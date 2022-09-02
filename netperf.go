@@ -271,9 +271,8 @@ func main() {
 
 	// Run through each test
 	for _, nc := range s.configs {
-		for i := 1; i <= nc.samples; i++ {
-			// If we have the ability to run across node
-			if s.clientAcross != nil {
+		if s.clientAcross != nil {
+			for i := 1; i <= nc.samples; i++ {
 				r, err := RunNetPerf(client, s.restconfig, nc, s.clientAcross, s.server)
 				if err != nil {
 					panic(err)
@@ -284,8 +283,9 @@ func main() {
 				}
 				nr.setup = "Across Node"
 				sr.results = append(sr.results, nr)
-
 			}
+		}
+		for i := 1; i <= nc.samples; i++ {
 			r, err := RunNetPerf(client, s.restconfig, nc, s.client, s.server)
 			if err != nil {
 				panic(err)
