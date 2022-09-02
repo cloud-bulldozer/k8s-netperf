@@ -1,5 +1,8 @@
-# k8s-netperf
+# k8s-netperf - Kubernetes Network Performance
 Running Networking Performance Tests against K8s
+
+## Status
+Currently a work-in-progress.
 
 ## Setup
 ```shell
@@ -8,8 +11,10 @@ $ cd k8s-netperf
 $ go build .
 ```
 
-### Running
-Ensure your `kubeconfig` is properly set to the cluster you would like to run `k8s-netperf` against
+## Running
+Ensure your `kubeconfig` is properly set to the cluster you would like to run `k8s-netperf` against.
+
+also be sure to create a `netperf` namespace. (Not over-writable yet)
 
 ```shell
 $ ./k8s-netperf
@@ -17,7 +22,7 @@ $ ./k8s-netperf
 
 Currently the tool is very opinionated on what is ran. Eventually there will be cli options to override some tests.
 
-### Output
+## Output
 `k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the contianer.
 
 ```
