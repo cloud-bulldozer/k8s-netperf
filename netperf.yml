@@ -1,0 +1,24 @@
+---
+TCPStream:
+   profile: "TCP_STREAM"
+   duration: 10
+   samples: 1
+   messagesize: 16384
+
+UDPStream:
+   profile: "UDP_STREAM"
+   duration: 10
+   samples: 1
+   messagesize: 16384
+
+CRR:
+   profile: "TCP_CRR"
+   duration: 10
+   samples: 1
+   messagesize: 16384
+
+RR:
+   profile: "TCP_RR"
+   duration: 10
+   samples: 1
+   messagesize: 16384

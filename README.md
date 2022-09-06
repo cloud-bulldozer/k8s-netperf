@@ -20,7 +20,20 @@ also be sure to create a `netperf` namespace. (Not over-writable yet)
 $ ./k8s-netperf
 ```
 
-Currently the tool is very opinionated on what is ran. Eventually there will be cli options to override some tests.
+`netperf.yml` contains a default set of tests.
+```yml
+TCPStream:
+   profile: "TCP_STREAM"
+   duration: 3
+   samples: 1
+   messagesize: 1024
+
+# TCPStream is a place-holder of a test name.
+# profile is the netperf profile to execute. This can be `[TCP,UDP]_STREAM, [TCP,UDP]_RR, TCP_CRR`
+# duration how long to run the test.
+# samples how many times to run the test
+# messagesize the size of the data-gram to send.
+```
 
 ## Output
 `k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the contianer.
