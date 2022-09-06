@@ -69,8 +69,10 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.name, dp.namespace)
 	d, err := client.AppsV1().Deployments(dp.namespace).Get(context.TODO(), dp.name, metav1.GetOptions{})
 	if err == nil {
-		fmt.Println("♻️  Using existing Deployment")
-		return d, nil
+		if d.Status.Replicas > 0 {
+			fmt.Println("♻️  Using existing Deployment")
+			return d, nil
+		}
 	}
 	dc := client.AppsV1().Deployments(dp.namespace)
 	deployment := &appsv1.Deployment{

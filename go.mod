@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/elastic/go-elasticsearch/v8 v8.4.0
+	github.com/montanaflynn/stats v0.6.6
 	github.com/sirupsen/logrus v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.25.0

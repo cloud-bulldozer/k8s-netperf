@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"regexp"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -20,19 +20,16 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-var NetReg = regexp.MustCompile(`\s+\d+\s+\d+\s+(\d+|\S+)\s+(\S+|\d+)\s+(\S+)+\s+(\S+)?`)
-
-type NetPerfResults struct {
-	Duration    int
-	MessageSize int
-	Profile     string
-	Metric      string
-	Values      float64
-	SameNode    bool
+type NetPerfResult struct {
+	NetPerfConfig
+	Metric   string
+	SameNode bool
+	Sample   float64
+	Summary  []float64
 }
 
 type ScenarioResults struct {
-	results []NetPerfResults
+	results []NetPerfResult
 }
 
 type NetPerfConfig struct {
@@ -126,49 +123,6 @@ func main() {
 	}
 	ncount := len(nodes.Items)
 
-	cdp_across := DeploymentParams{
-		name:      "client-across",
-		namespace: "netperf",
-		replicas:  1,
-		image:     "quay.io/jtaleric/k8snetperf:latest",
-		labels:    map[string]string{"role": "client-across"},
-		command:   []string{"/bin/bash", "-c", "sleep 10000000"},
-		port:      12865,
-	}
-	if z != "" {
-		cdp_across.nodeaffinity = apiv1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-				{
-					Weight: 100,
-					Preference: apiv1.NodeSelectorTerm{
-						MatchExpressions: []apiv1.NodeSelectorRequirement{
-							{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	if ncount > 1 {
-		_, err = CreateDeployment(cdp_across, client)
-		if err != nil {
-			log.Error("Unable to create Client deployment")
-			os.Exit(1)
-		}
-		// Wait for pod(s) in the deployment to be ready
-		_, err = WaitForReady(client, cdp_across)
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
-		}
-		// Retrieve the pod information
-		s.clientAcross, err = GetPods(client, cdp_across)
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
-		}
-	}
 	//  Create Netperf client on the same node as the server.
 	cdp := DeploymentParams{
 		name:      "client",
@@ -196,7 +150,6 @@ func main() {
 	_, err = CreateDeployment(cdp, client)
 	if err != nil {
 		log.Error("Unable to create Client deployment")
-		log.Error(err)
 		os.Exit(1)
 	}
 	// Wait for pod(s) in the deployment to be ready
@@ -281,13 +234,65 @@ func main() {
 		log.Error(err)
 		os.Exit(1)
 	}
+	cdp_across := DeploymentParams{
+		name:      "client-across",
+		namespace: "netperf",
+		replicas:  1,
+		image:     "quay.io/jtaleric/k8snetperf:latest",
+		labels:    map[string]string{"role": "client-across"},
+		command:   []string{"/bin/bash", "-c", "sleep 10000000"},
+		port:      12865,
+	}
+	if z != "" {
+		cdp_across.nodeaffinity = apiv1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
+				{
+					Weight: 100,
+					Preference: apiv1.NodeSelectorTerm{
+						MatchExpressions: []apiv1.NodeSelectorRequirement{
+							{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	if ncount > 1 {
+		_, err = CreateDeployment(cdp_across, client)
+		if err != nil {
+			log.Error("Unable to create Client deployment")
+			os.Exit(1)
+		}
+		// Wait for pod(s) in the deployment to be ready
+		_, err = WaitForReady(client, cdp_across)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		// Retrieve the pod information
+		s.clientAcross, err = GetPods(client, cdp_across)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+	}
 
 	var sr ScenarioResults
 
 	// Run through each test
 	for _, nc := range s.configs {
+		// Determine the metric for the test
+		metric := string("OP/s")
+		if strings.Contains(nc.Profile, "STREAM") {
+			metric = "Mb/s"
+		}
 		if s.clientAcross != nil {
-			for i := 1; i <= nc.Samples; i++ {
+			npr := NetPerfResult{}
+			npr.NetPerfConfig = nc
+			npr.Metric = metric
+			npr.SameNode = false
+			for i := 0; i < nc.Samples; i++ {
 				r, err := RunNetPerf(client, s.restconfig, nc, s.clientAcross, s.server)
 				if err != nil {
 					log.Error(err)
@@ -295,15 +300,20 @@ func main() {
 				}
 				nr, err := ParseResults(&r, nc)
 				if err != nil {
-
 					log.Error(err)
 					os.Exit(1)
 				}
-				nr.SameNode = false
-				sr.results = append(sr.results, nr)
+				npr.Summary = append(npr.Summary, nr)
 			}
+			sr.results = append(sr.results, npr)
 		}
-		for i := 1; i <= nc.Samples; i++ {
+		// Reset the result as we are now testing a different scenario
+		// Consider breaking the result per-scenario-config
+		npr := NetPerfResult{}
+		npr.NetPerfConfig = nc
+		npr.Metric = metric
+		npr.SameNode = true
+		for i := 0; i < nc.Samples; i++ {
 			r, err := RunNetPerf(client, s.restconfig, nc, s.client, s.server)
 			if err != nil {
 				log.Error(err)
@@ -311,20 +321,19 @@ func main() {
 			}
 			nr, err := ParseResults(&r, nc)
 			if err != nil {
-
 				log.Error(err)
 				os.Exit(1)
 			}
-			nr.SameNode = true
-			sr.results = append(sr.results, nr)
+			npr.Summary = append(npr.Summary, nr)
 		}
+		sr.results = append(sr.results, npr)
 	}
 	ShowResult(sr)
 }
 
 // Display the netperf config
 func ShowConfig(c NetPerfConfig) {
-	fmt.Printf("🗒️  Running netperf %s for %d(sec)\r\n", c.Profile, c.Duration)
+	fmt.Printf("🗒️  Running netperf %s for %ds\r\n", c.Profile, c.Duration)
 }
 
 // RunNetPerf will use the k8s client to run the netperf binary in the container image
