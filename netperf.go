@@ -328,7 +328,8 @@ func main() {
 		}
 		sr.results = append(sr.results, npr)
 	}
-	ShowResult(sr)
+	ShowStreamResult(sr)
+	ShowRRResult(sr)
 }
 
 // Display the netperf config
