@@ -17,6 +17,13 @@ CRR:
    samples: 1
    messagesize: 16384
 
+CRRService:
+   profile: "TCP_CRR"
+   duration: 10
+   samples: 1
+   messagesize: 16384
+   service: True
+
 RR:
    profile: "TCP_RR"
    duration: 10

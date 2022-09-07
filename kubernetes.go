@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -122,4 +123,45 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (*apiv1.PodList, erro
 		return nil, fmt.Errorf("❌ Failure to capture pods")
 	}
 	return pods, nil
+}
+
+func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
+	s, err := client.CoreV1().Services(sp.namespace).Get(context.TODO(), sp.name, metav1.GetOptions{})
+	if err == nil {
+		fmt.Println("♻️  Using existing Deployment")
+		return s, nil
+	}
+	fmt.Printf("🚀 Creating service for %s in %s\n", sp.name, sp.namespace)
+	sc := client.CoreV1().Services(sp.namespace)
+	service := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sp.name,
+			Namespace: sp.namespace,
+		},
+		Spec: apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				{
+					Name:       fmt.Sprintf("%s-ctl", sp.name),
+					Protocol:   apiv1.ProtocolTCP,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.ctlPort)),
+					Port:       sp.ctlPort,
+				},
+				{
+					Name:       fmt.Sprintf("%s-data-tcp", sp.name),
+					Protocol:   apiv1.ProtocolTCP,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.dataPort)),
+					Port:       sp.dataPort,
+				},
+				{
+					Name:       fmt.Sprintf("%s-data-udp", sp.name),
+					Protocol:   apiv1.ProtocolUDP,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.dataPort)),
+					Port:       sp.dataPort,
+				},
+			},
+			Type:     apiv1.ServiceType("ClusterIP"),
+			Selector: sp.labels,
+		},
+	}
+	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
 }

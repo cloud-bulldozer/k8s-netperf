@@ -32,31 +32,31 @@ func checkResults(s ScenarioResults, check string) bool {
 // ShowStreamResults accepts NetPerfResults to display to the user via stdout
 func ShowStreamResult(s ScenarioResults) {
 	if checkResults(s, "STREAM") {
-		fmt.Printf("%s Stream Results %s\r\n", strings.Repeat("-", (51)), strings.Repeat("-", (51)))
-		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Message Size", "Same node", "Duration", "Samples", "Avg value")
-		fmt.Printf("%s\r\n", strings.Repeat("-", (18+25+75)))
+		fmt.Printf("%s Stream Results %s\r\n", strings.Repeat("-", 59), strings.Repeat("-", 59))
+		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value")
+		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
 		for _, r := range s.results {
 			if strings.Contains(r.Profile, "STREAM") {
 				avg, _ := average(r.Summary)
-				fmt.Printf("📊 %-15s | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
+				fmt.Printf("📊 %-15s | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
 			}
 		}
-		fmt.Printf("%s\r\n", strings.Repeat("-", (18+25+75)))
+		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
 	}
 }
 
 func ShowRRResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
-		fmt.Printf("%s RR Results %s\r\n", strings.Repeat("-", (53)), strings.Repeat("-", (53)))
-		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Message Size", "Same node", "Duration", "Samples", "99%tile value")
-		fmt.Printf("%s\r\n", strings.Repeat("-", (18+25+75)))
+		fmt.Printf("%s RR Results %s\r\n", strings.Repeat("-", 62), strings.Repeat("-", 62))
+		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Service", "Message Size", "Same node", "Duration", "Samples", "99%tile value")
+		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
 		for _, r := range s.results {
 			if strings.Contains(r.Profile, "RR") {
 				pct, _ := percentile(r.Summary, 99)
-				fmt.Printf("📊 %-15s | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.MessageSize, r.SameNode, r.Duration, r.Samples, pct, r.Metric)
+				fmt.Printf("📊 %-15s | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, pct, r.Metric)
 			}
 		}
-		fmt.Printf("%s\r\n", strings.Repeat("-", (18+25+75)))
+		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
 	}
 }
 
