@@ -13,27 +13,24 @@ import (
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
 // It will return a bool based on if the pods ever become ready before we move on.
 func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
-	d, err := c.AppsV1().Deployments(dp.namespace).Get(context.TODO(), dp.name, metav1.GetOptions{})
+	fmt.Println("⏰ Checking for Pods to become ready...")
+	dw, err := c.AppsV1().Deployments(dp.namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return false, fmt.Errorf("❌ Failure to capture deployment information")
+		return false, err
 	}
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
-	fmt.Println("⏰ Waiting for Pods to become ready...")
-	w, err := c.CoreV1().Pods(dp.namespace).Watch(context.TODO(), metav1.ListOptions{LabelSelector: selector.String()})
-	if err != nil {
-		panic(err)
-	}
-	defer w.Stop()
-	for event := range w.ResultChan() {
-		p, ok := event.Object.(*apiv1.Pod)
+	defer dw.Stop()
+	for event := range dw.ResultChan() {
+		d, ok := event.Object.(*appsv1.Deployment)
 		if !ok {
-			fmt.Println("❌ Issue with the pod event")
+			fmt.Println("❌ Issue with the Deployment")
 		}
-		if p.Status.Phase == "Running" {
-			return true, nil
+		if d.Name == dp.name {
+			if d.Status.ReadyReplicas == 1 {
+				return true, nil
+			}
 		}
 	}
-	return false, fmt.Errorf("❌ Deployment had issues launching pods")
+	return false, fmt.Errorf("❌ Deployment had issues")
 }
 
 // GetZone will determine if we have a multiAZ/Zone cloud.
@@ -66,14 +63,14 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 }
 
 func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv1.Deployment, error) {
-	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.name, dp.namespace)
 	d, err := client.AppsV1().Deployments(dp.namespace).Get(context.TODO(), dp.name, metav1.GetOptions{})
 	if err == nil {
-		if d.Status.Replicas > 0 {
+		if d.Status.ReadyReplicas > 0 {
 			fmt.Println("♻️  Using existing Deployment")
 			return d, nil
 		}
 	}
+	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.name, dp.namespace)
 	dc := client.AppsV1().Deployments(dp.namespace)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -120,7 +117,7 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (*apiv1.PodList, erro
 	if err != nil {
 		return nil, fmt.Errorf("❌ Failure to capture deployment label")
 	}
-	pods, err := c.CoreV1().Pods(dp.namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String()})
+	pods, err := c.CoreV1().Pods(dp.namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
 	if err != nil {
 		return nil, fmt.Errorf("❌ Failure to capture pods")
 	}
