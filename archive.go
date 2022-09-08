@@ -15,6 +15,8 @@ type ElasticParams struct {
 	index    string
 }
 
+// Connect accepts ElasticParams which describe how to connect to ES.
+// Returns a client connected to the desired ES Cluster.
 func Connect(es ElasticParams) (*elasticsearch.Client, error) {
 	log.Infof("Connecting to ES - %s", es.url)
 	esc := elasticsearch.Config{

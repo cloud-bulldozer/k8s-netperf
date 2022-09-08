@@ -1,4 +1,4 @@
-package main
+package netperf
 
 import (
 	"bytes"
@@ -9,6 +9,18 @@ import (
 
 	stats "github.com/montanaflynn/stats"
 )
+
+type Data struct {
+	Config
+	Metric   string
+	SameNode bool
+	Sample   float64
+	Summary  []float64
+}
+
+type ScenarioResults struct {
+	Results []Data
+}
 
 var NetReg = regexp.MustCompile(`\s+\d+\s+\d+\s+(\d+|\S+)\s+(\S+|\d+)\s+(\S+)+\s+(\S+)?`)
 
@@ -21,8 +33,8 @@ func percentile(vals []float64, ptile float64) (float64, error) {
 }
 
 func checkResults(s ScenarioResults, check string) bool {
-	for t := range s.results {
-		if strings.Contains(s.results[t].Profile, check) {
+	for t := range s.Results {
+		if strings.Contains(s.Results[t].Profile, check) {
 			return true
 		}
 	}
@@ -35,7 +47,7 @@ func ShowStreamResult(s ScenarioResults) {
 		fmt.Printf("%s Stream Results %s\r\n", strings.Repeat("-", 59), strings.Repeat("-", 59))
 		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value")
 		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
-		for _, r := range s.results {
+		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "STREAM") {
 				avg, _ := average(r.Summary)
 				fmt.Printf("📊 %-15s | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
@@ -45,15 +57,18 @@ func ShowStreamResult(s ScenarioResults) {
 	}
 }
 
+// ShowRRResults will display the RR performance results
+// Currently showing the Avg Value.
+// TODO: Capture latency values
 func ShowRRResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
 		fmt.Printf("%s RR Results %s\r\n", strings.Repeat("-", 62), strings.Repeat("-", 62))
-		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Service", "Message Size", "Same node", "Duration", "Samples", "99%tile value")
+		fmt.Printf("%-18s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value")
 		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
-		for _, r := range s.results {
+		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
-				pct, _ := percentile(r.Summary, 99)
-				fmt.Printf("📊 %-15s | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, pct, r.Metric)
+				avg, _ := average(r.Summary)
+				fmt.Printf("📊 %-15s | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
 			}
 		}
 		fmt.Printf("%s\r\n", strings.Repeat("-", 136))
@@ -63,7 +78,7 @@ func ShowRRResult(s ScenarioResults) {
 // ParseResults accepts the stdout from the execution of the benchmark. It also needs
 // The NetPerfConfig to determine aspects of the workload the user provided.
 // It will return a NetPerfResults struct or error
-func ParseResults(stdout *bytes.Buffer, nc NetPerfConfig) (float64, error) {
+func ParseResults(stdout *bytes.Buffer) (float64, error) {
 	d := NetReg.FindStringSubmatch(stdout.String())
 	if len(d) < 5 {
 		return 0, fmt.Errorf("❌ Unable to process results")

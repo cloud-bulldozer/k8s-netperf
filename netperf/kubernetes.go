@@ -1,4 +1,4 @@
-package main
+package netperf
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 // It will return a bool based on if the pods ever become ready before we move on.
 func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 	fmt.Println("⏰ Checking for Pods to become ready...")
-	dw, err := c.AppsV1().Deployments(dp.namespace).Watch(context.TODO(), metav1.ListOptions{})
+	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return false, err
 	}
@@ -25,7 +25,7 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 		if !ok {
 			fmt.Println("❌ Issue with the Deployment")
 		}
-		if d.Name == dp.name {
+		if d.Name == dp.Name {
 			if d.Status.ReadyReplicas == 1 {
 				return true, nil
 			}
@@ -64,40 +64,40 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 }
 
 func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv1.Deployment, error) {
-	d, err := client.AppsV1().Deployments(dp.namespace).Get(context.TODO(), dp.name, metav1.GetOptions{})
+	d, err := client.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err == nil {
 		if d.Status.ReadyReplicas > 0 {
 			fmt.Println("♻️  Using existing Deployment")
 			return d, nil
 		}
 	}
-	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.name, dp.namespace)
-	dc := client.AppsV1().Deployments(dp.namespace)
+	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.Name, dp.Namespace)
+	dc := client.AppsV1().Deployments(dp.Namespace)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: dp.name,
+			Name: dp.Name,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &dp.replicas,
+			Replicas: &dp.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: dp.labels,
+				MatchLabels: dp.Labels,
 			},
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: dp.labels,
+					Labels: dp.Labels,
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:    dp.name,
-							Image:   dp.image,
-							Command: dp.command,
+							Name:    dp.Name,
+							Image:   dp.Image,
+							Command: dp.Command,
 						},
 					},
 					Affinity: &apiv1.Affinity{
-						NodeAffinity:    &dp.nodeaffinity,
-						PodAffinity:     &dp.podaffinity,
-						PodAntiAffinity: &dp.podantiaffinity,
+						NodeAffinity:    &dp.NodeAffinity,
+						PodAffinity:     &dp.PodAffinity,
+						PodAntiAffinity: &dp.PodAntiAffinity,
 					},
 				},
 			},
@@ -109,58 +109,66 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 // GetPods searches for a specific set of pods from DeploymentParms
 // It returns a PodList if the deployment is found.
 // NOTE : Since we can update the replicas to be > 1, is why I return a PodList.
-func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (*apiv1.PodList, error) {
-	d, err := c.AppsV1().Deployments(dp.namespace).Get(context.TODO(), dp.name, metav1.GetOptions{})
+func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error) {
+	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
+	npl := apiv1.PodList{}
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failure to capture deployment")
+		return npl, fmt.Errorf("❌ Failure to capture deployment")
 	}
 	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failure to capture deployment label")
+		return npl, fmt.Errorf("❌ Failure to capture deployment label")
 	}
-	pods, err := c.CoreV1().Pods(dp.namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
+	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failure to capture pods")
+		return npl, fmt.Errorf("❌ Failure to capture pods")
 	}
-	return pods, nil
+	for pod := range pods.Items {
+		if pods.Items[pod].DeletionTimestamp != nil {
+			continue
+		} else {
+			npl.Items = append(npl.Items, pods.Items[pod])
+		}
+	}
+	return npl, nil
 }
 
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
-	s, err := client.CoreV1().Services(sp.namespace).Get(context.TODO(), sp.name, metav1.GetOptions{})
+	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
 	if err == nil {
-		fmt.Println("♻️  Using existing Deployment")
+		fmt.Println("♻️ Using existing Service")
 		return s, nil
 	}
-	fmt.Printf("🚀 Creating service for %s in %s\n", sp.name, sp.namespace)
-	sc := client.CoreV1().Services(sp.namespace)
+	fmt.Printf("🚀 Creating service for %s in %s\n", sp.Name, sp.Namespace)
+	sc := client.CoreV1().Services(sp.Namespace)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      sp.name,
-			Namespace: sp.namespace,
+			Name:      sp.Name,
+			Namespace: sp.Namespace,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       fmt.Sprintf("%s-ctl", sp.name),
+					Name:       fmt.Sprintf("%s-ctl", sp.Name),
 					Protocol:   apiv1.ProtocolTCP,
-					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.ctlPort)),
-					Port:       sp.ctlPort,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.CtlPort)),
+					Port:       sp.CtlPort,
 				},
 				{
-					Name:       fmt.Sprintf("%s-data-tcp", sp.name),
+					Name:       fmt.Sprintf("%s-data-tcp", sp.Name),
 					Protocol:   apiv1.ProtocolTCP,
-					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.dataPort)),
-					Port:       sp.dataPort,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.DataPort)),
+					Port:       sp.DataPort,
 				},
 				{
-					Name:       fmt.Sprintf("%s-data-udp", sp.name),
+					Name:       fmt.Sprintf("%s-data-udp", sp.Name),
 					Protocol:   apiv1.ProtocolUDP,
-					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.dataPort)),
-					Port:       sp.dataPort,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.DataPort)),
+					Port:       sp.DataPort,
 				},
 			},
 			Type:     apiv1.ServiceType("ClusterIP"),
-			Selector: sp.labels,
+			Selector: sp.Labels,
 		},
 	}
 	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
