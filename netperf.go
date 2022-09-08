@@ -37,6 +37,7 @@ type NetPerfConfig struct {
 	Profile     string `yaml:"profile,omitempty"`
 	Samples     int    `yaml:"samples,omitempty"`
 	MessageSize int    `yaml:"messagesize,omitempty"`
+	Service     bool   `default:"false" yaml:"service,omitempty"`
 }
 
 type PerfScenarios struct {
@@ -44,6 +45,7 @@ type PerfScenarios struct {
 	client       *apiv1.PodList
 	server       *apiv1.PodList
 	clientAcross *apiv1.PodList
+	service      *apiv1.Service
 	restconfig   rest.Config
 }
 
@@ -59,6 +61,17 @@ type DeploymentParams struct {
 	nodeaffinity    apiv1.NodeAffinity
 	port            int
 }
+
+type ServiceParams struct {
+	name      string
+	namespace string
+	labels    map[string]string
+	ctlPort   int32
+	dataPort  int32
+}
+
+const serverCtlPort = 12865
+const serverDataPort = 42424
 
 func parseConf(fn string) ([]NetPerfConfig, error) {
 	fmt.Printf("📒 Reading %s file.\r\n", fn)
@@ -131,7 +144,7 @@ func main() {
 		image:     "quay.io/jtaleric/k8snetperf:latest",
 		labels:    map[string]string{"role": "client"},
 		command:   []string{"/bin/bash", "-c", "sleep 10000000"},
-		port:      12865,
+		port:      serverCtlPort,
 	}
 	if z != "" {
 		cdp.nodeaffinity = apiv1.NodeAffinity{
@@ -165,6 +178,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create netperf TCP service
+	spTcp := ServiceParams{
+		name:      "netperf-service",
+		namespace: "netperf",
+		labels:    map[string]string{"role": "server"},
+		ctlPort:   serverCtlPort,
+		dataPort:  serverDataPort,
+	}
+	s.service, err = CreateService(spTcp, client)
+	if err != nil {
+		fmt.Println("😥 Unable to create TCP netperf service")
+		log.Error(err)
+		os.Exit(1)
+	}
+
 	// Start netperf server
 	sdp := DeploymentParams{
 		name:      "server",
@@ -185,7 +213,7 @@ func main() {
 				},
 			},
 		},
-		port: 12865,
+		port: serverCtlPort,
 	}
 	if z != "" {
 		sdp.nodeaffinity = apiv1.NodeAffinity{
@@ -241,7 +269,7 @@ func main() {
 		image:     "quay.io/jtaleric/k8snetperf:latest",
 		labels:    map[string]string{"role": "client-across"},
 		command:   []string{"/bin/bash", "-c", "sleep 10000000"},
-		port:      12865,
+		port:      serverCtlPort,
 	}
 	if z != "" {
 		cdp_across.nodeaffinity = apiv1.NodeAffinity{
@@ -287,13 +315,19 @@ func main() {
 		if strings.Contains(nc.Profile, "STREAM") {
 			metric = "Mb/s"
 		}
+		var serverIP string
+		if nc.Service {
+			serverIP = s.service.Spec.ClusterIP
+		} else {
+			serverIP = s.server.Items[0].Status.PodIP
+		}
 		if s.clientAcross != nil {
 			npr := NetPerfResult{}
 			npr.NetPerfConfig = nc
 			npr.Metric = metric
 			npr.SameNode = false
 			for i := 0; i < nc.Samples; i++ {
-				r, err := RunNetPerf(client, s.restconfig, nc, s.clientAcross, s.server)
+				r, err := RunNetPerf(client, s.restconfig, nc, s.clientAcross, serverIP)
 				if err != nil {
 					log.Error(err)
 					os.Exit(1)
@@ -314,7 +348,7 @@ func main() {
 		npr.Metric = metric
 		npr.SameNode = true
 		for i := 0; i < nc.Samples; i++ {
-			r, err := RunNetPerf(client, s.restconfig, nc, s.client, s.server)
+			r, err := RunNetPerf(client, s.restconfig, nc, s.client, serverIP)
 			if err != nil {
 				log.Error(err)
 				os.Exit(1)
@@ -334,18 +368,17 @@ func main() {
 
 // Display the netperf config
 func ShowConfig(c NetPerfConfig) {
-	fmt.Printf("🗒️  Running netperf %s for %ds\r\n", c.Profile, c.Duration)
+	fmt.Printf("🗒️  Running netperf %s (service %t) for %ds\r\n", c.Profile, c.Service, c.Duration)
 }
 
 // RunNetPerf will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
-func RunNetPerf(c *kubernetes.Clientset, rc rest.Config, nc NetPerfConfig, client *apiv1.PodList, server *apiv1.PodList) (bytes.Buffer, error) {
+func RunNetPerf(c *kubernetes.Clientset, rc rest.Config, nc NetPerfConfig, client *apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
-	sip := server.Items[0].Status.PodIP
 	pod := client.Items[0]
-	fmt.Printf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, sip)
+	fmt.Printf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
-	cmd := []string{"/usr/local/bin/netperf", "-H", sip, "-l", fmt.Sprintf("%d", nc.Duration), "-t", nc.Profile, "--", "-R", "1", "-m", fmt.Sprintf("%d", nc.MessageSize)}
+	cmd := []string{"/usr/local/bin/netperf", "-H", serverIP, "-l", fmt.Sprintf("%d", nc.Duration), "-t", nc.Profile, "--", "-R", "1", "-m", fmt.Sprintf("%d", nc.MessageSize), "-P", fmt.Sprintf("0,%d", serverDataPort)}
 	req := c.CoreV1().RESTClient().
 		Post().
 		Namespace(pod.Namespace).
