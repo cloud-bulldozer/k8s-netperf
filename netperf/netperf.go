@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"regexp"
 
 	"gopkg.in/yaml.v2"
 	apiv1 "k8s.io/api/core/v1"
@@ -22,6 +23,8 @@ type Config struct {
 	MessageSize int    `yaml:"messagesize,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
 }
+
+const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
 
 type DeploymentParams struct {
 	Name            string
@@ -258,6 +261,19 @@ func ParseConf(fn string) ([]Config, error) {
 	// Pull out the specific tests
 	var tests []Config
 	for _, value := range c {
+		p, _ := regexp.MatchString("(?i)"+validTests, value.Profile)
+		if !p {
+			return nil, fmt.Errorf("unknown netperf profile")
+		}
+		if value.Duration < 1 {
+			return nil, fmt.Errorf("duration must be > 0")
+		}
+		if value.Samples < 1 {
+			return nil, fmt.Errorf("samples must be > 0")
+		}
+		if value.MessageSize < 1 {
+			return nil, fmt.Errorf("messagesize must be > 0")
+		}
 		tests = append(tests, value)
 	}
 	return tests, nil
