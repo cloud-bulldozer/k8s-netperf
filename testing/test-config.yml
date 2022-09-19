@@ -1,0 +1,6 @@
+---
+TCPStream:
+   profile: "TCP_STREAM"
+   duration: 10
+   samples: 1
+   messagesize: 16384

@@ -10,6 +10,7 @@ import (
 	stats "github.com/montanaflynn/stats"
 )
 
+// Data describes the result data
 type Data struct {
 	Config
 	Metric   string
@@ -18,10 +19,12 @@ type Data struct {
 	Summary  []float64
 }
 
+// ScenarioResults each scenario could have multiple results
 type ScenarioResults struct {
 	Results []Data
 }
 
+// NetReg Regex for netperf
 var NetReg = regexp.MustCompile(`\s+\d+\s+\d+\s+(\d+|\S+)\s+(\S+|\d+)\s+(\S+)+\s+(\S+)?`)
 
 func average(vals []float64) (float64, error) {
@@ -41,7 +44,7 @@ func checkResults(s ScenarioResults, check string) bool {
 	return false
 }
 
-// ShowStreamResults accepts NetPerfResults to display to the user via stdout
+// ShowStreamResult accepts NetPerfResults to display to the user via stdout
 func ShowStreamResult(s ScenarioResults) {
 	if checkResults(s, "STREAM") {
 		fmt.Printf("%s Stream Results %s\r\n", strings.Repeat("-", 59), strings.Repeat("-", 59))
@@ -57,7 +60,7 @@ func ShowStreamResult(s ScenarioResults) {
 	}
 }
 
-// ShowRRResults will display the RR performance results
+// ShowRRResult will display the RR performance results
 // Currently showing the Avg Value.
 // TODO: Capture latency values
 func ShowRRResult(s ScenarioResults) {
