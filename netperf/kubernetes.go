@@ -63,6 +63,7 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 	return zone, nil
 }
 
+// CreateDeployment will create the different deployments we need to do network performance tests
 func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv1.Deployment, error) {
 	d, err := client.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err == nil {
@@ -133,6 +134,7 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error
 	return npl, nil
 }
 
+// CreateService will build a k8s service
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
 	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
 	if err == nil {

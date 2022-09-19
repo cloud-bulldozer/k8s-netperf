@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// Config describes the netperf tests
 type Config struct {
 	Duration    int    `yaml:"duration,omitempty"`
 	Profile     string `yaml:"profile,omitempty"`
@@ -26,6 +27,7 @@ type Config struct {
 
 const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
 
+// DeploymentParams describes the deployment
 type DeploymentParams struct {
 	Name            string
 	Namespace       string
@@ -39,6 +41,7 @@ type DeploymentParams struct {
 	Port            int
 }
 
+// PerfScenarios describes the different scenarios
 type PerfScenarios struct {
 	NodeLocal    bool
 	HostNetwork  bool
@@ -50,6 +53,7 @@ type PerfScenarios struct {
 	RestConfig   rest.Config
 }
 
+// ServiceParams describes the service specific details
 type ServiceParams struct {
 	Name      string
 	Namespace string
@@ -58,9 +62,13 @@ type ServiceParams struct {
 	DataPort  int32
 }
 
+// ServerCtlPort control port for the service
 const ServerCtlPort = 12865
+
+// ServerDataPort data port for the service
 const ServerDataPort = 42424
 
+// BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
@@ -117,18 +125,18 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	}
 
 	// Create netperf TCP service
-	spTcp := ServiceParams{
+	spTCP := ServiceParams{
 		Name:      "netperf-service",
 		Namespace: "netperf",
 		Labels:    map[string]string{"role": "server"},
 		CtlPort:   ServerCtlPort,
 		DataPort:  ServerDataPort,
 	}
-	s.Service, err = CreateService(spTcp, client)
+	s.Service, err = CreateService(spTCP, client)
 	if err != nil {
 		return fmt.Errorf("😥 Unable to create TCP netperf service")
 	}
-	cdp_across := DeploymentParams{
+	cdpAcross := DeploymentParams{
 		Name:      "client-across",
 		Namespace: "netperf",
 		Replicas:  1,
@@ -138,7 +146,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Port:      ServerCtlPort,
 	}
 	if z != "" {
-		cdp_across.NodeAffinity = apiv1.NodeAffinity{
+		cdpAcross.NodeAffinity = apiv1.NodeAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
 				{
 					Weight: 100,
@@ -153,17 +161,17 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	}
 
 	if ncount > 1 {
-		_, err = CreateDeployment(cdp_across, client)
+		_, err = CreateDeployment(cdpAcross, client)
 		if err != nil {
 			return fmt.Errorf("Unable to create Client deployment")
 		}
 		// Wait for pod(s) in the deployment to be ready
-		_, err = WaitForReady(client, cdp_across)
+		_, err = WaitForReady(client, cdpAcross)
 		if err != nil {
 			return err
 		}
 		// Retrieve the pod information
-		s.ClientAcross, err = GetPods(client, cdp_across)
+		s.ClientAcross, err = GetPods(client, cdpAcross)
 		if err != nil {
 			return err
 		}
@@ -243,7 +251,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	return nil
 }
 
-// ParseConfig will read in the netperf configuration file which
+// ParseConf will read in the netperf configuration file which
 // describes which tests to run
 // Returns Config struct
 func ParseConf(fn string) ([]Config, error) {
@@ -279,12 +287,12 @@ func ParseConf(fn string) ([]Config, error) {
 	return tests, nil
 }
 
-// Display the netperf config
+// ShowConfig Display the netperf config
 func ShowConfig(c Config) {
 	fmt.Printf("🗒️  Running netperf %s (service %t) for %ds\r\n", c.Profile, c.Service, c.Duration)
 }
 
-// RunNetPerf will use the k8s client to run the netperf binary in the container image
+// Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
 func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer

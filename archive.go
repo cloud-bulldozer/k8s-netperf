@@ -8,7 +8,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 )
 
-type ElasticParams struct {
+type elasticParams struct {
 	url      string
 	user     string
 	password string
@@ -17,7 +17,7 @@ type ElasticParams struct {
 
 // Connect accepts ElasticParams which describe how to connect to ES.
 // Returns a client connected to the desired ES Cluster.
-func Connect(es ElasticParams) (*elasticsearch.Client, error) {
+func Connect(es elasticParams) (*elasticsearch.Client, error) {
 	log.Infof("Connecting to ES - %s", es.url)
 	esc := elasticsearch.Config{
 		Username:  es.user,
