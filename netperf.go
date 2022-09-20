@@ -120,4 +120,9 @@ func main() {
 	}
 	netperf.ShowStreamResult(sr)
 	netperf.ShowRRResult(sr)
+	err = netperf.WriteCSVResult(sr)
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
 }
