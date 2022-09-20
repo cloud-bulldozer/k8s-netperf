@@ -36,21 +36,35 @@ TCPStream:
 ```
 
 ## Output
-`k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the contianer.
+`k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the container.
 
-Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test. 
+Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test.
+```
+----------------------------------------------------------- Stream Results -----------------------------------------------------------
+Scenario           | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value
+----------------------------------------------------------------------------------------------------------------------------------------
+📊 UDP_STREAM      | false           | 16384           | false           | 10              | 1               | 3180.260000     (Mb/s)
+📊 TCP_STREAM      | false           | 16384           | false           | 10              | 1               | 846.200000      (Mb/s)
+----------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------- RR Results --------------------------------------------------------------
+Scenario           | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value
+----------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_CRR         | false           | 16384           | false           | 10              | 1               | 2534.770000     (OP/s)
+📊 TCP_CRR         | true            | 16384           | false           | 10              | 1               | 470.500000      (OP/s)
+📊 TCP_RR          | false           | 16384           | false           | 10              | 1               | 10065.760000    (OP/s)
+----------------------------------------------------------------------------------------------------------------------------------------
+```
 
+### Output to CSV
+`k8s-netperf` will write a csv file, after it has completed the desired performance tests.
+
+Example output
 ```
-----------------------------------------------------------------------------------------------------------------------
-Scenario           | Message Size    | Same node       | Duration        | Samples         | Avg value
-----------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | 16384           | false           | 10              | 1               | 901.350000      (Mb/s)
-📊 TCP_STREAM      | 16384           | true            | 10              | 1               | 10974.320000    (Mb/s)
-📊 UDP_STREAM      | 16384           | false           | 10              | 1               | 3316.240000     (Mb/s)
-📊 UDP_STREAM      | 16384           | true            | 10              | 1               | 8925.150000     (Mb/s)
-📊 TCP_CRR         | 16384           | false           | 10              | 1               | 3040.690000     (OP/s)
-📊 TCP_CRR         | 16384           | true            | 10              | 1               | 10880.340000    (OP/s)
-📊 TCP_RR          | 16384           | false           | 10              | 1               | 13537.740000    (OP/s)
-📊 TCP_RR          | 16384           | true            | 10              | 1               | 48891.490000    (OP/s)
-----------------------------------------------------------------------------------------------------------------------
+Profile,Same node,Service,Duration,# of Samples,Avg Throughput,Metric
+TCP_STREAM,false,false,10,1,894.030000,Mb/s
+UDP_STREAM,false,false,10,1,3297.260000,Mb/s
+TCP_CRR,false,false,10,1,2691.570000,OP/s
+TCP_CRR,false,true,10,1,1971.290000,OP/s
+TCP_RR,false,false,10,1,9504.450000,OP/s
 ```
+
