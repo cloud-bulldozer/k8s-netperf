@@ -88,6 +88,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					Labels: dp.Labels,
 				},
 				Spec: apiv1.PodSpec{
+					HostNetwork: dp.HostNetwork,
 					Containers: []apiv1.Container{
 						{
 							Name:    dp.Name,
@@ -174,4 +175,12 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Servi
 		},
 	}
 	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
+}
+
+// DestroyDeployment cleans up a specific deployment
+func DestroyDeployment(client *kubernetes.Clientset, dp *appsv1.Deployment) error {
+	deletePolicy := metav1.DeletePropagationForeground
+	return client.AppsV1().Deployments(dp.Namespace).Delete(context.TODO(), dp.Name, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 }

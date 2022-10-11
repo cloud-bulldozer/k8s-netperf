@@ -29,6 +29,7 @@ const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
 
 // DeploymentParams describes the deployment
 type DeploymentParams struct {
+	HostNetwork     bool
 	Name            string
 	Namespace       string
 	Replicas        int32
@@ -49,6 +50,8 @@ type PerfScenarios struct {
 	Client       apiv1.PodList
 	Server       apiv1.PodList
 	ClientAcross apiv1.PodList
+	ClientHost   apiv1.PodList
+	ServerHost   apiv1.PodList
 	Service      *apiv1.Service
 	RestConfig   rest.Config
 }
@@ -67,6 +70,12 @@ const ServerCtlPort = 12865
 
 // ServerDataPort data port for the service
 const ServerDataPort = 42424
+
+const serverRole = "server"
+const clientRole = "client"
+const clientAcrossRole = "client-across"
+const hostNetServerRole = "host-server"
+const hostNetClientRole = "host-client"
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
@@ -90,7 +99,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 			Namespace: "netperf",
 			Replicas:  1,
 			Image:     "quay.io/jtaleric/k8snetperf:latest",
-			Labels:    map[string]string{"role": "client"},
+			Labels:    map[string]string{"role": clientRole},
 			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 			Port:      ServerCtlPort,
 		}
@@ -108,27 +117,18 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 				},
 			}
 		}
-		_, err = CreateDeployment(cdp, client)
-		if err != nil {
-			return fmt.Errorf("Unable to create Client deployment")
-		}
-		// Wait for pod(s) in the deployment to be ready
-		_, err = WaitForReady(client, cdp)
+		s.Client, err = deployDeployment(client, cdp)
 		if err != nil {
 			return err
 		}
-		// Retrieve the pod information
-		s.Client, err = GetPods(client, cdp)
-		if err != nil {
-			return err
-		}
+
 	}
 
 	// Create netperf TCP service
 	spTCP := ServiceParams{
 		Name:      "netperf-service",
 		Namespace: "netperf",
-		Labels:    map[string]string{"role": "server"},
+		Labels:    map[string]string{"role": serverRole},
 		CtlPort:   ServerCtlPort,
 		DataPort:  ServerDataPort,
 	}
@@ -141,9 +141,20 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Namespace: "netperf",
 		Replicas:  1,
 		Image:     "quay.io/jtaleric/k8snetperf:latest",
-		Labels:    map[string]string{"role": "client-across"},
+		Labels:    map[string]string{"role": clientAcrossRole},
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:      ServerCtlPort,
+	}
+
+	cdpHostAcross := DeploymentParams{
+		Name:        "client-host",
+		Namespace:   "netperf",
+		Replicas:    1,
+		HostNetwork: true,
+		Image:       "quay.io/jtaleric/k8snetperf:latest",
+		Labels:      map[string]string{"role": hostNetClientRole},
+		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
+		Port:        ServerCtlPort,
 	}
 	if z != "" {
 		cdpAcross.NodeAffinity = apiv1.NodeAffinity{
@@ -161,20 +172,25 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	}
 
 	if ncount > 1 {
-		_, err = CreateDeployment(cdpAcross, client)
-		if err != nil {
-			return fmt.Errorf("Unable to create Client deployment")
-		}
-		// Wait for pod(s) in the deployment to be ready
-		_, err = WaitForReady(client, cdpAcross)
+		s.ClientHost, err = deployDeployment(client, cdpHostAcross)
 		if err != nil {
 			return err
 		}
-		// Retrieve the pod information
-		s.ClientAcross, err = GetPods(client, cdpAcross)
+		s.ClientAcross, err = deployDeployment(client, cdpAcross)
 		if err != nil {
 			return err
 		}
+	}
+
+	sdpHost := DeploymentParams{
+		Name:        "server-host",
+		Namespace:   "netperf",
+		Replicas:    1,
+		HostNetwork: true,
+		Image:       "quay.io/jtaleric/k8snetperf:latest",
+		Labels:      map[string]string{"role": hostNetServerRole},
+		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
+		Port:        ServerCtlPort,
 	}
 
 	// Start netperf server
@@ -183,27 +199,12 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Namespace: "netperf",
 		Replicas:  1,
 		Image:     "quay.io/jtaleric/k8snetperf:latest",
-		Labels:    map[string]string{"role": "server"},
-		Command:   []string{"/bin/bash", "-c", "netserver; sleep 10000000"},
-		PodAffinity: apiv1.PodAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
-				{
-					Weight: 100,
-					PodAffinityTerm: apiv1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{"client"}},
-							},
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
-			},
-		},
-		Port: ServerCtlPort,
+		Labels:    map[string]string{"role": serverRole},
+		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
+		Port:      ServerCtlPort,
 	}
 	if z != "" {
-		sdp.NodeAffinity = apiv1.NodeAffinity{
+		affinity := apiv1.NodeAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
 				{
 					Weight: 100,
@@ -215,16 +216,18 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 				},
 			},
 		}
+		sdp.NodeAffinity = affinity
+		sdpHost.NodeAffinity = affinity
 	}
 	if ncount > 1 {
-		sdp.PodAntiAffinity = apiv1.PodAntiAffinity{
+		antiAffinity := apiv1.PodAntiAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
 				{
 					Weight: 100,
 					PodAffinityTerm: apiv1.PodAffinityTerm{
 						LabelSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{"client-across"}},
+								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRole}},
 							},
 						},
 						TopologyKey: "kubernetes.io/hostname",
@@ -232,23 +235,53 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 				},
 			},
 		}
-
+		sdp.PodAntiAffinity = antiAffinity
+		antiAffinity = apiv1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: apiv1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRole}},
+							},
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			},
+		}
+		sdpHost.PodAntiAffinity = antiAffinity
 	}
-	_, err = CreateDeployment(sdp, client)
-	if err != nil {
-		return fmt.Errorf("😥 Unable to create Server deployment")
-	}
-	_, err = WaitForReady(client, sdp)
+	s.ServerHost, err = deployDeployment(client, sdpHost)
 	if err != nil {
 		return err
+	}
+	s.Server, err = deployDeployment(client, sdp)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// deployDeployment Manages the creation and waits for the pods to become ready.
+// returns a podList which is associated with the Deployment.
+func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error) {
+	pods := apiv1.PodList{}
+	_, err := CreateDeployment(dp, client)
+	if err != nil {
+		return pods, fmt.Errorf("😥 Unable to create deployment")
+	}
+	_, err = WaitForReady(client, dp)
+	if err != nil {
+		return pods, err
 	}
 	// Retrieve pods which match the server/client role labels
-	s.Server, err = GetPods(client, sdp)
+	pods, err = GetPods(client, dp)
 	if err != nil {
-		return err
+		return pods, err
 	}
-
-	return nil
+	return pods, nil
 }
 
 // ParseConf will read in the netperf configuration file which

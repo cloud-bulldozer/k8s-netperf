@@ -43,13 +43,13 @@ func WriteCSVResult(r ScenarioResults) error {
 	}
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()
-	data := []string{"Profile", "Same node", "Service", "Duration", "# of Samples", "Avg Throughput", "Metric"}
+	data := []string{"Profile", "Same node", "Host Network", "Service", "Duration", "# of Samples", "Avg Throughput", "Metric"}
 	if err := archive.Write(data); err != nil {
 		return fmt.Errorf("Failed to write archive to file")
 	}
 	for _, row := range r.Results {
 		avg, _ := average(row.Summary)
-		data := []string{row.Profile, fmt.Sprint(row.SameNode), fmt.Sprint(row.Service), strconv.Itoa(row.Duration), strconv.Itoa(row.Samples), fmt.Sprintf("%f", avg), row.Metric}
+		data := []string{row.Profile, fmt.Sprint(row.SameNode), fmt.Sprint(row.HostNetwork), fmt.Sprint(row.Service), strconv.Itoa(row.Duration), strconv.Itoa(row.Samples), fmt.Sprintf("%f", avg), row.Metric}
 		if err := archive.Write(data); err != nil {
 			return fmt.Errorf("Failed to write archive to file")
 		}
