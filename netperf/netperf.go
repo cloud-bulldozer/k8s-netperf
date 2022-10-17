@@ -336,7 +336,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 	pod := client.Items[0]
 	fmt.Printf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
-	cmd := []string{"/usr/local/bin/netperf", "-H", serverIP, "-l", fmt.Sprintf("%d", nc.Duration), "-t", nc.Profile, "--", "-m", fmt.Sprintf("%d", nc.MessageSize), "-P", fmt.Sprintf("0,%d", ServerDataPort)}
+	cmd := []string{"/usr/local/bin/netperf", "-H", serverIP, "-l", fmt.Sprintf("%d", nc.Duration), "-t", nc.Profile, "--", "-m", fmt.Sprintf("%d", nc.MessageSize), "-P", fmt.Sprintf("0,%d", ServerDataPort), "-R", "1"}
 	req := c.CoreV1().RESTClient().
 		Post().
 		Namespace(pod.Namespace).
