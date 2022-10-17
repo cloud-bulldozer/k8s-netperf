@@ -172,7 +172,9 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	}
 
 	if ncount > 1 {
-		s.ClientHost, err = deployDeployment(client, cdpHostAcross)
+		if s.HostNetwork {
+			s.ClientHost, err = deployDeployment(client, cdpHostAcross)
+		}
 		if err != nil {
 			return err
 		}
@@ -253,9 +255,11 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		}
 		sdpHost.PodAntiAffinity = antiAffinity
 	}
-	s.ServerHost, err = deployDeployment(client, sdpHost)
-	if err != nil {
-		return err
+	if s.HostNetwork {
+		s.ServerHost, err = deployDeployment(client, sdpHost)
+		if err != nil {
+			return err
+		}
 	}
 	s.Server, err = deployDeployment(client, sdp)
 	if err != nil {

@@ -41,9 +41,10 @@ func main() {
 		os.Exit(1)
 	}
 	s := netperf.PerfScenarios{
-		NodeLocal:  *nl,
-		RestConfig: *rconfig,
-		Configs:    cfg,
+		HostNetwork: *full,
+		NodeLocal:   *nl,
+		RestConfig:  *rconfig,
+		Configs:     cfg,
 	}
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
