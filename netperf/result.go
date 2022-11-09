@@ -1,10 +1,7 @@
 package netperf
 
 import (
-	"bytes"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	stats "github.com/montanaflynn/stats"
@@ -13,11 +10,12 @@ import (
 // Data describes the result data
 type Data struct {
 	Config
-	Metric      string
-	SameNode    bool
-	HostNetwork bool
-	Sample      float64
-	Summary     []float64
+	Metric            string
+	SameNode          bool
+	HostNetwork       bool
+	Sample            Sample
+	ThroughputSummary []float64
+	LatencySummary    []float64
 }
 
 // ScenarioResults each scenario could have multiple results
@@ -25,16 +23,12 @@ type ScenarioResults struct {
 	Results []Data
 }
 
-// NetReg Regex for Netperf
-var NetReg = regexp.MustCompile(`\s+\d+\s+\d+\s+(\d+|\S+)\s+(\S+|\d+)\s+(\S+)+\s+(\S+)?`)
-
-// NetUDPReg, with UDP we need to capture what the server saw versus what the client sent
-var NetUDPReg = regexp.MustCompile(`(?m)^[0-9]+\s+\S+\s+\d+\s+(\S+)`)
-
+// average accepts array of floats to calculate average
 func average(vals []float64) (float64, error) {
 	return stats.Median(vals)
 }
 
+// percentile accepts array of floats and the desired %tile to calculate
 func percentile(vals []float64, ptile float64) (float64, error) {
 	return stats.Percentile(vals, ptile)
 }
@@ -71,11 +65,11 @@ func TCPThroughputDiff(s ScenarioResults) (float64, error) {
 		if !s.Results[t].Service {
 			if s.Results[t].HostNetwork {
 				if s.Results[t].Profile == "TCP_STREAM" {
-					hostPerf, _ = average(s.Results[t].Summary)
+					hostPerf, _ = average(s.Results[t].ThroughputSummary)
 				}
 			} else {
 				if s.Results[t].Profile == "TCP_STREAM" {
-					podPerf, _ = average(s.Results[t].Summary)
+					podPerf, _ = average(s.Results[t].ThroughputSummary)
 				}
 			}
 		}
@@ -97,8 +91,35 @@ func ShowStreamResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "STREAM") {
-				avg, _ := average(r.Summary)
+				avg, _ := average(r.ThroughputSummary)
 				fmt.Printf("📊 %-15s | %-15t |%-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
+			}
+		}
+		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
+	}
+}
+
+func ShowLatencyResult(s ScenarioResults) {
+	if checkResults(s, "STREAM") {
+		fmt.Printf("%s Stream Latency Results %s\r\n", strings.Repeat("-", 65), strings.Repeat("-", 65))
+		fmt.Printf("%-18s | %-15s |%-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "99%tile value")
+		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
+		for _, r := range s.Results {
+			if strings.Contains(r.Profile, "STREAM") {
+				avg, _ := average(r.LatencySummary)
+				fmt.Printf("📊 %-15s | %-15t |%-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, "usec")
+			}
+		}
+		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
+	}
+	if checkResults(s, "RR") {
+		fmt.Printf("%s RR Latency Results %s\r\n", strings.Repeat("-", 66), strings.Repeat("-", 66))
+		fmt.Printf("%-18s | %-15s |%-15s | %-15s | %-15s | %-15s | %-15s | %-15s\r\n", "Scenario", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "99%tile value")
+		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
+		for _, r := range s.Results {
+			if strings.Contains(r.Profile, "RR") {
+				avg, _ := average(r.LatencySummary)
+				fmt.Printf("📊 %-15s | %-15t |%-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, "usec")
 			}
 		}
 		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
@@ -115,39 +136,10 @@ func ShowRRResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
-				avg, _ := average(r.Summary)
+				avg, _ := average(r.ThroughputSummary)
 				fmt.Printf("📊 %-15s | %-15t |%-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
 			}
 		}
 		fmt.Printf("%s\r\n", strings.Repeat("-", 155))
 	}
-}
-
-// ParseResults accepts the stdout from the execution of the benchmark. It also needs
-// The NetPerfConfig to determine aspects of the workload the user provided.
-// It will return a NetPerfResults struct or error
-func ParseResults(stdout *bytes.Buffer, nc Config) (float64, error) {
-	d := NetReg.FindStringSubmatch(stdout.String())
-	val := ""
-	if strings.Contains(nc.Profile, "UDP_STREAM") {
-		d = NetUDPReg.FindStringSubmatch(stdout.String())
-		if len(d) == 0 {
-			return 0, fmt.Errorf("❌ Unable to process results")
-		}
-		val = d[1]
-	} else {
-		if len(d) < 5 {
-			return 0, fmt.Errorf("❌ Unable to process results")
-		}
-		if len(d[len(d)-1]) > 0 {
-			val = d[len(d)-1]
-		} else {
-			val = d[len(d)-2]
-		}
-	}
-	sample, err := strconv.ParseFloat(val, 64)
-	if err != nil {
-		return 0, fmt.Errorf("❌ Unable to parse netperf result")
-	}
-	return sample, nil
 }

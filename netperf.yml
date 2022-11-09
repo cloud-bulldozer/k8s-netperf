@@ -2,30 +2,30 @@
 TCPStream:
    profile: "TCP_STREAM"
    duration: 10
-   samples: 1
-   messagesize: 16384
+   samples: 3
+   messagesize: 1024
 
 UDPStream:
    profile: "UDP_STREAM"
    duration: 10
-   samples: 1
-   messagesize: 16384
+   samples: 3
+   messagesize: 1024
 
 CRR:
    profile: "TCP_CRR"
    duration: 10
-   samples: 1
-   messagesize: 16384
+   samples: 3
+   messagesize: 1024
 
 CRRService:
    profile: "TCP_CRR"
    duration: 10
-   samples: 1
-   messagesize: 16384
+   samples: 3
+   messagesize: 1024
    service: True
 
 RR:
    profile: "TCP_RR"
    duration: 10
-   samples: 1
-   messagesize: 16384
+   samples: 3
+   messagesize: 1024

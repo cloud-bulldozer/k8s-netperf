@@ -99,7 +99,8 @@ func main() {
 						log.Error(err)
 						os.Exit(1)
 					}
-					npr.Summary = append(npr.Summary, nr)
+					npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+					npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 				}
 				sr.Results = append(sr.Results, npr)
 			}
@@ -118,7 +119,8 @@ func main() {
 					log.Error(err)
 					os.Exit(1)
 				}
-				npr.Summary = append(npr.Summary, nr)
+				npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+				npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 			}
 			sr.Results = append(sr.Results, npr)
 		} else {
@@ -139,13 +141,15 @@ func main() {
 					log.Error(err)
 					os.Exit(1)
 				}
-				npr.Summary = append(npr.Summary, nr)
+				npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+				npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 			}
 			sr.Results = append(sr.Results, npr)
 		}
 	}
 	netperf.ShowStreamResult(sr)
 	netperf.ShowRRResult(sr)
+	netperf.ShowLatencyResult(sr)
 	err = netperf.WriteCSVResult(sr)
 	if err != nil {
 		log.Error(err)

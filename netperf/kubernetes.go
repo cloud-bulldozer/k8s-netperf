@@ -45,7 +45,7 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
-			return "", fmt.Errorf("⚠️ No zone label")
+			return "", fmt.Errorf("⚠️  No zone label")
 		}
 		if _, ok := zones[l.GetLabels()["topology.kubernetes.io/zone"]]; ok {
 			zone = l.GetLabels()["topology.kubernetes.io/zone"]
@@ -57,7 +57,7 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 	}
 	// No zone had > 1, use the last zone.
 	if zone == "" {
-		fmt.Println("⚠️ Single node per zone")
+		fmt.Println("⚠️  Single node per zone")
 		zone = lz
 	}
 	return zone, nil
@@ -139,7 +139,7 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
 	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
 	if err == nil {
-		fmt.Println("♻️ Using existing Service")
+		fmt.Println("♻️  Using existing Service")
 		return s, nil
 	}
 	fmt.Printf("🚀 Creating service for %s in %s\n", sp.Name, sp.Namespace)
