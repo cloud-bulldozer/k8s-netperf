@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 	apiv1 "k8s.io/api/core/v1"
@@ -25,7 +27,13 @@ type Config struct {
 	Service     bool   `default:"false" yaml:"service,omitempty"`
 }
 
-const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
+// Sample describes the values we will return with each execution.
+type Sample struct {
+	Latency        float64
+	Latency99ptile float64
+	Throughput     float64
+	Metric         string
+}
 
 // DeploymentParams describes the deployment
 type DeploymentParams struct {
@@ -71,11 +79,18 @@ const ServerCtlPort = 12865
 // ServerDataPort data port for the service
 const ServerDataPort = 42424
 
+// Labels we will apply to k8s assets.
 const serverRole = "server"
 const clientRole = "client"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
+
+// Tests we will support in k8s-netperf
+const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
+
+// omniOptions are netperf specific options that we will pass to the netperf client.
+const omniOptions = "rt_latency,p99_latency,throughput,throughput_units"
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
@@ -145,7 +160,6 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:      ServerCtlPort,
 	}
-
 	cdpHostAcross := DeploymentParams{
 		Name:        "client-host",
 		Namespace:   "netperf",
@@ -170,7 +184,6 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 			},
 		}
 	}
-
 	if ncount > 1 {
 		if s.HostNetwork {
 			s.ClientHost, err = deployDeployment(client, cdpHostAcross)
@@ -183,7 +196,6 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 			return err
 		}
 	}
-
 	sdpHost := DeploymentParams{
 		Name:        "server-host",
 		Namespace:   "netperf",
@@ -194,7 +206,6 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
 		Port:        ServerCtlPort,
 	}
-
 	// Start netperf server
 	sdp := DeploymentParams{
 		Name:      "server",
@@ -336,7 +347,14 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 	pod := client.Items[0]
 	fmt.Printf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
-	cmd := []string{"/usr/local/bin/netperf", "-H", serverIP, "-l", fmt.Sprintf("%d", nc.Duration), "-t", nc.Profile, "--", "-m", fmt.Sprintf("%d", nc.MessageSize), "-P", fmt.Sprintf("0,%d", ServerDataPort), "-R", "1"}
+	cmd := []string{"/usr/local/bin/netperf", "-H",
+		serverIP, "-l",
+		fmt.Sprintf("%d", nc.Duration),
+		"-t", nc.Profile,
+		"--",
+		"-k", fmt.Sprintf("%s", omniOptions),
+		"-m", fmt.Sprintf("%d", nc.MessageSize),
+		"-P", fmt.Sprintf("0,%d", ServerDataPort), "-R", "1"}
 	req := c.CoreV1().RESTClient().
 		Post().
 		Namespace(pod.Namespace).
@@ -366,4 +384,27 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 	}
 	// Sound check stderr
 	return stdout, nil
+}
+
+// ParseResults accepts the stdout from the execution of the benchmark. It also needs
+// The NetPerfConfig to determine aspects of the workload the user provided.
+// It will return a Sample struct or error
+func ParseResults(stdout *bytes.Buffer, nc Config) (Sample, error) {
+	sample := Sample{}
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		l := strings.Split(line, "=")
+		if len(l) < 2 {
+			continue
+		}
+		if strings.Contains(l[0], "THROUGHPUT_UNITS") {
+			sample.Metric = l[1]
+		} else if strings.Contains(l[0], "THROUGHPUT") {
+			sample.Throughput, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "P99_LATENCY") {
+			sample.Latency99ptile, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "RT_LATENCY") {
+			sample.Latency, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		}
+	}
+	return sample, nil
 }
