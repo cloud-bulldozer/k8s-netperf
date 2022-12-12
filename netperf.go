@@ -76,7 +76,10 @@ func main() {
 			metric = "Mb/s"
 		}
 		var serverIP string
+		var service bool
+		service = false
 		if nc.Service {
+			service = true
 			serverIP = s.Service.Spec.ClusterIP
 		} else {
 			serverIP = s.Server.Items[0].Status.PodIP
@@ -85,6 +88,7 @@ func main() {
 			npr := netperf.Data{}
 			npr.Config = nc
 			npr.Metric = metric
+			npr.Service = service
 			npr.HostNetwork = true
 			if !nc.Service && *full {
 				for i := 0; i < nc.Samples; i++ {
@@ -107,6 +111,7 @@ func main() {
 			npr = netperf.Data{}
 			npr.Config = nc
 			npr.Metric = metric
+			npr.Service = service
 			npr.SameNode = false
 			for i := 0; i < nc.Samples; i++ {
 				r, err := netperf.Run(client, s.RestConfig, nc, s.ClientAcross, serverIP)
@@ -129,6 +134,7 @@ func main() {
 			npr := netperf.Data{}
 			npr.Config = nc
 			npr.Metric = metric
+			npr.Service = service
 			npr.SameNode = true
 			for i := 0; i < nc.Samples; i++ {
 				r, err := netperf.Run(client, s.RestConfig, nc, s.Client, serverIP)
