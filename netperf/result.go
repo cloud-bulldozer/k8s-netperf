@@ -14,6 +14,7 @@ type Data struct {
 	SameNode          bool
 	HostNetwork       bool
 	Sample            Sample
+	Service           bool
 	ThroughputSummary []float64
 	LatencySummary    []float64
 }
