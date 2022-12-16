@@ -7,19 +7,26 @@ import (
 	"os"
 	"strings"
 
+	log "gihub.com/jtaleric/k8s-netperf/logging"
 	"gihub.com/jtaleric/k8s-netperf/netperf"
-	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
+
 	cfgfile := flag.String("config", "netperf.yml", "K8s netperf Configuration File")
 	nl := flag.Bool("local", false, "Run Netperf with pod/server on the same node")
 	full := flag.Bool("all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
+	debug := flag.Bool("debug", false, "Enable debug log")
 	tcpt := flag.Float64("tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	flag.Parse()
+
+	if *debug {
+		log.SetDebug()
+	}
+
 	cfg, err := netperf.ParseConf(*cfgfile)
 	if err != nil {
 		log.Error(err)
@@ -32,12 +39,12 @@ func main() {
 		&clientcmd.ConfigOverrides{})
 	rconfig, err := kconfig.ClientConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 		os.Exit(1)
 	}
 	client, err := kubernetes.NewForConfig(rconfig)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 		os.Exit(1)
 	}
 	s := netperf.PerfScenarios{
@@ -55,7 +62,7 @@ func main() {
 	if !s.NodeLocal && len(nodes.Items) < 2 {
 		log.Error("Node count too low to run pod to pod across nodes.")
 		log.Error("To run k8s-netperf on a single node deployment pass -local.")
-		log.Error("		$ k8s-netperf -local")
+		log.Error("	$ k8s-netperf -local")
 		os.Exit(1)
 	}
 

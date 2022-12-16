@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	log "gihub.com/jtaleric/k8s-netperf/logging"
 	"gopkg.in/yaml.v2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -98,7 +99,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 	// in the same AZ/Zone versus across AZ/Zone
 	z, err := GetZone(client)
 	if err != nil {
-		fmt.Println(err)
+		log.Warn(err)
 	}
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
@@ -106,6 +107,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		return err
 	}
 	ncount := len(nodes.Items)
+	log.Debugf("Number of nodes with role worker: %d", ncount)
 
 	if s.NodeLocal {
 		//  Create Netperf client on the same node as the server.
@@ -303,7 +305,7 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (apiv1.
 // describes which tests to run
 // Returns Config struct
 func ParseConf(fn string) ([]Config, error) {
-	fmt.Printf("📒 Reading %s file.\r\n", fn)
+	log.Infof("📒 Reading %s file.\n", fn)
 	buf, err := ioutil.ReadFile(fn)
 	if err != nil {
 		return nil, err
@@ -337,7 +339,7 @@ func ParseConf(fn string) ([]Config, error) {
 
 // ShowConfig Display the netperf config
 func ShowConfig(c Config) {
-	fmt.Printf("🗒️  Running netperf %s (service %t) for %ds\r\n", c.Profile, c.Service, c.Duration)
+	log.Infof("🗒️  Running netperf %s (service %t) for %ds\n", c.Profile, c.Service, c.Duration)
 }
 
 // Run will use the k8s client to run the netperf binary in the container image
@@ -345,7 +347,7 @@ func ShowConfig(c Config) {
 func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
-	fmt.Printf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
+	log.Infof("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
 	cmd := []string{"/usr/local/bin/netperf", "-H",
 		serverIP, "-l",
@@ -355,6 +357,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 		"-k", fmt.Sprintf("%s", omniOptions),
 		"-m", fmt.Sprintf("%d", nc.MessageSize),
 		"-P", fmt.Sprintf("0,%d", ServerDataPort), "-R", "1"}
+	log.Debug(cmd)
 	req := c.CoreV1().RESTClient().
 		Post().
 		Namespace(pod.Namespace).
@@ -382,6 +385,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 	if err != nil {
 		return stdout, err
 	}
+	log.Debug(strings.TrimSpace(stdout.String()))
 	// Sound check stderr
 	return stdout, nil
 }

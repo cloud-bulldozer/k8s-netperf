@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	log "gihub.com/jtaleric/k8s-netperf/logging"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +15,7 @@ import (
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
 // It will return a bool based on if the pods ever become ready before we move on.
 func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
-	fmt.Println("⏰ Checking for Pods to become ready...")
+	log.Info("⏰ Checking for Pods to become ready...")
 	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return false, err
@@ -57,7 +58,7 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 	}
 	// No zone had > 1, use the last zone.
 	if zone == "" {
-		fmt.Println("⚠️  Single node per zone")
+		log.Warn("⚠️  Single node per zone")
 		zone = lz
 	}
 	return zone, nil
@@ -68,11 +69,11 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	d, err := client.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err == nil {
 		if d.Status.ReadyReplicas > 0 {
-			fmt.Println("♻️  Using existing Deployment")
+			log.Info("♻️  Using existing Deployment")
 			return d, nil
 		}
 	}
-	fmt.Printf("🚀 Starting Deployment for %s in %s\n", dp.Name, dp.Namespace)
+	log.Infof("🚀 Starting Deployment for: %s in namespace: %s", dp.Name, dp.Namespace)
 	dc := client.AppsV1().Deployments(dp.Namespace)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -139,10 +140,10 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
 	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
 	if err == nil {
-		fmt.Println("♻️  Using existing Service")
+		log.Info("♻️  Using existing Service")
 		return s, nil
 	}
-	fmt.Printf("🚀 Creating service for %s in %s\n", sp.Name, sp.Namespace)
+	log.Infof("🚀 Creating service for %s in namespace %s", sp.Name, sp.Namespace)
 	sc := client.CoreV1().Services(sp.Namespace)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{

@@ -45,7 +45,7 @@ func checkResults(s ScenarioResults, check string) bool {
 	return false
 }
 
-// checkHostResults will check to see if there are hostNet results
+// CheckHostResults will check to see if there are hostNet results
 // returns true if there are results with hostNetwork
 func CheckHostResults(s ScenarioResults) bool {
 	for t := range s.Results {
@@ -100,6 +100,7 @@ func ShowStreamResult(s ScenarioResults) {
 	}
 }
 
+// ShowLatencyResult accepts NetPerfResults to display to the user via stdout
 func ShowLatencyResult(s ScenarioResults) {
 	if checkResults(s, "STREAM") {
 		fmt.Printf("%s Stream Latency Results %s\r\n", strings.Repeat("-", 65), strings.Repeat("-", 65))
