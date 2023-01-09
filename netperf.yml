@@ -5,6 +5,12 @@ TCPStream:
    samples: 3
    messagesize: 1024
 
+TCPStream2:
+   profile: "TCP_STREAM"
+   duration: 10
+   samples: 3
+   messagesize: 8192
+
 UDPStream:
    profile: "UDP_STREAM"
    duration: 10
