@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	log "gihub.com/jtaleric/k8s-netperf/logging"
+	"gihub.com/jtaleric/k8s-netperf/metrics"
 	"gopkg.in/yaml.v2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,16 +54,18 @@ type DeploymentParams struct {
 
 // PerfScenarios describes the different scenarios
 type PerfScenarios struct {
-	NodeLocal    bool
-	HostNetwork  bool
-	Configs      []Config
-	Client       apiv1.PodList
-	Server       apiv1.PodList
-	ClientAcross apiv1.PodList
-	ClientHost   apiv1.PodList
-	ServerHost   apiv1.PodList
-	Service      *apiv1.Service
-	RestConfig   rest.Config
+	NodeLocal      bool
+	HostNetwork    bool
+	Configs        []Config
+	ServerNodeInfo metrics.NodeInfo
+	ClientNodeInfo metrics.NodeInfo
+	Client         apiv1.PodList
+	Server         apiv1.PodList
+	ClientAcross   apiv1.PodList
+	ClientHost     apiv1.PodList
+	ServerHost     apiv1.PodList
+	Service        *apiv1.Service
+	RestConfig     rest.Config
 }
 
 // ServiceParams describes the service specific details
@@ -138,7 +141,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		if err != nil {
 			return err
 		}
-
+		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdp)
 	}
 
 	// Create netperf TCP service
@@ -275,6 +278,11 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		}
 	}
 	s.Server, err = deployDeployment(client, sdp)
+
+	s.ServerNodeInfo, _ = GetPodNodeInfo(client, sdp)
+	if !s.NodeLocal {
+		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdpAcross)
+	}
 	if err != nil {
 		return err
 	}
@@ -347,7 +355,7 @@ func ShowConfig(c Config) {
 func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
-	log.Infof("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
+	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
 	cmd := []string{"/usr/local/bin/netperf", "-H",
 		serverIP, "-l",

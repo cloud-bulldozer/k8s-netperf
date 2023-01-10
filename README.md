@@ -29,15 +29,40 @@ also be sure to create a `netperf` namespace. (Not over-writable yet)
 
 ```shell
 $ kubectl create ns netperf
+$ kubectl create sa -n netperf netperf
+```
+
+If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
+
+
+```shell
+$ kubectl create ns netperf
+$ kubectl create sa netperf -n netperf
 $ ./k8s-netperf -help
 Usage of ./k8s-netperf:
+  -all
+    	Run all tests scenarios - hostNet and podNetwork (if possible)
   -config string
-        K8s netperf Configuration File (default "netperf.yml")
+    	K8s netperf Configuration File (default "netperf.yml")
+  -debug
+    	Enable debug log
   -local
-        Run Netperf with pod/server on the same node
+    	Run Netperf with pod/server on the same node
+  -metrics
+    	Show all system metrics retrieved from prom
+  -prom string
+    	Prometheus URL
   -tcp-tolerance float
-        Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
+    	Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
 ```
+
+`-prom` accepts a string (URL). Example  http://localhost:9090
+
+When using `-prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
+
+With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `-prom` option.
+
+`-metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file. 
 
 ### Config file
 `netperf.yml` contains a default set of tests.
