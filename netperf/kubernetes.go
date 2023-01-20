@@ -5,12 +5,15 @@ import (
 	"fmt"
 
 	log "gihub.com/jtaleric/k8s-netperf/logging"
+	"gihub.com/jtaleric/k8s-netperf/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 )
+
+const sa string = "netperf"
 
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
 // It will return a bool based on if the pods ever become ready before we move on.
@@ -89,7 +92,8 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					Labels: dp.Labels,
 				},
 				Spec: apiv1.PodSpec{
-					HostNetwork: dp.HostNetwork,
+					ServiceAccountName: sa,
+					HostNetwork:        dp.HostNetwork,
 					Containers: []apiv1.Container{
 						{
 							Name:    dp.Name,
@@ -107,6 +111,33 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 		},
 	}
 	return dc.Create(context.TODO(), deployment, metav1.CreateOptions{})
+}
+
+// GetPodNodeInfo collects the node information for a specific pod
+func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeInfo, error) {
+	var info metrics.NodeInfo
+	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
+	if err != nil {
+		return info, fmt.Errorf("❌ Failure to capture deployment")
+	}
+	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	if err != nil {
+		return info, fmt.Errorf("❌ Failure to capture deployment label")
+	}
+	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
+	if err != nil {
+		return info, fmt.Errorf("❌ Failure to capture pods")
+	}
+	for pod := range pods.Items {
+		p := pods.Items[pod]
+		if pods.Items[pod].DeletionTimestamp != nil {
+			continue
+		} else {
+			info.IP = p.Status.HostIP
+			info.Hostname = p.Spec.NodeName
+		}
+	}
+	return info, nil
 }
 
 // GetPods searches for a specific set of pods from DeploymentParms
