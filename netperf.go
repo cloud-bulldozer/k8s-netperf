@@ -225,6 +225,13 @@ func main() {
 		log.Error(err)
 		os.Exit(1)
 	}
+	if pavail {
+		err = netperf.WritePromCSVResult(sr)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+	}
 	// Initially we are just checking against TCP_STREAM results.
 	if netperf.CheckHostResults(sr) {
 		diff, err := netperf.TCPThroughputDiff(sr)

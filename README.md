@@ -70,6 +70,7 @@ With OpenShift, we attempt to discover the OpenShift route. If that route is not
 Description of each field in the YAML.
 ```yml
 TCPStream:                 # Place-holder of a test name
+   parallelism: 1          # Number of concurrent netperf processes to run. 
    profile: "TCP_STREAM"   # Netperf profile to execute. This can be [TCP,UDP]_STREAM, [TCP,UDP]_RR, TCP_CRR
    duration: 3             # How long to run the test
    samples: 1              # Iterations to run specified test
@@ -77,20 +78,29 @@ TCPStream:                 # Place-holder of a test name
    service: false          # If we should test with the server pod behind a service
 ```
 
+#### parallelism
+In most cases setting parallelism greater than 1 is OK, however through a `service` we only support a single process of netperf, since we bind to a specific port.
+
 ## Pass / Fail
 `k8s-netperf` has a cli option for `-tcp-tolerance` which defaults to 10%.
 
 In order to have `k8s-netperf` determine pass/fail the user must pass the `-all` flag. `k8s-netperf` must be able to run with hostNetwork and podNetwork across nodes.
 
 ```shell
-$ ./k8s-netperf -tcp-tolerance 1
---------------------------------------------------------------------- Stream Results ---------------------------------------------------------------------
-Scenario           | Host Network    |Service         | Message Size    | Same node       | Duration        | Samples         | Avg value
------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | true            |false           | 16384           | false           | 10              | 3               | 923.180000      (Mb/s)
-📊 TCP_STREAM      | false           |false           | 16384           | false           | 10              | 3               | 881.770000      (Mb/s)
------------------------------------------------------------------------------------------------------------------------------------------------------------
-😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than 1.0 percent (4.6 percent)
+$ ./k8s-netperf -tcp-tolerance 10
+------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_STREAM      | 2               | true            | false           | 1024            | false           | 10              | 1               | 1867.890000     (Mb/s) 
+📊 TCP_STREAM      | 2               | false           | false           | 1024            | false           | 10              | 1               | 1657.140000     (Mb/s) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------- Stream Latency Results ---------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_STREAM      | 2               | true            |false           | 1024            | false           | 10              | 1               | 32.000000       (usec) 
+📊 TCP_STREAM      | 2               | false           |false           | 1024            | false           | 10              | 1               | 32.000000       (usec) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than 10.0 percent (12.0 percent)
 $ echo $?
 1
 ```
@@ -104,23 +114,36 @@ $ echo $?
 
 Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test.
 ```
---------------------------------------------------------------------- Stream Results ---------------------------------------------------------------------
-Scenario           | Host Network    |Service         | Message Size    | Same node       | Duration        | Samples         | Avg value
------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | true            |false           | 16384           | false           | 10              | 3               | 923.360000      (Mb/s)
-📊 TCP_STREAM      | false           |false           | 16384           | false           | 10              | 3               | 882.310000      (Mb/s)
-📊 UDP_STREAM      | true            |false           | 16384           | false           | 10              | 3               | 943.440000      (Mb/s)
-📊 UDP_STREAM      | false           |false           | 16384           | false           | 10              | 3               | 3472.660000     (Mb/s)
------------------------------------------------------------------------------------------------------------------------------------------------------------
------------------------------------------------------------------------- RR Results ------------------------------------------------------------------------
-Scenario           | Host Network    |Service         | Message Size    | Same node       | Duration        | Samples         | Avg value
------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_CRR         | false           |true            | 16384           | false           | 10              | 3               | 1969.860000     (OP/s)
-📊 TCP_RR          | true            |false           | 16384           | false           | 10              | 3               | 14952.600000    (OP/s)
-📊 TCP_RR          | false           |false           | 16384           | false           | 10              | 3               | 8862.240000     (OP/s)
-📊 TCP_CRR         | true            |false           | 16384           | false           | 10              | 3               | 3454.080000     (OP/s)
-📊 TCP_CRR         | false           |false           | 16384           | false           | 10              | 3               | 2332.390000     (OP/s)
------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_STREAM      | 1               | false           | false           | 1024            | false           | 10              | 3               | 1131.150000     (Mb/s) 
+📊 TCP_STREAM      | 2               | false           | false           | 1024            | false           | 10              | 3               | 1710.150000     (Mb/s) 
+📊 TCP_STREAM      | 1               | false           | false           | 8192            | false           | 10              | 3               | 4437.520000     (Mb/s) 
+📊 UDP_STREAM      | 1               | false           | false           | 1024            | false           | 10              | 3               | 1159.790000     (Mb/s) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------- RR Results ----------------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_CRR         | 1               | false           | false           | 1024            | false           | 10              | 3               | 5954.940000     (OP/s) 
+📊 TCP_CRR         | 1               | false           | true            | 1024            | false           | 10              | 3               | 1455.470000     (OP/s) 
+📊 TCP_RR          | 1               | false           | false           | 1024            | false           | 10              | 3               | 41330.000000    (OP/s) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------- Stream Latency Results ---------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_STREAM      | 1               | false           |false           | 1024            | false           | 10              | 3               | 23.000000       (usec) 
+📊 TCP_STREAM      | 2               | false           |false           | 1024            | false           | 10              | 3               | 34.000000       (usec) 
+📊 TCP_STREAM      | 1               | false           |false           | 8192            | false           | 10              | 3               | 30.000000       (usec) 
+📊 UDP_STREAM      | 1               | false           |false           | 1024            | false           | 10              | 3               | 14.000000       (usec) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------- RR Latency Results ----------------------------------------------------------------------------
+Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+📊 TCP_CRR         |  1               | false           | false           | 1024            | false           | 10              | 3               | 456.000000      (usec) 
+📊 TCP_CRR         |  1               | false           | true            | 1024            | false           | 10              | 3               | 248.000000      (usec) 
+📊 TCP_RR          |  1               | false           | false           | 1024            | false           | 10              | 3               | 85.000000       (usec) 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 ### Output to CSV
@@ -128,14 +151,12 @@ Scenario           | Host Network    |Service         | Message Size    | Same n
 
 Example output
 ```csv
-Profile,Same node,Host Network,Service,Duration,# of Samples,Avg Throughput,Metric
-TCP_RR,false,true,false,10,3,15000.820000,OP/s
-TCP_RR,false,false,false,10,3,8120.030000,OP/s
-TCP_STREAM,false,true,false,10,3,926.450000,Mb/s
-TCP_STREAM,false,false,false,10,3,884.090000,Mb/s
-UDP_STREAM,false,true,false,10,3,933.370000,Mb/s
-UDP_STREAM,false,false,false,10,3,3459.930000,Mb/s
-TCP_CRR,false,true,false,10,3,3316.510000,OP/s
-TCP_CRR,false,false,false,10,3,2031.390000,OP/s
-TCP_CRR,false,false,true,10,3,19.200000,OP/s
+Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
+TCP_STREAM,false,false,false,10,1,3,1024,1131.150000,Mb/s,23,usec
+TCP_STREAM,false,false,false,10,2,3,1024,1710.150000,Mb/s,34,usec
+TCP_STREAM,false,false,false,10,1,3,8192,4437.520000,Mb/s,30,usec
+UDP_STREAM,false,false,false,10,1,3,1024,1159.790000,Mb/s,14,usec
+TCP_CRR,false,false,false,10,1,3,1024,5954.940000,OP/s,456,usec
+TCP_CRR,false,false,true,10,1,3,1024,1455.470000,OP/s,248,usec
+TCP_RR,false,false,false,10,1,3,1024,41330.000000,OP/s,85,usec
 ```
