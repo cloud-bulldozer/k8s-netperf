@@ -22,6 +22,7 @@ import (
 
 // Config describes the netperf tests
 type Config struct {
+	Parallelism int    `default:"1" yaml:"parallelism,omitempty"`
 	Duration    int    `yaml:"duration,omitempty"`
 	Profile     string `yaml:"profile,omitempty"`
 	Samples     int    `yaml:"samples,omitempty"`
@@ -91,7 +92,7 @@ const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 
 // Tests we will support in k8s-netperf
-const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr"
+const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr|udp_crr|sctp_stream|sctp_rr|sctp_crr"
 
 // omniOptions are netperf specific options that we will pass to the netperf client.
 const omniOptions = "rt_latency,p99_latency,throughput,throughput_units"
@@ -118,7 +119,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 			Name:      "client",
 			Namespace: "netperf",
 			Replicas:  1,
-			Image:     "quay.io/jtaleric/k8snetperf:latest",
+			Image:     "quay.io/jtaleric/netperf:beta",
 			Labels:    map[string]string{"role": clientRole},
 			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 			Port:      ServerCtlPort,
@@ -160,7 +161,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Name:      "client-across",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/jtaleric/k8snetperf:latest",
+		Image:     "quay.io/jtaleric/netperf:beta",
 		Labels:    map[string]string{"role": clientAcrossRole},
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:      ServerCtlPort,
@@ -170,7 +171,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/jtaleric/k8snetperf:latest",
+		Image:       "quay.io/jtaleric/netperf:beta",
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:        ServerCtlPort,
@@ -206,7 +207,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/jtaleric/k8snetperf:latest",
+		Image:       "quay.io/jtaleric/netperf:beta",
 		Labels:      map[string]string{"role": hostNetServerRole},
 		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
 		Port:        ServerCtlPort,
@@ -216,7 +217,7 @@ func BuildSUT(client *kubernetes.Clientset, s *PerfScenarios) error {
 		Name:      "server",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/jtaleric/k8snetperf:latest",
+		Image:     "quay.io/jtaleric/netperf:beta",
 		Labels:    map[string]string{"role": serverRole},
 		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
 		Port:      ServerCtlPort,
@@ -340,6 +341,14 @@ func ParseConf(fn string) ([]Config, error) {
 		if value.MessageSize < 1 {
 			return nil, fmt.Errorf("messagesize must be > 0")
 		}
+		if value.Parallelism < 1 {
+			return nil, fmt.Errorf("parallelism must be > 0")
+		}
+		if value.Service {
+			if value.Parallelism > 1 {
+				return nil, fmt.Errorf("parallelism must be 1 when using a service")
+			}
+		}
 		tests = append(tests, value)
 	}
 	return tests, nil
@@ -357,14 +366,27 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc Config, client apiv1.PodLis
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	ShowConfig(nc)
-	cmd := []string{"/usr/local/bin/netperf", "-H",
-		serverIP, "-l",
-		fmt.Sprintf("%d", nc.Duration),
-		"-t", nc.Profile,
-		"--",
-		"-k", fmt.Sprintf("%s", omniOptions),
-		"-m", fmt.Sprintf("%d", nc.MessageSize),
-		"-P", fmt.Sprintf("0,%d", ServerDataPort), "-R", "1"}
+	cmd := []string{}
+	if nc.Service {
+		cmd = []string{"bash", "super-netperf", "1", "-H",
+			serverIP, "-l",
+			fmt.Sprintf("%d", nc.Duration),
+			"-t", nc.Profile,
+			"--",
+			"-k", fmt.Sprintf("%s", omniOptions),
+			"-m", fmt.Sprintf("%d", nc.MessageSize),
+			"-P", fmt.Sprintf("%d", ServerDataPort),
+			"-R", "1"}
+	} else {
+		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
+			serverIP, "-l",
+			fmt.Sprintf("%d", nc.Duration),
+			"-t", nc.Profile,
+			"--",
+			"-k", fmt.Sprintf("%s", omniOptions),
+			"-m", fmt.Sprintf("%d", nc.MessageSize),
+			"-R", "1"}
+	}
 	log.Debug(cmd)
 	req := c.CoreV1().RESTClient().
 		Post().
