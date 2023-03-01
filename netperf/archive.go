@@ -1,36 +1,116 @@
 package netperf
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v8"
+	"gihub.com/jtaleric/k8s-netperf/logging"
+	"gihub.com/jtaleric/k8s-netperf/metrics"
+	"github.com/google/uuid"
+	"github.com/opensearch-project/opensearch-go"
+	"github.com/opensearch-project/opensearch-go/opensearchapi"
 )
 
-type elasticParams struct {
-	url      string
-	user     string
-	password string
-	index    string
+const index = "k8s-netperf"
+
+// Doc struct of the JSON document to be indexed
+type Doc struct {
+	UUID          string           `json:"uuid"`
+	Timestamp     time.Time        `json:"timestamp"`
+	HostNetwork   bool             `json:"hostNetwork"`
+	Parallelism   int              `json:"parallelism"`
+	Profile       string           `json:"profile"`
+	Duration      int              `json:"duration"`
+	Samples       int              `json:"samples"`
+	Messagesize   int              `json:"messageSize"`
+	Result        float64          `json:"result"`
+	Metric        string           `json:"metric"`
+	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
+	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
+	ClientNodeCPU metrics.NodeCPU  `json:"clientCPU"`
+	ClientPodCPU  []metrics.PodCPU `json:"clientPods"`
 }
 
-// Connect accepts ElasticParams which describe how to connect to ES.
-// Returns a client connected to the desired ES Cluster.
-func Connect(es elasticParams) (*elasticsearch.Client, error) {
-	fmt.Printf("Connecting to ES - %s\r\n", es.url)
-	esc := elasticsearch.Config{
-		Username:  es.user,
-		Password:  es.password,
-		Addresses: []string{es.url},
+// Connect returns a client connected to the desired cluster.
+func Connect(url string, skip bool) (*opensearch.Client, error) {
+	config := opensearch.Config{
+		Addresses: []string{url},
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: skip},
+		},
 	}
-	ec, err := elasticsearch.NewClient(esc)
+	client, err := opensearch.NewClient(config)
 	if err != nil {
-		return nil, fmt.Errorf("Error connecting to ES")
+		return nil, fmt.Errorf("Unable to connect OpenSearch")
 	}
-	return ec, nil
+	logging.Infof("Connected to : %s\n", config.Addresses)
+	return client, nil
+}
+
+// BuildDocs returns the documents that need to be indexed or an error.
+func BuildDocs(sr ScenarioResults) ([]Doc, error) {
+	u := uuid.New()
+	uuid := fmt.Sprintf("%s", u.String())
+	time := time.Now().UTC()
+
+	var docs []Doc
+	if len(sr.Results) < 1 {
+		return nil, fmt.Errorf("No result documents")
+	}
+	for _, r := range sr.Results {
+		var d Doc
+		d.UUID = uuid
+		d.Timestamp = time
+		d.HostNetwork = r.HostNetwork
+		d.Parallelism = r.Parallelism
+		d.Profile = r.Profile
+		d.Duration = r.Duration
+		d.Samples = r.Samples
+		d.Messagesize = r.MessageSize
+		d.Metric = r.Metric
+		if strings.Contains(d.Profile, "STREAM") {
+			d.Result, _ = average(r.ThroughputSummary)
+		} else {
+			d.Result, _ = percentile(r.LatencySummary, 95)
+		}
+		d.ServerNodeCPU = r.ServerMetrics
+		d.ClientNodeCPU = r.ClientMetrics
+		d.ServerPodCPU = r.ServerPodCPU.Results
+		d.ClientPodCPU = r.ClientPodCPU.Results
+		docs = append(docs, d)
+	}
+	return docs, nil
+}
+
+// IndexDocs indexes results from k8s-netperf returns failures if any happen.
+func IndexDocs(client *opensearch.Client, docs []Doc) error {
+	logging.Infof("Attempting to index %d documents", len(docs))
+	for _, doc := range docs {
+		jdoc, err := json.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		body := strings.NewReader(string(jdoc))
+		logging.Debug(body)
+		r := opensearchapi.IndexRequest{
+			Index: index,
+			Body:  body,
+		}
+		resp, err := r.Do(context.Background(), client)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+	}
+	return nil
 }
 
 // WritePromCSVResult writes the prom data in CSV format
