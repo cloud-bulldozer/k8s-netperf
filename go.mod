@@ -3,8 +3,9 @@ module gihub.com/jtaleric/k8s-netperf
 go 1.18
 
 require (
-	github.com/elastic/go-elasticsearch/v8 v8.4.0
+	github.com/google/uuid v1.1.2
 	github.com/montanaflynn/stats v0.6.6
+	github.com/opensearch-project/opensearch-go v1.1.0
 	github.com/openshift/client-go v0.0.0-20221213131518-7aec8d54188a
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0
@@ -18,7 +19,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/elastic/elastic-transport-go/v8 v8.1.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect

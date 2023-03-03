@@ -109,11 +109,22 @@ $ echo $?
 |-----------|------|----------|
 | netperf | TCP_STREAM | working (default:10%) |
 
+## Indexing to OpenSearch
+`k8s-netperf` can store results in OpenSearch, if the user provides the OpenSearch URL. 
+```shell
+rhino in ~ $ ./k8s-netperf -config test.yml -search https://admin:pass@my-es:443
+... <trimmed output>
+INFO[2023-03-02 16:38:48] Connected to : [https://admin:pass@my-es:443] 
+INFO[2023-03-02 16:38:48] Attempting to index 2 documents              
+```
+
+Document format can be seen in `netperf/archive.go`
+
 ## Output
 `k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the container.
 
 Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test.
-```
+```shell
 ------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
 Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

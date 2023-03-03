@@ -23,6 +23,7 @@ func main() {
 	full := flag.Bool("all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	debug := flag.Bool("debug", false, "Enable debug log")
 	promURL := flag.String("prom", "", "Prometheus URL")
+	searchURL := flag.String("search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
 	showMetrics := flag.Bool("metrics", false, "Show all system metrics retrieved from prom")
 	tcpt := flag.Float64("tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	flag.Parse()
@@ -210,6 +211,24 @@ func main() {
 			sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 			sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 			sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+		}
+	}
+
+	if len(*searchURL) > 1 {
+		jdocs, err := netperf.BuildDocs(sr)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		esClient, err := netperf.Connect(*searchURL, true)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		err = netperf.IndexDocs(esClient, jdocs)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
 		}
 	}
 

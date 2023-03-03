@@ -30,20 +30,20 @@ type NodeInfo struct {
 
 // NodeCPU stores CPU information for a specific Node
 type NodeCPU struct {
-	Idle    float64
-	User    float64
-	Steal   float64
-	System  float64
-	Nice    float64
-	Irq     float64
-	Softirq float64
-	Iowait  float64
+	Idle    float64 `json:"idleCPU"`
+	User    float64 `json:"userCPU"`
+	Steal   float64 `json:"stealCPU"`
+	System  float64 `json:"systemCPU"`
+	Nice    float64 `json:"niceCPU"`
+	Irq     float64 `json:"irqCPU"`
+	Softirq float64 `json:"softCPU"`
+	Iowait  float64 `json:"ioCPU"`
 }
 
 // PodCPU stores pod CPU
 type PodCPU struct {
-	Name  string
-	Value float64
+	Name  string  `json:"podName"`
+	Value float64 `json:"cpuUsage"`
 }
 
 // PodValues is a collection of PodCPU
