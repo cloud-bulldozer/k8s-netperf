@@ -33,6 +33,7 @@ type Doc struct {
 	Messagesize   int              `json:"messageSize"`
 	Result        float64          `json:"result"`
 	Metric        string           `json:"metric"`
+	Metadata      Metadata         `json:"metadata"`
 	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
 	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
 	ClientNodeCPU metrics.NodeCPU  `json:"clientCPU"`
@@ -85,6 +86,7 @@ func BuildDocs(sr ScenarioResults) ([]Doc, error) {
 		d.ClientNodeCPU = r.ClientMetrics
 		d.ServerPodCPU = r.ServerPodCPU.Results
 		d.ClientPodCPU = r.ClientPodCPU.Results
+		d.Metadata = sr.Metadata
 		docs = append(docs, d)
 	}
 	return docs, nil

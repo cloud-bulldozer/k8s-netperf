@@ -8,7 +8,7 @@ require (
 	github.com/opensearch-project/opensearch-go v1.1.0
 	github.com/openshift/client-go v0.0.0-20221213131518-7aec8d54188a
 	github.com/prometheus/client_golang v1.14.0
-	github.com/prometheus/common v0.37.0
+	github.com/prometheus/common v0.41.0
 	github.com/sirupsen/logrus v1.9.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.26.0
@@ -39,11 +39,11 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/openshift/api v0.0.0-20230111143458-54592eea5539 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10 // indirect
-	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
-	golang.org/x/sys v0.3.0 // indirect
-	golang.org/x/term v0.3.0 // indirect
-	golang.org/x/text v0.5.0 // indirect
+	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/oauth2 v0.5.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
