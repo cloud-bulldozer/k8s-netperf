@@ -32,6 +32,17 @@ type Data struct {
 // ScenarioResults each scenario could have multiple results
 type ScenarioResults struct {
 	Results []Data
+	Metadata
+}
+
+// Metadata for the run
+type Metadata struct {
+	Platform   string `json:"platform"`
+	Kernel     string `json:"kernel"`
+	Kubelet    string `json:"kubelet"`
+	OCPVersion string `json:"ocpVersion"`
+	IPsec      bool   `json:"ipsec"`
+	MTU        int    `json:"mtu"`
 }
 
 // average accepts array of floats to calculate average

@@ -205,16 +205,35 @@ func main() {
 		}
 	}
 
+	var fTime time.Time
+	var lTime time.Time
 	if pavail {
 		for i, npr := range sr.Results {
 			sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 			sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 			sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 			sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+			fTime = npr.StartTime
+			lTime = npr.EndTime
 		}
 	}
 
 	if len(*searchURL) > 1 {
+		// Metadata
+		node := metrics.NodeDetails(pcon)
+		sr.Metadata.Kernel = node.Metric.Kernel
+		sr.Metadata.Kubelet = node.Metric.Kubelet
+		sr.Metadata.OCPVersion = metrics.OCPversion(pcon, fTime, lTime)
+		sr.Metadata.Platform = metrics.Platform(pcon)
+		sec, err := metrics.IPSecEnabled(pcon, fTime, lTime)
+		if err == nil {
+			sr.Metadata.IPsec = sec
+		}
+		mtu, err := metrics.NodeMTU(pcon)
+		if err == nil {
+			sr.Metadata.MTU = mtu
+		}
+
 		jdocs, err := netperf.BuildDocs(sr)
 		if err != nil {
 			log.Error(err)

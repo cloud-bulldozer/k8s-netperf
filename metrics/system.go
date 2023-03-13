@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -57,6 +58,14 @@ type PromConnect struct {
 	Token     string
 	Verify    bool
 	OpenShift bool
+}
+
+// Details stores the node details
+type Details struct {
+	Metric struct {
+		Kernel  string `json:"kernel_version"`
+		Kubelet string `json:"kubelet_version"`
+	}
 }
 
 // Discover is to find Prometheus and generate an auth token if necessary.
@@ -127,6 +136,138 @@ func Discover() (PromConnect, bool) {
 func PromCheck(conn PromConnect) bool {
 	_, ret := promQueryRange(time.Now(), time.Now(), "node_cpu_seconds_total{}", conn)
 	return ret
+}
+
+// NodeDetails returns the Details of the nodes. Only returning a single node info.
+func NodeDetails(conn PromConnect) Details {
+	pd := Details{}
+	if !conn.OpenShift {
+		logging.Warn("Not able to collect OpenShift specific node info")
+		return pd
+	}
+	query := `kube_node_info`
+	val, q := promQueryRange(time.Now().Add(-time.Minute*1), time.Now(), query, conn)
+	if !q {
+		logging.Error("Issue querying Prometheus")
+		return pd
+	}
+	if val.Type() == model.ValMatrix {
+		v := val.(model.Matrix)
+		for _, s := range v {
+			d, _ := s.MarshalJSON()
+			json.Unmarshal(d, &pd)
+			break
+		}
+	}
+	return pd
+
+}
+
+// Platform returns the platform
+func Platform(conn PromConnect) string {
+	type Data struct {
+		Metric struct {
+			Platform string `json:"type"`
+		}
+	}
+	pd := Data{}
+	if !conn.OpenShift {
+		logging.Warn("Not able to collect OpenShift Specific version info")
+		return ""
+	}
+	query := `cluster_infrastructure_provider`
+	val, q := promQueryRange(time.Now().Add(-time.Minute*1), time.Now(), query, conn)
+	if !q {
+		logging.Error("Issue querying Prometheus")
+		return ""
+	}
+	if val.Type() == model.ValMatrix {
+		v := val.(model.Matrix)
+		for _, s := range v {
+			d, _ := s.MarshalJSON()
+			json.Unmarshal(d, &pd)
+		}
+	}
+	return pd.Metric.Platform
+
+}
+
+// OCPversion returns the Cluster version
+func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
+	type Data struct {
+		Metric struct {
+			Version string `json:"version"`
+		}
+	}
+	vd := Data{}
+	ver := ""
+	if !conn.OpenShift {
+		logging.Warn("Not able to collect OpenShift Specific version info")
+		return ver
+	}
+	query := `cluster_version{type="current"}`
+	val, q := promQueryRange(start, end, query, conn)
+	if !q {
+		logging.Error("Issue querying Prometheus")
+		return ver
+	}
+	if val.Type() == model.ValMatrix {
+		v := val.(model.Matrix)
+		for _, s := range v {
+			d, _ := s.MarshalJSON()
+			json.Unmarshal(d, &vd)
+		}
+	}
+	return vd.Metric.Version
+}
+
+// NodeMTU return mtu
+func NodeMTU(conn PromConnect) (int, error) {
+	if !conn.OpenShift {
+		return 0, fmt.Errorf("Not able to collect OpenShift specific mtu info")
+	}
+	query := `node_network_mtu_bytes`
+	val, q := promQueryRange(time.Now().Add(-time.Minute*1), time.Now(), query, conn)
+	if !q {
+		return 0, fmt.Errorf("Issue querying Prometheus")
+	}
+	var mtu int
+	if val.Type() == model.ValMatrix {
+		v := val.(model.Matrix)
+		for _, s := range v {
+			d := s.Values
+			mtu = int(d[0].Value)
+			break
+		}
+	}
+	return mtu, nil
+
+}
+
+// IPSecEnabled checks if IPsec
+func IPSecEnabled(conn PromConnect, start time.Time, end time.Time) (bool, error) {
+	if !conn.OpenShift {
+		return false, fmt.Errorf("Not able to collect OpenShift specific ovn ipsec info")
+	}
+	query := `ovnkube_master_ipsec_enabled`
+	val, q := promQueryRange(start, end, query, conn)
+	if !q {
+		return false, fmt.Errorf("Issue querying Prometheus")
+	}
+	var ipsec int
+	if val.Type() == model.ValMatrix {
+		v := val.(model.Matrix)
+		for _, s := range v {
+			d := s.Values
+			ipsec = int(d[0].Value)
+			break
+		}
+	}
+	if ipsec == 0 {
+		return false, nil
+	}
+	return true, nil
+
 }
 
 // QueryNodeCPU will return all the CPU usage information for a given node
