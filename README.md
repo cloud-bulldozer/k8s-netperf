@@ -3,9 +3,6 @@ Running Networking Performance Tests against K8s
 
 [![asciicast](https://asciinema.org/a/524925.svg)](https://asciinema.org/a/524925)
 
-## Status
-Currently a work-in-progress.
-
 ### Benchmark Tool and Tests
 
 | Tool | Test | Status | Pass/Fail Context |
@@ -19,7 +16,7 @@ Currently a work-in-progress.
 ```shell
 $ git clone http://github.com/jtaleric/k8s-netperf
 $ cd k8s-netperf
-$ go build .
+$ make build 
 ```
 
 ## Running
@@ -38,7 +35,7 @@ If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
-$ ./k8s-netperf -help
+$ ./bin/arch/k8s-netperf -help
 Usage of ./k8s-netperf:
   -all
     	Run all tests scenarios - hostNet and podNetwork (if possible)
