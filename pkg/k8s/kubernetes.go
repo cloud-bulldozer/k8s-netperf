@@ -57,10 +57,11 @@ const hostNetClientRole = "host-client"
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
-	z, err := GetZone(client)
+	z, num_nodes, err := GetZone(client)
 	if err != nil {
 		log.Warn(err)
 	}
+	log.Infof("Deploying in %s zone", z)
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
@@ -133,17 +134,40 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Port:        ServerCtlPort,
 	}
 	if z != "" {
-		cdpAcross.NodeAffinity = apiv1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-				{
-					Weight: 100,
-					Preference: apiv1.NodeSelectorTerm{
-						MatchExpressions: []apiv1.NodeSelectorRequirement{
-							{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+		if num_nodes > 1 {
+			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
+					{
+						Weight: 100,
+						Preference: apiv1.NodeSelectorTerm{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+							},
 						},
 					},
 				},
-			},
+				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+						{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+							},
+						},
+					},
+				},
+			}
+		} else {
+			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+						{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+							},
+						},
+					},
+				},
+			}
 		}
 	}
 	if ncount > 1 {
@@ -179,17 +203,41 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Port:      ServerCtlPort,
 	}
 	if z != "" {
-		affinity := apiv1.NodeAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-				{
-					Weight: 100,
-					Preference: apiv1.NodeSelectorTerm{
-						MatchExpressions: []apiv1.NodeSelectorRequirement{
-							{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+		affinity := apiv1.NodeAffinity{}
+		if num_nodes > 1 {
+			affinity = apiv1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
+					{
+						Weight: 100,
+						Preference: apiv1.NodeSelectorTerm{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+							},
 						},
 					},
 				},
-			},
+				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+						{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+							},
+						},
+					},
+				},
+			}
+		} else {
+			affinity = apiv1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+						{
+							MatchExpressions: []apiv1.NodeSelectorRequirement{
+								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+							},
+						},
+					},
+				},
+			}
 		}
 		sdp.NodeAffinity = affinity
 		sdpHost.NodeAffinity = affinity
@@ -290,20 +338,23 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 }
 
 // GetZone will determine if we have a multiAZ/Zone cloud.
-func GetZone(c *kubernetes.Clientset) (string, error) {
+func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	zones := map[string]int{}
 	zone := ""
 	lz := ""
-	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	num_nodes := 0
+	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", fmt.Errorf("Unable to query nodes")
+		return "", num_nodes, fmt.Errorf("Unable to query nodes")
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
-			return "", fmt.Errorf("⚠️  No zone label")
+			return "", num_nodes, fmt.Errorf("⚠️  No zone label")
 		}
 		if _, ok := zones[l.GetLabels()["topology.kubernetes.io/zone"]]; ok {
 			zone = l.GetLabels()["topology.kubernetes.io/zone"]
+			num_nodes = 2
+			// Simple check, no need to determine all the zones with > 1 node.
 			break
 		} else {
 			zones[l.GetLabels()["topology.kubernetes.io/zone"]] = 1
@@ -313,9 +364,10 @@ func GetZone(c *kubernetes.Clientset) (string, error) {
 	// No zone had > 1, use the last zone.
 	if zone == "" {
 		log.Warn("⚠️  Single node per zone")
+		num_nodes = 1
 		zone = lz
 	}
-	return zone, nil
+	return zone, num_nodes, nil
 }
 
 // CreateDeployment will create the different deployments we need to do network performance tests
