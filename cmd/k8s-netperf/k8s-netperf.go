@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/k8s"
 	log "github.com/jtaleric/k8s-netperf/pkg/logging"
@@ -25,10 +26,19 @@ func main() {
 	full := flag.Bool("all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	debug := flag.Bool("debug", false, "Enable debug log")
 	promURL := flag.String("prom", "", "Prometheus URL")
+	id := flag.String("uuid", "", "User provided UUID")
 	searchURL := flag.String("search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
 	showMetrics := flag.Bool("metrics", false, "Show all system metrics retrieved from prom")
 	tcpt := flag.Float64("tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	flag.Parse()
+
+	uid := ""
+	if len(*id) > 0 {
+		uid = *id
+	} else {
+		u := uuid.New()
+		uid = fmt.Sprintf("%s", u.String())
+	}
 
 	if *debug {
 		log.SetDebug()
@@ -236,7 +246,7 @@ func main() {
 			sr.Metadata.MTU = mtu
 		}
 
-		jdocs, err := netperf.BuildDocs(sr)
+		jdocs, err := netperf.BuildDocs(sr, uid)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
