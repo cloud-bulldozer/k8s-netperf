@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	"github.com/opensearch-project/opensearch-go"
@@ -57,9 +56,7 @@ func Connect(url string, skip bool) (*opensearch.Client, error) {
 }
 
 // BuildDocs returns the documents that need to be indexed or an error.
-func BuildDocs(sr ScenarioResults) ([]Doc, error) {
-	u := uuid.New()
-	uuid := fmt.Sprintf("%s", u.String())
+func BuildDocs(sr ScenarioResults, uuid string) ([]Doc, error) {
 	time := time.Now().UTC()
 
 	var docs []Doc
