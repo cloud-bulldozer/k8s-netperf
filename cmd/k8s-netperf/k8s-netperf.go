@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jtaleric/k8s-netperf/pkg/archive"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/k8s"
 	log "github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	"github.com/jtaleric/k8s-netperf/pkg/netperf"
+	result "github.com/jtaleric/k8s-netperf/pkg/results"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -117,7 +119,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var sr netperf.ScenarioResults
+	var sr result.ScenarioResults
 
 	// Run through each test
 	for _, nc := range s.Configs {
@@ -136,7 +138,7 @@ func main() {
 			serverIP = s.Server.Items[0].Status.PodIP
 		}
 		if !s.NodeLocal {
-			npr := netperf.Data{}
+			npr := result.Data{}
 			npr.Config = nc
 			npr.Metric = metric
 			npr.Service = service
@@ -163,7 +165,7 @@ func main() {
 				npr.ServerNodeInfo = s.ServerNodeInfo
 				sr.Results = append(sr.Results, npr)
 			}
-			npr = netperf.Data{}
+			npr = result.Data{}
 			npr.Config = nc
 			npr.Metric = metric
 			npr.Service = service
@@ -190,7 +192,7 @@ func main() {
 		} else {
 			// Reset the result as we are now testing a different scenario
 			// Consider breaking the result per-scenario-config
-			npr := netperf.Data{}
+			npr := result.Data{}
 			npr.Config = nc
 			npr.Metric = metric
 			npr.Service = service
@@ -246,45 +248,45 @@ func main() {
 			sr.Metadata.MTU = mtu
 		}
 
-		jdocs, err := netperf.BuildDocs(sr, uid)
+		jdocs, err := archive.BuildDocs(sr, uid)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
 		}
-		esClient, err := netperf.Connect(*searchURL, true)
+		esClient, err := archive.Connect(*searchURL, true)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
 		}
-		err = netperf.IndexDocs(esClient, jdocs)
+		err = archive.IndexDocs(esClient, jdocs)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
 		}
 	}
 
-	netperf.ShowStreamResult(sr)
-	netperf.ShowRRResult(sr)
-	netperf.ShowLatencyResult(sr)
+	result.ShowStreamResult(sr)
+	result.ShowRRResult(sr)
+	result.ShowLatencyResult(sr)
 	if *showMetrics {
-		netperf.ShowNodeCPU(sr)
-		netperf.ShowPodCPU(sr)
+		result.ShowNodeCPU(sr)
+		result.ShowPodCPU(sr)
 	}
-	err = netperf.WriteCSVResult(sr)
+	err = archive.WriteCSVResult(sr)
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)
 	}
 	if pavail {
-		err = netperf.WritePromCSVResult(sr)
+		err = archive.WritePromCSVResult(sr)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
 		}
 	}
 	// Initially we are just checking against TCP_STREAM results.
-	if netperf.CheckHostResults(sr) {
-		diff, err := netperf.TCPThroughputDiff(sr)
+	if result.CheckHostResults(sr) {
+		diff, err := result.TCPThroughputDiff(sr)
 		if err != nil {
 			fmt.Println("Unable to calculate difference between HostNetwork and PodNetwork")
 			os.Exit(1)

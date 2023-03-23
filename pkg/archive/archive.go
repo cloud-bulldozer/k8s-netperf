@@ -1,4 +1,4 @@
-package netperf
+package archive
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
+	result "github.com/jtaleric/k8s-netperf/pkg/results"
 	"github.com/opensearch-project/opensearch-go"
 	"github.com/opensearch-project/opensearch-go/opensearchapi"
 )
@@ -32,7 +33,7 @@ type Doc struct {
 	Messagesize   int              `json:"messageSize"`
 	Result        float64          `json:"result"`
 	Metric        string           `json:"metric"`
-	Metadata      Metadata         `json:"metadata"`
+	Metadata      result.Metadata  `json:"metadata"`
 	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
 	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
 	ClientNodeCPU metrics.NodeCPU  `json:"clientCPU"`
@@ -56,7 +57,7 @@ func Connect(url string, skip bool) (*opensearch.Client, error) {
 }
 
 // BuildDocs returns the documents that need to be indexed or an error.
-func BuildDocs(sr ScenarioResults, uuid string) ([]Doc, error) {
+func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 	time := time.Now().UTC()
 
 	var docs []Doc
@@ -75,9 +76,9 @@ func BuildDocs(sr ScenarioResults, uuid string) ([]Doc, error) {
 		d.Messagesize = r.MessageSize
 		d.Metric = r.Metric
 		if strings.Contains(d.Profile, "STREAM") {
-			d.Result, _ = average(r.ThroughputSummary)
+			d.Result, _ = result.Average(r.ThroughputSummary)
 		} else {
-			d.Result, _ = percentile(r.LatencySummary, 95)
+			d.Result, _ = result.Percentile(r.LatencySummary, 95)
 		}
 		d.ServerNodeCPU = r.ServerMetrics
 		d.ClientNodeCPU = r.ClientMetrics
@@ -113,7 +114,7 @@ func IndexDocs(client *opensearch.Client, docs []Doc) error {
 }
 
 // WritePromCSVResult writes the prom data in CSV format
-func WritePromCSVResult(r ScenarioResults) error {
+func WritePromCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	podfp, err := os.Create(fmt.Sprintf("podcpu-result-%d.csv", d))
 	defer podfp.Close()
@@ -243,7 +244,7 @@ func WritePromCSVResult(r ScenarioResults) error {
 }
 
 // WriteCSVResult will write the throughput result to the local filesystem
-func WriteCSVResult(r ScenarioResults) error {
+func WriteCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	fp, err := os.Create(fmt.Sprintf("result-%d.csv", d))
 	defer fp.Close()
@@ -271,8 +272,8 @@ func WriteCSVResult(r ScenarioResults) error {
 		return fmt.Errorf("Failed to write result archive to file")
 	}
 	for _, row := range r.Results {
-		avg, _ := average(row.ThroughputSummary)
-		lavg, _ := average(row.LatencySummary)
+		avg, _ := result.Average(row.ThroughputSummary)
+		lavg, _ := result.Average(row.LatencySummary)
 		data := []string{row.Profile,
 			fmt.Sprint(row.SameNode),
 			fmt.Sprint(row.HostNetwork),
