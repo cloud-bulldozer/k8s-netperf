@@ -1,4 +1,4 @@
-package netperf
+package result
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
+	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	stats "github.com/montanaflynn/stats"
 )
 
@@ -18,7 +19,7 @@ type Data struct {
 	HostNetwork       bool
 	ClientNodeInfo    metrics.NodeInfo
 	ServerNodeInfo    metrics.NodeInfo
-	Sample            Sample
+	Sample            sample.Sample
 	StartTime         time.Time
 	EndTime           time.Time
 	Service           bool
@@ -46,13 +47,13 @@ type Metadata struct {
 	MTU        int    `json:"mtu"`
 }
 
-// average accepts array of floats to calculate average
-func average(vals []float64) (float64, error) {
+// Average accepts array of floats to calculate average
+func Average(vals []float64) (float64, error) {
 	return stats.Median(vals)
 }
 
-// percentile accepts array of floats and the desired %tile to calculate
-func percentile(vals []float64, ptile float64) (float64, error) {
+// Percentile accepts array of floats and the desired %tile to calculate
+func Percentile(vals []float64, ptile float64) (float64, error) {
 	return stats.Percentile(vals, ptile)
 }
 
@@ -88,11 +89,11 @@ func TCPThroughputDiff(s ScenarioResults) (float64, error) {
 		if !s.Results[t].Service {
 			if s.Results[t].HostNetwork {
 				if s.Results[t].Profile == "TCP_STREAM" {
-					hostPerf, _ = average(s.Results[t].ThroughputSummary)
+					hostPerf, _ = Average(s.Results[t].ThroughputSummary)
 				}
 			} else {
 				if s.Results[t].Profile == "TCP_STREAM" {
-					podPerf, _ = average(s.Results[t].ThroughputSummary)
+					podPerf, _ = Average(s.Results[t].ThroughputSummary)
 				}
 			}
 		}
@@ -145,7 +146,7 @@ func ShowStreamResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 175))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "STREAM") {
-				avg, _ := average(r.ThroughputSummary)
+				avg, _ := Average(r.ThroughputSummary)
 				fmt.Printf("📊 %-15s | %-15d | %-15t | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Parallelism, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
 			}
 		}
@@ -162,7 +163,7 @@ func ShowLatencyResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 175))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "STREAM") {
-				avg, _ := average(r.LatencySummary)
+				avg, _ := Average(r.LatencySummary)
 				fmt.Printf("📊 %-15s | %-15d | %-15t |%-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Parallelism, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, "usec")
 			}
 		}
@@ -174,7 +175,7 @@ func ShowLatencyResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 175))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
-				avg, _ := average(r.LatencySummary)
+				avg, _ := Average(r.LatencySummary)
 				fmt.Printf("📊 %-15s |  %-15d | %-15t | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Parallelism, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, "usec")
 			}
 		}
@@ -192,7 +193,7 @@ func ShowRRResult(s ScenarioResults) {
 		fmt.Printf("%s\r\n", strings.Repeat("-", 175))
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
-				avg, _ := average(r.ThroughputSummary)
+				avg, _ := Average(r.ThroughputSummary)
 				fmt.Printf("📊 %-15s | %-15d | %-15t | %-15t | %-15d | %-15t | %-15d | %-15d | %-15f (%s) \r\n", r.Profile, r.Parallelism, r.HostNetwork, r.Service, r.MessageSize, r.SameNode, r.Duration, r.Samples, avg, r.Metric)
 			}
 		}

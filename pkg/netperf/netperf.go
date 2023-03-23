@@ -10,19 +10,12 @@ import (
 
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	log "github.com/jtaleric/k8s-netperf/pkg/logging"
+	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
-
-// Sample describes the values we will return with each execution.
-type Sample struct {
-	Latency        float64
-	Latency99ptile float64
-	Throughput     float64
-	Metric         string
-}
 
 // ServerCtlPort control port for the service
 const ServerCtlPort = 12865
@@ -104,8 +97,8 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 // ParseResults accepts the stdout from the execution of the benchmark. It also needs
 // The NetPerfConfig to determine aspects of the workload the user provided.
 // It will return a Sample struct or error
-func ParseResults(stdout *bytes.Buffer, nc config.Config) (Sample, error) {
-	sample := Sample{}
+func ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
+	sample := sample.Sample{}
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
 		if len(l) < 2 {
