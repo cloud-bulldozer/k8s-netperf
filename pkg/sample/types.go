@@ -6,4 +6,5 @@ type Sample struct {
 	Latency99ptile float64
 	Throughput     float64
 	Metric         string
+	Driver         string
 }

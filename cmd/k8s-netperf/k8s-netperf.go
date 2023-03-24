@@ -10,11 +10,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jtaleric/k8s-netperf/pkg/archive"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
+	"github.com/jtaleric/k8s-netperf/pkg/iperf"
 	"github.com/jtaleric/k8s-netperf/pkg/k8s"
 	log "github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	"github.com/jtaleric/k8s-netperf/pkg/netperf"
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
+	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -24,6 +26,7 @@ import (
 var (
 	cfgfile     string
 	nl          bool
+	iperf3      bool
 	full        bool
 	debug       bool
 	promURL     string
@@ -74,6 +77,7 @@ var rootCmd = &cobra.Command{
 			NodeLocal:   nl,
 			RestConfig:  *rconfig,
 			Configs:     cfg,
+			ClientSet:   client,
 		}
 		// Get node count
 		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
@@ -130,72 +134,22 @@ var rootCmd = &cobra.Command{
 			if strings.Contains(nc.Profile, "STREAM") {
 				metric = "Mb/s"
 			}
-			var serverIP string
-			var service bool
-			service = false
-			if nc.Service {
-				service = true
-				serverIP = s.Service.Spec.ClusterIP
-			} else {
-				serverIP = s.Server.Items[0].Status.PodIP
-			}
-			npr := result.Data{}
-			sameNodeFlag := true
-			Client := s.Client
-			if !s.NodeLocal {
-				npr.Config = nc
-				npr.Metric = metric
-				npr.Service = service
-				npr.HostNetwork = true
-				if !nc.Service && full {
-					npr.StartTime = time.Now()
-					for i := 0; i < nc.Samples; i++ {
-						r, err := netperf.Run(client, s.RestConfig, nc, s.ClientHost, s.ServerHost.Items[0].Status.PodIP)
-						if err != nil {
-							log.Error(err)
-							log.Error("Note : Running netperf with hostNetwork will require some host configuration -- poking a hole in the firewall.")
-							os.Exit(1)
-						}
-						nr, err := netperf.ParseResults(&r, nc)
-						if err != nil {
-							log.Error(err)
-							os.Exit(1)
-						}
-						npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
-						npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
-					}
-					npr.EndTime = time.Now()
-					npr.ClientNodeInfo = s.ClientNodeInfo
-					npr.ServerNodeInfo = s.ServerNodeInfo
-					sr.Results = append(sr.Results, npr)
+			nc.Metric = metric
+
+			if s.HostNetwork {
+				npr := executeWorkload(nc, s, true, false)
+				sr.Results = append(sr.Results, npr)
+				if iperf3 {
+					ipr := executeWorkload(nc, s, true, true)
+					sr.Results = append(sr.Results, ipr)
 				}
-				sameNodeFlag = false
-				Client = s.ClientAcross
 			}
-			npr = result.Data{}
-			npr.Config = nc
-			npr.Metric = metric
-			npr.Service = service
-			npr.SameNode = sameNodeFlag
-			npr.StartTime = time.Now()
-			for i := 0; i < nc.Samples; i++ {
-				r, err := netperf.Run(client, s.RestConfig, nc, Client, serverIP)
-				if err != nil {
-					log.Error(err)
-					os.Exit(1)
-				}
-				nr, err := netperf.ParseResults(&r, nc)
-				if err != nil {
-					log.Error(err)
-					os.Exit(1)
-				}
-				npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
-				npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
-			}
-			npr.EndTime = time.Now()
-			npr.ClientNodeInfo = s.ClientNodeInfo
-			npr.ServerNodeInfo = s.ServerNodeInfo
+			npr := executeWorkload(nc, s, false, false)
 			sr.Results = append(sr.Results, npr)
+			if iperf3 {
+				ipr := executeWorkload(nc, s, false, true)
+				sr.Results = append(sr.Results, ipr)
+			}
 		}
 
 		var fTime time.Time
@@ -279,8 +233,81 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool) result.Data {
+	serverIP := ""
+	service := false
+	sameNode := true
+	Client := s.Client
+	if nc.Service {
+		service = true
+		if iperf3 {
+			serverIP = s.IperfService.Spec.ClusterIP
+		} else {
+			serverIP = s.NetperfService.Spec.ClusterIP
+		}
+	} else {
+		serverIP = s.Server.Items[0].Status.PodIP
+	}
+	if !s.NodeLocal {
+		Client = s.ClientAcross
+		sameNode = false
+	}
+	if hostNet {
+		Client = s.ClientHost
+	}
+	npr := result.Data{}
+	if iperf3 {
+		// iperf doesn't support all tests cases
+		if !iperf.TestSupported(nc.Profile) {
+			return npr
+		}
+	}
+
+	npr.Config = nc
+	npr.Metric = nc.Metric
+	npr.Service = service
+	npr.SameNode = sameNode
+	npr.HostNetwork = hostNet
+	npr.StartTime = time.Now()
+	for i := 0; i < nc.Samples; i++ {
+		nr := sample.Sample{}
+		if iperf3 {
+			npr.Driver = "iperf3"
+			r, err := iperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			nr, err = iperf.ParseResults(&r)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+		} else {
+			npr.Driver = "netperf"
+			r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			nr, err = netperf.ParseResults(&r)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+		}
+		npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+		npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
+	}
+	npr.EndTime = time.Now()
+	npr.ClientNodeInfo = s.ClientNodeInfo
+	npr.ServerNodeInfo = s.ServerNodeInfo
+	return npr
+}
+
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
+	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with pod/server on the same node")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
