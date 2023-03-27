@@ -49,7 +49,7 @@ type Metadata struct {
 
 // Average accepts array of floats to calculate average
 func Average(vals []float64) (float64, error) {
-	return stats.Median(vals)
+	return stats.Mean(vals)
 }
 
 // Percentile accepts array of floats and the desired %tile to calculate
