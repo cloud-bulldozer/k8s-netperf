@@ -35,7 +35,8 @@ If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
-$ ./bin/arch/k8s-netperf -help
+$ export ARCH=`go env GOARCH`
+$ ./bin/${ARCH}/k8s-netperf -help
 Usage of ./k8s-netperf:
   -all
     	Run all tests scenarios - hostNet and podNetwork (if possible)
