@@ -22,15 +22,15 @@ import (
 )
 
 var (
-    cfgfile string
-    nl bool
-    full bool
-    debug bool
-    promURL string
-    id string
-    searchURL string
-    showMetrics bool
-    tcpt float64
+	cfgfile     string
+	nl          bool
+	full        bool
+	debug       bool
+	promURL     string
+	id          string
+	searchURL   string
+	showMetrics bool
+	tcpt        float64
 )
 
 var rootCmd = &cobra.Command{
@@ -123,7 +123,6 @@ var rootCmd = &cobra.Command{
 		}
 
 		var sr result.ScenarioResults
-
 		// Run through each test
 		for _, nc := range s.Configs {
 			// Determine the metric for the test
@@ -140,8 +139,10 @@ var rootCmd = &cobra.Command{
 			} else {
 				serverIP = s.Server.Items[0].Status.PodIP
 			}
+			npr := result.Data{}
+			sameNodeFlag := true
+			Client := s.Client
 			if !s.NodeLocal {
-				npr := result.Data{}
 				npr.Config = nc
 				npr.Metric = metric
 				npr.Service = service
@@ -168,58 +169,33 @@ var rootCmd = &cobra.Command{
 					npr.ServerNodeInfo = s.ServerNodeInfo
 					sr.Results = append(sr.Results, npr)
 				}
-				npr = result.Data{}
-				npr.Config = nc
-				npr.Metric = metric
-				npr.Service = service
-				npr.SameNode = false
-				npr.StartTime = time.Now()
-				for i := 0; i < nc.Samples; i++ {
-					r, err := netperf.Run(client, s.RestConfig, nc, s.ClientAcross, serverIP)
-					if err != nil {
-						log.Error(err)
-						os.Exit(1)
-					}
-					nr, err := netperf.ParseResults(&r, nc)
-					if err != nil {
-						log.Error(err)
-						os.Exit(1)
-					}
-					npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
-					npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
-				}
-				npr.EndTime = time.Now()
-				npr.ClientNodeInfo = s.ClientNodeInfo
-				npr.ServerNodeInfo = s.ServerNodeInfo
-				sr.Results = append(sr.Results, npr)
-			} else {
-				// Reset the result as we are now testing a different scenario
-				// Consider breaking the result per-scenario-config
-				npr := result.Data{}
-				npr.Config = nc
-				npr.Metric = metric
-				npr.Service = service
-				npr.SameNode = true
-				npr.StartTime = time.Now()
-				for i := 0; i < nc.Samples; i++ {
-					r, err := netperf.Run(client, s.RestConfig, nc, s.Client, serverIP)
-					if err != nil {
-						log.Error(err)
-						os.Exit(1)
-					}
-					nr, err := netperf.ParseResults(&r, nc)
-					if err != nil {
-						log.Error(err)
-						os.Exit(1)
-					}
-					npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
-					npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
-				}
-				npr.EndTime = time.Now()
-				npr.ClientNodeInfo = s.ClientNodeInfo
-				npr.ServerNodeInfo = s.ServerNodeInfo
-				sr.Results = append(sr.Results, npr)
+				sameNodeFlag = false
+				Client = s.ClientAcross
 			}
+			npr = result.Data{}
+			npr.Config = nc
+			npr.Metric = metric
+			npr.Service = service
+			npr.SameNode = sameNodeFlag
+			npr.StartTime = time.Now()
+			for i := 0; i < nc.Samples; i++ {
+				r, err := netperf.Run(client, s.RestConfig, nc, Client, serverIP)
+				if err != nil {
+					log.Error(err)
+					os.Exit(1)
+				}
+				nr, err := netperf.ParseResults(&r, nc)
+				if err != nil {
+					log.Error(err)
+					os.Exit(1)
+				}
+				npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+				npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
+			}
+			npr.EndTime = time.Now()
+			npr.ClientNodeInfo = s.ClientNodeInfo
+			npr.ServerNodeInfo = s.ServerNodeInfo
+			sr.Results = append(sr.Results, npr)
 		}
 
 		var fTime time.Time
@@ -302,7 +278,6 @@ var rootCmd = &cobra.Command{
 		}
 	},
 }
-
 
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
