@@ -51,7 +51,6 @@ Flags:
       --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
       --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
       --uuid string           User provided UUID
-
 ```
 
 `--prom` accepts a string (URL). Example  http://localhost:9090
