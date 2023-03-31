@@ -35,32 +35,31 @@ If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
-$ export ARCH=`go env GOARCH`
-$ ./bin/${ARCH}/k8s-netperf -help
-Usage of ./k8s-netperf:
-  -all
-    	Run all tests scenarios - hostNet and podNetwork (if possible)
-  -config string
-    	K8s netperf Configuration File (default "netperf.yml")
-  -debug
-    	Enable debug log
-  -local
-    	Run Netperf with pod/server on the same node
-  -metrics
-    	Show all system metrics retrieved from prom
-  -prom string
-    	Prometheus URL
-  -tcp-tolerance float
-    	Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
+$ ./bin/arch/k8s-netperf --help
+A tool to run netperf tests in Kubernetes cluster
+Usage:
+  k8s-netperf [flags]
+
+Flags:
+      --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
+      --config string         K8s netperf Configuration File (default "netperf.yml")
+      --debug                 Enable debug log
+  -h, --help                  help for k8s-netperf
+      --local                 Run Netperf with pod/server on the same node
+      --metrics               Show all system metrics retrieved from prom
+      --prom string           Prometheus URL
+      --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
+      --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
+      --uuid string           User provided UUID
 ```
 
-`-prom` accepts a string (URL). Example  http://localhost:9090
+`--prom` accepts a string (URL). Example  http://localhost:9090
 
-When using `-prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
+When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
 
-With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `-prom` option.
+With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.
 
-`-metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file. 
+`--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file. 
 
 ### Config file
 `netperf.yml` contains a default set of tests.
@@ -80,12 +79,12 @@ TCPStream:                 # Place-holder of a test name
 In most cases setting parallelism greater than 1 is OK, however through a `service` we only support a single process of netperf, since we bind to a specific port.
 
 ## Pass / Fail
-`k8s-netperf` has a cli option for `-tcp-tolerance` which defaults to 10%.
+`k8s-netperf` has a cli option for `--tcp-tolerance` which defaults to 10%.
 
-In order to have `k8s-netperf` determine pass/fail the user must pass the `-all` flag. `k8s-netperf` must be able to run with hostNetwork and podNetwork across nodes.
+In order to have `k8s-netperf` determine pass/fail the user must pass the `--all` flag. `k8s-netperf` must be able to run with hostNetwork and podNetwork across nodes.
 
 ```shell
-$ ./k8s-netperf -tcp-tolerance 10
+$ ./k8s-netperf --tcp-tolerance 10
 ------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
 Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -110,7 +109,7 @@ $ echo $?
 ## Indexing to OpenSearch
 `k8s-netperf` can store results in OpenSearch, if the user provides the OpenSearch URL. 
 ```shell
-rhino in ~ $ ./k8s-netperf -config test.yml -search https://admin:pass@my-es:443
+rhino in ~ $ ./k8s-netperf --config test.yml --search https://admin:pass@my-es:443
 ... <trimmed output>
 INFO[2023-03-02 16:38:48] Connected to : [https://admin:pass@my-es:443] 
 INFO[2023-03-02 16:38:48] Attempting to index 2 documents              
