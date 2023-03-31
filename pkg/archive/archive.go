@@ -113,6 +113,66 @@ func IndexDocs(client *opensearch.Client, docs []Doc) error {
 	return nil
 }
 
+// Common csv header fields.
+func commonCsvHeaderFields() []string {
+	return []string{
+		"Profile",
+		"Same node",
+		"Host Network",
+		"Service",
+		"Duration",
+		"Parallelism",
+		"# of Samples",
+		"Message Size",
+	}
+}
+
+// Common csv data fields.
+func commonCsvDataFeilds(row result.Data) []string{
+	return []string{
+		fmt.Sprint(row.Profile),
+		fmt.Sprint(row.SameNode),
+		fmt.Sprint(row.HostNetwork),
+		fmt.Sprint(row.Service),
+		strconv.Itoa(row.Duration),
+		strconv.Itoa(row.Parallelism),
+		strconv.Itoa(row.Samples),
+		strconv.Itoa(row.MessageSize),
+	}
+}
+
+// Writes all the mertic feilds to the archive.
+func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU) error {
+	roleFieldData := []string{role}
+	for _, pod := range podResults {
+		if err := podarchive.Write(append(append(roleFieldData, 
+			commonCsvDataFeilds(row)...), 
+			fmt.Sprintf("%s", pod.Name),
+			fmt.Sprintf("%f", pod.Value),
+		)); err != nil {
+			return fmt.Errorf("Failed to write archive to file")
+		}
+	}
+
+	cpu := row.ClientMetrics
+	if role == "Server" {
+		cpu = row.ServerMetrics
+	}
+	if err := cpuarchive.Write(append(append(roleFieldData, 
+		commonCsvDataFeilds(row)...),
+		fmt.Sprintf("%f", cpu.Idle),
+		fmt.Sprintf("%f", cpu.User),
+		fmt.Sprintf("%f", cpu.System),
+		fmt.Sprintf("%f", cpu.Iowait),
+		fmt.Sprintf("%f", cpu.Steal),
+		fmt.Sprintf("%f", cpu.Softirq),
+		fmt.Sprintf("%f", cpu.Irq),
+	)); err != nil {
+		return fmt.Errorf("Failed to write archive to file")
+	}
+	return nil
+}
+
 // WritePromCSVResult writes the prom data in CSV format
 func WritePromCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
@@ -130,35 +190,22 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	defer cpuarchive.Flush()
 	podarchive := csv.NewWriter(podfp)
 	defer podarchive.Flush()
-	cpudata := []string{
-		"Role",
-		"Profile",
-		"Same node",
-		"Host Network",
-		"Service",
-		"Duration",
-		"Parallelism",
-		"# of Samples",
-		"Message Size",
+	roleField := []string{"Role"}
+	cpudata := append(append(roleField, 
+		commonCsvHeaderFields()...), 
 		"Idle CPU",
 		"User CPU",
 		"System CPU",
 		"IOWait CPU",
 		"Steal CPU",
 		"SoftIRQ CPU",
-		"IRQ CPU"}
-	poddata := []string{
-		"Role",
-		"Profile",
-		"Same node",
-		"Host Network",
-		"Service",
-		"Duration",
-		"Parallelism",
-		"# of Samples",
-		"Message Size",
+		"IRQ CPU",
+	)
+	poddata := append(append(roleField,
+		commonCsvHeaderFields()...),
 		"Pod Name",
-		"Utilization"}
+		"Utilization",
+	)
 	if err := cpuarchive.Write(cpudata); err != nil {
 		return fmt.Errorf("Failed to write cpu archive to file")
 	}
@@ -166,79 +213,12 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		return fmt.Errorf("Failed to write pod archive to file")
 	}
 	for _, row := range r.Results {
-		ccpu := row.ClientMetrics
-		if err := cpuarchive.Write([]string{"Client",
-			fmt.Sprint(row.Profile),
-			fmt.Sprint(row.SameNode),
-			fmt.Sprint(row.HostNetwork),
-			fmt.Sprint(row.Service),
-			strconv.Itoa(row.Duration),
-			strconv.Itoa(row.Parallelism),
-			strconv.Itoa(row.Samples),
-			strconv.Itoa(row.MessageSize),
-			fmt.Sprintf("%f", ccpu.Idle),
-			fmt.Sprintf("%f", ccpu.User),
-			fmt.Sprintf("%f", ccpu.System),
-			fmt.Sprintf("%f", ccpu.Iowait),
-			fmt.Sprintf("%f", ccpu.Steal),
-			fmt.Sprintf("%f", ccpu.Softirq),
-			fmt.Sprintf("%f", ccpu.Irq),
-		}); err != nil {
-			return fmt.Errorf("Failed to write archive to file")
+		if err := writeArchive(cpuarchive, podarchive, "Client", row, row.ClientPodCPU.Results); err != nil {
+			return err
 		}
-		scpu := row.ServerMetrics
-		if err := cpuarchive.Write([]string{"Server",
-			fmt.Sprint(row.Profile),
-			fmt.Sprint(row.SameNode),
-			fmt.Sprint(row.HostNetwork),
-			fmt.Sprint(row.Service),
-			strconv.Itoa(row.Duration),
-			strconv.Itoa(row.Parallelism),
-			strconv.Itoa(row.Samples),
-			strconv.Itoa(row.MessageSize),
-			fmt.Sprintf("%f", scpu.Idle),
-			fmt.Sprintf("%f", scpu.User),
-			fmt.Sprintf("%f", scpu.System),
-			fmt.Sprintf("%f", scpu.Iowait),
-			fmt.Sprintf("%f", scpu.Steal),
-			fmt.Sprintf("%f", scpu.Softirq),
-			fmt.Sprintf("%f", scpu.Irq),
-		}); err != nil {
-			return fmt.Errorf("Failed to write archive to file")
+		if err := writeArchive(cpuarchive, podarchive, "Server", row, row.ServerPodCPU.Results); err != nil {
+			return err
 		}
-		for _, pod := range row.ClientPodCPU.Results {
-			if err := podarchive.Write([]string{"Server",
-				fmt.Sprint(row.Profile),
-				fmt.Sprint(row.SameNode),
-				fmt.Sprint(row.HostNetwork),
-				fmt.Sprint(row.Service),
-				strconv.Itoa(row.Duration),
-				strconv.Itoa(row.Parallelism),
-				strconv.Itoa(row.Samples),
-				strconv.Itoa(row.MessageSize),
-				fmt.Sprintf("%s", pod.Name),
-				fmt.Sprintf("%f", pod.Value),
-			}); err != nil {
-				return fmt.Errorf("Failed to write archive to file")
-			}
-		}
-		for _, pod := range row.ServerPodCPU.Results {
-			if err := podarchive.Write([]string{"Server",
-				fmt.Sprint(row.Profile),
-				fmt.Sprint(row.SameNode),
-				fmt.Sprint(row.HostNetwork),
-				fmt.Sprint(row.Service),
-				strconv.Itoa(row.Duration),
-				strconv.Itoa(row.Parallelism),
-				strconv.Itoa(row.Samples),
-				strconv.Itoa(row.MessageSize),
-				fmt.Sprintf("%s", pod.Name),
-				fmt.Sprintf("%f", pod.Value),
-			}); err != nil {
-				return fmt.Errorf("Failed to write archive to file")
-			}
-		}
-
 	}
 	return nil
 }
@@ -254,19 +234,12 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()
 
-	data := []string{
-		"Profile",
-		"Same node",
-		"Host Network",
-		"Service",
-		"Duration",
-		"Parallelism",
-		"# of Samples",
-		"Message Size",
+	data := append(commonCsvHeaderFields(),
 		"Avg Throughput",
 		"Throughput Metric",
 		"99%tile Observed Latency",
-		"Latency Metric"}
+		"Latency Metric",
+	)
 
 	if err := archive.Write(data); err != nil {
 		return fmt.Errorf("Failed to write result archive to file")
@@ -274,18 +247,12 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
-		data := []string{row.Profile,
-			fmt.Sprint(row.SameNode),
-			fmt.Sprint(row.HostNetwork),
-			fmt.Sprint(row.Service),
-			strconv.Itoa(row.Duration),
-			strconv.Itoa(row.Parallelism),
-			strconv.Itoa(row.Samples),
-			strconv.Itoa(row.MessageSize),
+		data := append(commonCsvDataFeilds(row),
 			fmt.Sprintf("%f", avg),
 			row.Metric,
 			fmt.Sprint(lavg),
-			"usec"}
+			"usec",
+		)
 		if err := archive.Write(data); err != nil {
 			return fmt.Errorf("Failed to write archive to file")
 		}
