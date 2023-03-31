@@ -35,7 +35,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
-	Short: "A tool to run netperf tests in Kubernetes cluster",
+	Short: "A tool to run network performance tests in Kubernetes cluster",
 	Run: func(cmd *cobra.Command, args []string) {
 		uid := ""
 		if len(id) > 0 {
@@ -84,7 +84,7 @@ var rootCmd = &cobra.Command{
 		if !s.NodeLocal && len(nodes.Items) < 2 {
 			log.Error("Node count too low to run pod to pod across nodes.")
 			log.Error("To run k8s-netperf on a single node deployment pass -local.")
-			log.Error("	$ k8s-netperf -local")
+			log.Error("	$ k8s-netperf --local")
 			os.Exit(1)
 		}
 
@@ -281,7 +281,7 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
-	rootCmd.Flags().BoolVar(&nl, "local", false, "Run Netperf with pod/server on the same node")
+	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with pod/server on the same node")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
