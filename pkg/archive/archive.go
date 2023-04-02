@@ -31,8 +31,10 @@ type Doc struct {
 	Duration      int              `json:"duration"`
 	Samples       int              `json:"samples"`
 	Messagesize   int              `json:"messageSize"`
-	Result        float64          `json:"result"`
-	Metric        string           `json:"metric"`
+	Throughput    float64          `json:"throughput"`   
+	Latency       float64          `json:"latency"`
+	TputMetric    string           `json:"tputMetric"`
+	LtcyMetric    string           `json:"ltcyMetric"`
 	Metadata      result.Metadata  `json:"metadata"`
 	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
 	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
@@ -66,6 +68,8 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 	}
 	for _, r := range sr.Results {
 		var d Doc
+		ltcyMetric := "usec"
+		
 		d.UUID = uuid
 		d.Timestamp = time
 		d.HostNetwork = r.HostNetwork
@@ -74,12 +78,10 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 		d.Duration = r.Duration
 		d.Samples = r.Samples
 		d.Messagesize = r.MessageSize
-		d.Metric = r.Metric
-		if strings.Contains(d.Profile, "STREAM") {
-			d.Result, _ = result.Average(r.ThroughputSummary)
-		} else {
-			d.Result, _ = result.Percentile(r.LatencySummary, 95)
-		}
+		d.Throughput, _ = result.Average(r.ThroughputSummary)
+		d.Latency, _ = result.Average(r.LatencySummary)
+		d.TputMetric = r.Metric
+		d.LtcyMetric = ltcyMetric
 		d.ServerNodeCPU = r.ServerMetrics
 		d.ClientNodeCPU = r.ClientMetrics
 		d.ServerPodCPU = r.ServerPodCPU.Results
