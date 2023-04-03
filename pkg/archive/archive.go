@@ -20,19 +20,23 @@ import (
 )
 
 const index = "k8s-netperf"
+const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
 	UUID          string           `json:"uuid"`
 	Timestamp     time.Time        `json:"timestamp"`
 	HostNetwork   bool             `json:"hostNetwork"`
+	Driver        string           `json:"driver"`
 	Parallelism   int              `json:"parallelism"`
 	Profile       string           `json:"profile"`
 	Duration      int              `json:"duration"`
 	Samples       int              `json:"samples"`
 	Messagesize   int              `json:"messageSize"`
-	Result        float64          `json:"result"`
-	Metric        string           `json:"metric"`
+	Throughput    float64          `json:"throughput"`
+	Latency       float64          `json:"latency"`
+	TputMetric    string           `json:"tputMetric"`
+	LtcyMetric    string           `json:"ltcyMetric"`
 	Metadata      result.Metadata  `json:"metadata"`
 	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
 	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
@@ -65,21 +69,23 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 		return nil, fmt.Errorf("No result documents")
 	}
 	for _, r := range sr.Results {
+		if len(r.Driver) < 1 {
+			continue
+		}
 		var d Doc
 		d.UUID = uuid
 		d.Timestamp = time
+		d.Driver = r.Driver
 		d.HostNetwork = r.HostNetwork
 		d.Parallelism = r.Parallelism
 		d.Profile = r.Profile
 		d.Duration = r.Duration
 		d.Samples = r.Samples
 		d.Messagesize = r.MessageSize
-		d.Metric = r.Metric
-		if strings.Contains(d.Profile, "STREAM") {
-			d.Result, _ = result.Average(r.ThroughputSummary)
-		} else {
-			d.Result, _ = result.Percentile(r.LatencySummary, 95)
-		}
+		d.Throughput, _ = result.Average(r.ThroughputSummary)
+		d.Latency, _ = result.Average(r.LatencySummary)
+		d.TputMetric = r.Metric
+		d.LtcyMetric = ltcyMetric
 		d.ServerNodeCPU = r.ServerMetrics
 		d.ClientNodeCPU = r.ClientMetrics
 		d.ServerPodCPU = r.ServerPodCPU.Results
@@ -134,6 +140,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	defer podarchive.Flush()
 	cpudata := []string{
 		"Role",
+		"Driver",
 		"Profile",
 		"Same node",
 		"Host Network",
@@ -151,6 +158,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		"IRQ CPU"}
 	poddata := []string{
 		"Role",
+		"Driver",
 		"Profile",
 		"Same node",
 		"Host Network",
@@ -169,7 +177,9 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	}
 	for _, row := range r.Results {
 		ccpu := row.ClientMetrics
-		if err := cpuarchive.Write([]string{"Client",
+		if err := cpuarchive.Write([]string{
+			"Client",
+			fmt.Sprint(row.Driver),
 			fmt.Sprint(row.Profile),
 			fmt.Sprint(row.SameNode),
 			fmt.Sprint(row.HostNetwork),
@@ -189,7 +199,9 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 			return fmt.Errorf("Failed to write archive to file")
 		}
 		scpu := row.ServerMetrics
-		if err := cpuarchive.Write([]string{"Server",
+		if err := cpuarchive.Write([]string{
+			"Server",
+			fmt.Sprint(row.Driver),
 			fmt.Sprint(row.Profile),
 			fmt.Sprint(row.SameNode),
 			fmt.Sprint(row.HostNetwork),
@@ -209,7 +221,9 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 			return fmt.Errorf("Failed to write archive to file")
 		}
 		for _, pod := range row.ClientPodCPU.Results {
-			if err := podarchive.Write([]string{"Server",
+			if err := podarchive.Write([]string{
+				"Server",
+				fmt.Sprint(row.Driver),
 				fmt.Sprint(row.Profile),
 				fmt.Sprint(row.SameNode),
 				fmt.Sprint(row.HostNetwork),
@@ -225,7 +239,9 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 			}
 		}
 		for _, pod := range row.ServerPodCPU.Results {
-			if err := podarchive.Write([]string{"Server",
+			if err := podarchive.Write([]string{
+				"Server",
+				fmt.Sprint(row.Driver),
 				fmt.Sprint(row.Profile),
 				fmt.Sprint(row.SameNode),
 				fmt.Sprint(row.HostNetwork),
@@ -258,6 +274,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	defer archive.Flush()
 
 	data := []string{
+		"Driver",
 		"Profile",
 		"Same node",
 		"Host Network",
@@ -277,7 +294,9 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
-		data := []string{row.Profile,
+		data := []string{
+			row.Driver,
+			row.Profile,
 			fmt.Sprint(row.SameNode),
 			fmt.Sprint(row.HostNetwork),
 			fmt.Sprint(row.Service),

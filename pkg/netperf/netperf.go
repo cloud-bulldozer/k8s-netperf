@@ -18,8 +18,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// ServerCtlPort control port for the service
-const ServerCtlPort = 12865
+const workload = "netperf"
 
 // ServerDataPort data port for the service
 const ServerDataPort = 42424
@@ -33,7 +32,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
-	config.Show(nc)
+	config.Show(nc, workload)
 	cmd := []string{}
 	if nc.Service {
 		cmd = []string{"bash", "super-netperf", "1", "-H",
@@ -84,15 +83,14 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		return stdout, err
 	}
 	log.Debug(strings.TrimSpace(stdout.String()))
-	// Sound check stderr
 	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark. It also needs
-// The NetPerfConfig to determine aspects of the workload the user provided.
 // It will return a Sample struct or error
-func ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
+func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample := sample.Sample{}
+	sample.Driver = workload
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
 		if len(l) < 2 {
