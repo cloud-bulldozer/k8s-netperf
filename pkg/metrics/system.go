@@ -114,7 +114,7 @@ func Discover() (PromConnect, bool) {
 		conn.URL = fmt.Sprintf("https://%s", proute.Spec.Host)
 		request := auth.TokenRequest{
 			Spec: auth.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64Ptr(int64(expire.Seconds())),
+				ExpirationSeconds: pointer.Int64(int64(expire.Seconds())),
 			},
 		}
 		token, err := client.CoreV1().ServiceAccounts("openshift-monitoring").CreateToken(context.TODO(), "prometheus-k8s", &request, v1.CreateOptions{})
