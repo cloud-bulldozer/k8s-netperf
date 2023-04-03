@@ -40,11 +40,17 @@ type ServiceParams struct {
 
 const sa string = "netperf"
 
-// ServerCtlPort control port for the service
-const ServerCtlPort = 12865
+// NetperfServerCtlPort control port for the service
+const NetperfServerCtlPort = 12865
 
-// ServerDataPort data port for the service
-const ServerDataPort = 42424
+// ServerCtlPort control port for the service
+const IperfServerCtlPort = 22865
+
+// NetperfServerDataPort data port for the service
+const NetperfServerDataPort = 42424
+
+// NetperfServerDataPort data port for the service
+const IperfServerDataPort = 43433
 
 // Labels we will apply to k8s assets.
 const serverRole = "server"
@@ -79,7 +85,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Image:     "quay.io/jtaleric/netperf:beta",
 			Labels:    map[string]string{"role": clientRole},
 			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
-			Port:      ServerCtlPort,
+			Port:      NetperfServerCtlPort,
 		}
 		if z != "" {
 			cdp.NodeAffinity = apiv1.NodeAffinity{
@@ -102,17 +108,30 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdp)
 	}
 
-	// Create netperf TCP service
-	spTCP := ServiceParams{
+	// Create iperf service
+	iperfSVC := ServiceParams{
+		Name:      "iperf-service",
+		Namespace: "netperf",
+		Labels:    map[string]string{"role": serverRole},
+		CtlPort:   IperfServerCtlPort,
+		DataPort:  IperfServerDataPort,
+	}
+	s.IperfService, err = CreateService(iperfSVC, client)
+	if err != nil {
+		return fmt.Errorf("😥 Unable to create iperf service")
+	}
+
+	// Create netperf service
+	netperfSVC := ServiceParams{
 		Name:      "netperf-service",
 		Namespace: "netperf",
 		Labels:    map[string]string{"role": serverRole},
-		CtlPort:   ServerCtlPort,
-		DataPort:  ServerDataPort,
+		CtlPort:   NetperfServerCtlPort,
+		DataPort:  NetperfServerDataPort,
 	}
-	s.Service, err = CreateService(spTCP, client)
+	s.NetperfService, err = CreateService(netperfSVC, client)
 	if err != nil {
-		return fmt.Errorf("😥 Unable to create TCP netperf service")
+		return fmt.Errorf("😥 Unable to create netperf service")
 	}
 	cdpAcross := DeploymentParams{
 		Name:      "client-across",
@@ -121,7 +140,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Image:     "quay.io/jtaleric/netperf:beta",
 		Labels:    map[string]string{"role": clientAcrossRole},
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
-		Port:      ServerCtlPort,
+		Port:      NetperfServerCtlPort,
 	}
 	cdpHostAcross := DeploymentParams{
 		Name:        "client-host",
@@ -131,7 +150,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Image:       "quay.io/jtaleric/netperf:beta",
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
-		Port:        ServerCtlPort,
+		Port:        NetperfServerCtlPort,
 	}
 	if z != "" {
 		if num_nodes > 1 {
@@ -189,8 +208,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		HostNetwork: true,
 		Image:       "quay.io/jtaleric/netperf:beta",
 		Labels:      map[string]string{"role": hostNetServerRole},
-		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
-		Port:        ServerCtlPort,
+		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		Port:        NetperfServerCtlPort,
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
@@ -199,8 +218,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Replicas:  1,
 		Image:     "quay.io/jtaleric/netperf:beta",
 		Labels:    map[string]string{"role": serverRole},
-		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver; sleep 10000000")},
-		Port:      ServerCtlPort,
+		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		Port:      NetperfServerCtlPort,
 	}
 	if z != "" {
 		affinity := apiv1.NodeAffinity{}
@@ -317,7 +336,7 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (apiv1.
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
 // It will return a bool based on if the pods ever become ready before we move on.
 func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
-	log.Info("⏰ Checking for Pods to become ready...")
+	log.Infof("⏰ Checking for %s Pods to become ready...", dp.Name)
 	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return false, err
@@ -399,9 +418,10 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					HostNetwork:        dp.HostNetwork,
 					Containers: []apiv1.Container{
 						{
-							Name:    dp.Name,
-							Image:   dp.Image,
-							Command: dp.Command,
+							Name:            dp.Name,
+							Image:           dp.Image,
+							Command:         dp.Command,
+							ImagePullPolicy: apiv1.PullAlways,
 						},
 					},
 					Affinity: &apiv1.Affinity{
@@ -473,6 +493,7 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error
 // CreateService will build a k8s service
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Service, error) {
 	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
+	log.Debugf("Looking for service %s in namespace %s", sp.Name, sp.Namespace)
 	if err == nil {
 		log.Info("♻️  Using existing Service")
 		return s, nil
@@ -487,8 +508,14 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Servi
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       fmt.Sprintf("%s-ctl", sp.Name),
+					Name:       fmt.Sprintf("%s-tcp-ctl", sp.Name),
 					Protocol:   apiv1.ProtocolTCP,
+					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.CtlPort)),
+					Port:       sp.CtlPort,
+				},
+				{
+					Name:       fmt.Sprintf("%s-udp-ctl", sp.Name),
+					Protocol:   apiv1.ProtocolUDP,
 					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.CtlPort)),
 					Port:       sp.CtlPort,
 				},

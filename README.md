@@ -16,7 +16,7 @@ Running Networking Performance Tests against K8s
 ```shell
 $ git clone http://github.com/jtaleric/k8s-netperf
 $ cd k8s-netperf
-$ make build 
+$ make build
 ```
 
 ## Running
@@ -31,12 +31,18 @@ $ kubectl create sa -n netperf netperf
 
 If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
 
+Example
+```shell
+$ oc adm policy add-scc-to-user hostnetwork -z netperf
+```
+
 
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
 $ ./bin/arch/k8s-netperf --help
-A tool to run netperf tests in Kubernetes cluster
+A tool to run network performance tests in Kubernetes cluster
+
 Usage:
   k8s-netperf [flags]
 
@@ -45,7 +51,8 @@ Flags:
       --config string         K8s netperf Configuration File (default "netperf.yml")
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
-      --local                 Run Netperf with pod/server on the same node
+      --iperf                 Use iperf3 as load driver (along with netperf)
+      --local                 Run network performance tests with pod/server on the same node
       --metrics               Show all system metrics retrieved from prom
       --prom string           Prometheus URL
       --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
@@ -59,7 +66,11 @@ When using `--prom` with a non-openshift clsuter, it will be necessary to pass t
 
 With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.
 
-`--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file. 
+`--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
+
+`--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
+
+`--netperf` Our default load driver. However, users can pass `--netperf=false --iperf3` which will disable netperf, and enable iperf3, for just stream tests.
 
 ### Config file
 `netperf.yml` contains a default set of tests.
@@ -67,7 +78,7 @@ With OpenShift, we attempt to discover the OpenShift route. If that route is not
 Description of each field in the YAML.
 ```yml
 TCPStream:                 # Place-holder of a test name
-   parallelism: 1          # Number of concurrent netperf processes to run. 
+   parallelism: 1          # Number of concurrent netperf processes to run.
    profile: "TCP_STREAM"   # Netperf profile to execute. This can be [TCP,UDP]_STREAM, [TCP,UDP]_RR, TCP_CRR
    duration: 3             # How long to run the test
    samples: 1              # Iterations to run specified test
@@ -84,20 +95,54 @@ In most cases setting parallelism greater than 1 is OK, however through a `servi
 In order to have `k8s-netperf` determine pass/fail the user must pass the `--all` flag. `k8s-netperf` must be able to run with hostNetwork and podNetwork across nodes.
 
 ```shell
-$ ./k8s-netperf --tcp-tolerance 10
-------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | 2               | true            | false           | 1024            | false           | 10              | 1               | 1867.890000     (Mb/s) 
-📊 TCP_STREAM      | 2               | false           | false           | 1024            | false           | 10              | 1               | 1657.140000     (Mb/s) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------- Stream Latency Results ---------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | 2               | true            |false           | 1024            | false           | 10              | 1               | 32.000000       (usec) 
-📊 TCP_STREAM      | 2               | false           |false           | 1024            | false           | 10              | 1               | 32.000000       (usec) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than 10.0 percent (12.0 percent)
+$ ./k8s-netperf --tcp-tolerance 1
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
+|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2661.006667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2483.078229 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2702.230000 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2523.434069 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2697.276667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2542.793728 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2707.076667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2604.067072 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1143.926667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1202.428288 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1145.066667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1239.580672 (Mb/s) |
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
++---------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+---------------------+
+|  RESULT TYPE  | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |      AVG VALUE      |
++---------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+---------------------+
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | true    | 1024         | false     | 10       | 3       | 2370.196667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | true    | 1024         | false     | 10       | 3       | 3046.126667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_RR   | 1           | true         | false   | 1024         | false     | 10       | 3       | 16849.056667 (OP/s) |
+| 📊 Rr Results | netperf | TCP_RR   | 1           | false        | false   | 1024         | false     | 10       | 3       | 17101.856667 (OP/s) |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | false   | 1024         | false     | 10       | 3       | 3166.136667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | false   | 1024         | false     | 10       | 3       | 1787.530000 (OP/s)  |
++---------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+---------------------+
++---------------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
+|        RESULT TYPE        | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
++---------------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 71.333333 (usec)  |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2.333333 (usec)   |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 276.000000 (usec) |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 124.333333 (usec) |
+| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 14.666667 (usec)  |
+| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 14.666667 (usec)  |
++---------------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
++-----------------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
+|      RESULT TYPE      | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
++-----------------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | true    | 1024         | false     | 10       | 3       | 817.333333 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | true    | 1024         | false     | 10       | 3       | 647.666667 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | true         | false   | 1024         | false     | 10       | 3       | 125.333333 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | false        | false   | 1024         | false     | 10       | 3       | 119.666667 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | false   | 1024         | false     | 10       | 3       | 621.000000 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | false   | 1024         | false     | 10       | 3       | 539.666667 (usec) |
++-----------------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+-------------------+
+😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than 1.0 percent (2.7 percent)
 $ echo $?
 1
 ```
@@ -115,43 +160,29 @@ INFO[2023-03-02 16:38:48] Connected to : [https://admin:pass@my-es:443]
 INFO[2023-03-02 16:38:48] Attempting to index 2 documents              
 ```
 
-Document format can be seen in `netperf/archive.go`
+Document format can be seen in `pkg/archive/archive.go`
 
 ## Output
 `k8s-netperf` will provide updates to stdout of the operations it is running, such as creating the server/client deployments and the execution of the workload in the container.
 
 Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test.
 ```shell
-------------------------------------------------------------------------------- Stream Results -------------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | 1               | false           | false           | 1024            | false           | 10              | 3               | 1131.150000     (Mb/s) 
-📊 TCP_STREAM      | 2               | false           | false           | 1024            | false           | 10              | 3               | 1710.150000     (Mb/s) 
-📊 TCP_STREAM      | 1               | false           | false           | 8192            | false           | 10              | 3               | 4437.520000     (Mb/s) 
-📊 UDP_STREAM      | 1               | false           | false           | 1024            | false           | 10              | 3               | 1159.790000     (Mb/s) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------------- RR Results ----------------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | Avg value      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_CRR         | 1               | false           | false           | 1024            | false           | 10              | 3               | 5954.940000     (OP/s) 
-📊 TCP_CRR         | 1               | false           | true            | 1024            | false           | 10              | 3               | 1455.470000     (OP/s) 
-📊 TCP_RR          | 1               | false           | false           | 1024            | false           | 10              | 3               | 41330.000000    (OP/s) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------- Stream Latency Results ---------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_STREAM      | 1               | false           |false           | 1024            | false           | 10              | 3               | 23.000000       (usec) 
-📊 TCP_STREAM      | 2               | false           |false           | 1024            | false           | 10              | 3               | 34.000000       (usec) 
-📊 TCP_STREAM      | 1               | false           |false           | 8192            | false           | 10              | 3               | 30.000000       (usec) 
-📊 UDP_STREAM      | 1               | false           |false           | 1024            | false           | 10              | 3               | 14.000000       (usec) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
----------------------------------------------------------------------------- RR Latency Results ----------------------------------------------------------------------------
-Scenario           | Parallelism     | Host Network    | Service         | Message Size    | Same node       | Duration        | Samples         | 99%tile value  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-📊 TCP_CRR         |  1               | false           | false           | 1024            | false           | 10              | 3               | 456.000000      (usec) 
-📊 TCP_CRR         |  1               | false           | true            | 1024            | false           | 10              | 3               | 248.000000      (usec) 
-📊 TCP_RR          |  1               | false           | false           | 1024            | false           | 10              | 3               | 85.000000       (usec) 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
+|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2661.006667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2483.078229 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2702.230000 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2523.434069 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2697.276667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2542.793728 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2707.076667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2604.067072 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1143.926667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1202.428288 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1145.066667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1239.580672 (Mb/s) |
++-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
 ```
 
 ### Output to CSV
