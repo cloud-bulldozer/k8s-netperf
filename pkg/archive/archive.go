@@ -117,14 +117,16 @@ func IndexDocs(client *opensearch.Client, docs []Doc) error {
 func WritePromCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	podfp, err := os.Create(fmt.Sprintf("podcpu-result-%d.csv", d))
-	defer podfp.Close()
 	if err != nil {
 		return fmt.Errorf("Failed to open pod cpu archive file")
+	} else {
+		defer podfp.Close()
 	}
 	cpufp, err := os.Create(fmt.Sprintf("cpu-result-%d.csv", d))
-	defer cpufp.Close()
 	if err != nil {
 		return fmt.Errorf("Failed to open cpu archive file")
+	} else {
+		defer cpufp.Close()
 	}
 	cpuarchive := csv.NewWriter(cpufp)
 	defer cpuarchive.Flush()
@@ -216,7 +218,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 				strconv.Itoa(row.Parallelism),
 				strconv.Itoa(row.Samples),
 				strconv.Itoa(row.MessageSize),
-				fmt.Sprintf("%s", pod.Name),
+				fmt.Sprint(pod.Name),
 				fmt.Sprintf("%f", pod.Value),
 			}); err != nil {
 				return fmt.Errorf("Failed to write archive to file")
@@ -232,7 +234,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 				strconv.Itoa(row.Parallelism),
 				strconv.Itoa(row.Samples),
 				strconv.Itoa(row.MessageSize),
-				fmt.Sprintf("%s", pod.Name),
+				fmt.Sprint(pod.Name),
 				fmt.Sprintf("%f", pod.Value),
 			}); err != nil {
 				return fmt.Errorf("Failed to write archive to file")
@@ -247,9 +249,10 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 func WriteCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	fp, err := os.Create(fmt.Sprintf("result-%d.csv", d))
-	defer fp.Close()
 	if err != nil {
 		return fmt.Errorf("Failed to open archive file")
+	} else {
+		defer fp.Close()
 	}
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()

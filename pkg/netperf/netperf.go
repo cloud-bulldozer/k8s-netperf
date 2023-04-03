@@ -2,6 +2,7 @@ package netperf
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -23,13 +24,6 @@ const ServerCtlPort = 12865
 // ServerDataPort data port for the service
 const ServerDataPort = 42424
 
-// Labels we will apply to k8s assets.
-const serverRole = "server"
-const clientRole = "client"
-const clientAcrossRole = "client-across"
-const hostNetServerRole = "host-server"
-const hostNetClientRole = "host-client"
-
 // omniOptions are netperf specific options that we will pass to the netperf client.
 const omniOptions = "rt_latency,p99_latency,throughput,throughput_units"
 
@@ -47,7 +41,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 			fmt.Sprintf("%d", nc.Duration),
 			"-t", nc.Profile,
 			"--",
-			"-k", fmt.Sprintf("%s", omniOptions),
+			"-k", fmt.Sprint(omniOptions),
 			"-m", fmt.Sprintf("%d", nc.MessageSize),
 			"-P", fmt.Sprintf("%d", ServerDataPort),
 			"-R", "1"}
@@ -57,7 +51,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 			fmt.Sprintf("%d", nc.Duration),
 			"-t", nc.Profile,
 			"--",
-			"-k", fmt.Sprintf("%s", omniOptions),
+			"-k", fmt.Sprint(omniOptions),
 			"-m", fmt.Sprintf("%d", nc.MessageSize),
 			"-R", "1"}
 	}
@@ -81,7 +75,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		return stdout, err
 	}
 	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdin:  nil,
 		Stdout: &stdout,
 		Stderr: &stderr,

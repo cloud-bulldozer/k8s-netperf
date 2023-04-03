@@ -57,7 +57,7 @@ const hostNetClientRole = "host-client"
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
-	z, num_nodes, err := GetZone(client)
+	z, numNodes, err := GetZone(client)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -134,7 +134,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Port:        ServerCtlPort,
 	}
 	if z != "" {
-		if num_nodes > 1 {
+		if numNodes > 1 {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
 					{
@@ -204,7 +204,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	if z != "" {
 		affinity := apiv1.NodeAffinity{}
-		if num_nodes > 1 {
+		if numNodes > 1 {
 			affinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
 					{
@@ -342,18 +342,18 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	zones := map[string]int{}
 	zone := ""
 	lz := ""
-	num_nodes := 0
+	numNodes := 0
 	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", num_nodes, fmt.Errorf("Unable to query nodes")
+		return "", numNodes, fmt.Errorf("Unable to query nodes")
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
-			return "", num_nodes, fmt.Errorf("⚠️  No zone label")
+			return "", numNodes, fmt.Errorf("⚠️  No zone label")
 		}
 		if _, ok := zones[l.GetLabels()["topology.kubernetes.io/zone"]]; ok {
 			zone = l.GetLabels()["topology.kubernetes.io/zone"]
-			num_nodes = 2
+			numNodes = 2
 			// Simple check, no need to determine all the zones with > 1 node.
 			break
 		} else {
@@ -364,10 +364,10 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	// No zone had > 1, use the last zone.
 	if zone == "" {
 		log.Warn("⚠️  Single node per zone")
-		num_nodes = 1
+		numNodes = 1
 		zone = lz
 	}
-	return zone, num_nodes, nil
+	return zone, numNodes, nil
 }
 
 // CreateDeployment will create the different deployments we need to do network performance tests
