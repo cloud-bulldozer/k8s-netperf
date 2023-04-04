@@ -122,6 +122,7 @@ func IndexDocs(client *opensearch.Client, docs []Doc) error {
 // Common csv header fields.
 func commonCsvHeaderFields() []string {
 	return []string{
+		"Driver",
 		"Profile",
 		"Same node",
 		"Host Network",
@@ -136,6 +137,7 @@ func commonCsvHeaderFields() []string {
 // Common csv data fields.
 func commonCsvDataFeilds(row result.Data) []string{
 	return []string{
+		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
 		fmt.Sprint(row.SameNode),
 		fmt.Sprint(row.HostNetwork),
