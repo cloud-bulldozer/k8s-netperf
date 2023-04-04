@@ -222,7 +222,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Port:      NetperfServerCtlPort,
 	}
 	if z != "" {
-		affinity := apiv1.NodeAffinity{}
+		var affinity apiv1.NodeAffinity
 		if numNodes > 1 {
 			affinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
