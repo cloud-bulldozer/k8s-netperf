@@ -155,8 +155,12 @@ func NodeDetails(conn PromConnect) Details {
 		v := val.(model.Matrix)
 		for _, s := range v {
 			d, _ := s.MarshalJSON()
-			json.Unmarshal(d, &pd)
-			break
+			error := json.Unmarshal(d, &pd)
+			if error != nil {
+				logging.Error(" Cannot unmarshal node information ")
+			} else {
+				break
+			}
 		}
 	}
 	return pd
@@ -185,7 +189,10 @@ func Platform(conn PromConnect) string {
 		v := val.(model.Matrix)
 		for _, s := range v {
 			d, _ := s.MarshalJSON()
-			json.Unmarshal(d, &pd)
+			error := json.Unmarshal(d, &pd)
+			if error != nil {
+				logging.Errorf(" Cannot unmarshal Promquery ")
+			}
 		}
 	}
 	return pd.Metric.Platform
@@ -215,7 +222,10 @@ func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
 		v := val.(model.Matrix)
 		for _, s := range v {
 			d, _ := s.MarshalJSON()
-			json.Unmarshal(d, &vd)
+			error := json.Unmarshal(d, &vd)
+			if error != nil {
+				logging.Error(" Cannot unmarshal the OCP Cluster information ")
+			}
 		}
 	}
 	return vd.Metric.Version
@@ -224,12 +234,12 @@ func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
 // NodeMTU return mtu
 func NodeMTU(conn PromConnect) (int, error) {
 	if !conn.OpenShift {
-		return 0, fmt.Errorf("Not able to collect OpenShift specific mtu info")
+		return 0, fmt.Errorf(" Not able to collect OpenShift specific mtu info ")
 	}
 	query := `node_network_mtu_bytes`
 	val, q := promQueryRange(time.Now().Add(-time.Minute*1), time.Now(), query, conn)
 	if !q {
-		return 0, fmt.Errorf("Issue querying Prometheus")
+		return 0, fmt.Errorf(" Issue querying Prometheus ")
 	}
 	var mtu int
 	if val.Type() == model.ValMatrix {
@@ -247,12 +257,12 @@ func NodeMTU(conn PromConnect) (int, error) {
 // IPSecEnabled checks if IPsec
 func IPSecEnabled(conn PromConnect, start time.Time, end time.Time) (bool, error) {
 	if !conn.OpenShift {
-		return false, fmt.Errorf("Not able to collect OpenShift specific ovn ipsec info")
+		return false, fmt.Errorf(" Not able to collect OpenShift specific ovn ipsec info ")
 	}
 	query := `ovnkube_master_ipsec_enabled`
 	val, q := promQueryRange(start, end, query, conn)
 	if !q {
-		return false, fmt.Errorf("Issue querying Prometheus")
+		return false, fmt.Errorf(" Issue querying Prometheus ")
 	}
 	var ipsec int
 	if val.Type() == model.ValMatrix {
