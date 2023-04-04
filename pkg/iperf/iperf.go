@@ -134,7 +134,10 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample.Driver = workload
 	result := Result{}
 	sample.Metric = "Mb/s"
-	json.NewDecoder(stdout).Decode(&result)
+	error := json.NewDecoder(stdout).Decode(&result)
+	if error != nil {
+		log.Error(" Issue while decoding ")
+	}
 	if result.Data.TCPStream.Rate > 0 {
 		sample.Throughput = float64(result.Data.TCPStream.Rate) / 1000000
 
