@@ -10,6 +10,7 @@ import (
 	log "github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	"gopkg.in/yaml.v2"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -21,6 +22,7 @@ type Config struct {
 	Samples     int    `yaml:"samples,omitempty"`
 	MessageSize int    `yaml:"messagesize,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
+	Metric      string
 }
 
 // PerfScenarios describes the different scenarios
@@ -35,8 +37,10 @@ type PerfScenarios struct {
 	ClientAcross   apiv1.PodList
 	ClientHost     apiv1.PodList
 	ServerHost     apiv1.PodList
-	Service        *apiv1.Service
+	NetperfService *apiv1.Service
+	IperfService   *apiv1.Service
 	RestConfig     rest.Config
+	ClientSet      *kubernetes.Clientset
 }
 
 // Tests we will support in k8s-netperf
@@ -87,6 +91,6 @@ func ParseConf(fn string) ([]Config, error) {
 }
 
 // Show Display the netperf config
-func Show(c Config) {
-	log.Infof("🗒️  Running netperf %s (service %t) for %ds\n", c.Profile, c.Service, c.Duration)
+func Show(c Config, driver string) {
+	log.Infof("🗒️  Running %s %s (service %t) for %ds\n", driver, c.Profile, c.Service, c.Duration)
 }
