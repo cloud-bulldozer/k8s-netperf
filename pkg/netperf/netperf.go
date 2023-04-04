@@ -33,7 +33,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, workload)
-	cmd := []string{}
+	var cmd []string
 	if nc.Service {
 		cmd = []string{"bash", "super-netperf", "1", "-H",
 			serverIP, "-l",

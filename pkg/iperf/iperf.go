@@ -58,7 +58,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	if strings.Contains(nc.Profile, "UDP") {
 		tcp = false
 	}
-	var cmd = []string{}
+	var cmd []string
 	if nc.Service {
 		if tcp {
 			cmd = []string{"iperf3", "-P", "1", "-c",
