@@ -45,7 +45,7 @@ var rootCmd = &cobra.Command{
 			uid = id
 		} else {
 			u := uuid.New()
-			uid = fmt.Sprintf("%s", u.String())
+			uid = u.String()
 		}
 
 		if debug {

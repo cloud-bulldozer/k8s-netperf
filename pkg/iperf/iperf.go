@@ -53,12 +53,12 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	config.Show(nc, workload)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {
-		return bytes.Buffer{}, fmt.Errorf("Unable to run iperf3 with non-stream tests")
+		return bytes.Buffer{}, fmt.Errorf(" Unable to run iperf3 with non-stream tests ")
 	}
 	if strings.Contains(nc.Profile, "UDP") {
 		tcp = false
 	}
-	cmd := []string{}
+	var cmd = []string{}
 	if nc.Service {
 		if tcp {
 			cmd = []string{"iperf3", "-P", "1", "-c",
