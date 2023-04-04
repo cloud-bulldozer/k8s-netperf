@@ -175,7 +175,8 @@ func renderResults(s ScenarioResults, testType string) {
 	table.Render()
 }
 
-// ShowStreamResult accepts NetPerfResults to display to the user via stdout
+// ShowStreamResult will display the throughput results
+// Currently sharing Avg value
 func ShowStreamResult(s ScenarioResults) {
 	if checkResults(s, "STREAM") {
 		logging.Debug("Rendering Stream results")
@@ -183,23 +184,26 @@ func ShowStreamResult(s ScenarioResults) {
 	}
 }
 
-// ShowRRResult will display the RR performance results
+// ShowRRResult will display the RR transaction results
 // Currently showing the Avg Value.
 func ShowRRResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
-		logging.Debug("Rendering RR results")
+		logging.Debug("Rendering RR Transaction results")
 		renderResults(s, "RR")
 	}
 }
 
 // ShowLatencyResult accepts NetPerfResults to display to the user via stdout
 func ShowLatencyResult(s ScenarioResults) {
-        table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
-        for _, r := range s.Results {
-                if strings.Contains(r.Profile, "RR") {
-                        p99, _ := Average(r.LatencySummary)
-                        table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
-                }
-        }
-        table.Render()
+	if checkResults(s, "RR") {
+		logging.Debug("Rendering RR P99 Latency results")
+        	table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
+        	for _, r := range s.Results {
+                	if strings.Contains(r.Profile, "RR") {
+                        	p99, _ := Average(r.LatencySummary)
+                        	table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
+                	}
+		}
+        	table.Render()
+	}
 }
