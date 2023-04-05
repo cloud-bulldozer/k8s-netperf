@@ -5,7 +5,7 @@ COPY appstream.repo /etc/yum.repos.d/centos8-appstream.repo
 COPY netperf.diff /tmp/netperf.diff
 
 RUN dnf install -y --nodocs make automake --enablerepo=centos9 --allowerasing  && \
-    dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo --enablerepo=*
+    dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo iperf3 --enablerepo=*
 
 RUN git clone https://github.com/HewlettPackard/netperf
 WORKDIR netperf
