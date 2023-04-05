@@ -19,6 +19,14 @@ $ cd k8s-netperf
 $ make build
 ```
 
+## Build Container Image
+
+```shell
+$ git clone http://github.com/jtaleric/k8s-netperf
+$ cd k8s-netperf 
+$ make docker-build
+```
+
 ## Running
 Ensure your `kubeconfig` is properly set to the cluster you would like to run `k8s-netperf` against.
 
