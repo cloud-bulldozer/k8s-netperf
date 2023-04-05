@@ -1,0 +1,26 @@
+##### 
+### Set up the following package managers for regular updates
+### 1) gomod
+### 2) github-actions
+#### based on https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+####
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # Check GitHub Actions update(s) weekly
+      interval: "weekly"
+    commit-message:
+      # Prefix all commit messages with "Dependabot GHA:"
+      prefix: "Dependabot GHA"
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      # Check Go modules update(s) monthly
+      interval: "monthly"
+    commit-message:
+      # Prefix all commit messages with "Dependabot gomod:"
+      prefix: "Dependabot gomod"
