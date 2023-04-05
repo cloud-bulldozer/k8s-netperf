@@ -1,3 +1,4 @@
+# RHEL_VERSION defined in Makefile
 ARG RHEL_VERSION
 FROM registry.access.redhat.com/${RHEL_VERSION}:latest
 
