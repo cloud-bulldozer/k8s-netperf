@@ -231,6 +231,20 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	return nil
 }
 
+// WriteJSONResult sends the results as JSON to stdout
+func WriteJSONResult(r result.ScenarioResults) error {
+	docs, err := BuildDocs(r, "k8s-netperf")
+	if err != nil {
+		return err
+	}
+	p, err := json.MarshalIndent(docs, " ", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(p))
+	return nil
+}
+
 // WriteCSVResult will write the throughput result to the local filesystem
 func WriteCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
