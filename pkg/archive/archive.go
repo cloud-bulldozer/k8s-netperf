@@ -232,7 +232,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 				strconv.Itoa(row.Parallelism),
 				strconv.Itoa(row.Samples),
 				strconv.Itoa(row.MessageSize),
-				fmt.Sprint(pod.Name),
+				pod.Name,
 				fmt.Sprintf("%f", pod.Value),
 			}); err != nil {
 				return fmt.Errorf("Failed to write archive to file")
@@ -250,7 +250,7 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 				strconv.Itoa(row.Parallelism),
 				strconv.Itoa(row.Samples),
 				strconv.Itoa(row.MessageSize),
-				fmt.Sprint(pod.Name),
+				pod.Name,
 				fmt.Sprintf("%f", pod.Value),
 			}); err != nil {
 				return fmt.Errorf("Failed to write archive to file")

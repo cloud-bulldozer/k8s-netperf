@@ -13,7 +13,12 @@ import (
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	stats "github.com/montanaflynn/stats"
 	"github.com/olekukonko/tablewriter"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
+
+// Specify Language specific case wrapper as global variable
+var caser = cases.Title(language.English)
 
 // Data describes the result data
 type Data struct {
@@ -168,7 +173,7 @@ func renderResults(s ScenarioResults, testType string) {
 		if strings.Contains(r.Profile, testType) {
 			if len(r.Driver) > 0 {
 				avg, _ := Average(r.ThroughputSummary)
-				table.Append([]string{fmt.Sprintf("📊 %s Results", strings.Title(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric)})
+				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric)})
 			}
 		}
 	}
@@ -204,7 +209,7 @@ func ShowLatencyResult(s ScenarioResults) {
 			if r.Driver == "netperf" {
 				if strings.Contains(r.Profile, testType) {
 					avg, _ := Average(r.LatencySummary)
-					table.Append([]string{fmt.Sprintf("📊 %s Latency Results", strings.Title(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, "usec")})
+					table.Append([]string{fmt.Sprintf("📊 %s Latency Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, "usec")})
 				}
 			}
 		}

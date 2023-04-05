@@ -58,14 +58,14 @@ func ParseConf(fn string) ([]Config, error) {
 	c := make(map[string]Config)
 	err = yaml.Unmarshal(buf, &c)
 	if err != nil {
-		return nil, fmt.Errorf("in file %q: %v", fn, err)
+		return nil, fmt.Errorf(" In file %q: %v", fn, err)
 	}
 	// Ignore the key
 	// Pull out the specific tests
 	var tests []Config
-	pre := regexp.MustCompile("(?i)" + validTests)
+	preEval := regexp.MustCompile("(?i)" + validTests)
 	for _, value := range c {
-		p := pre.MatchString(value.Profile)
+		p := preEval.MatchString(value.Profile)
 		if !p {
 			return nil, fmt.Errorf("unknown netperf profile")
 		}
