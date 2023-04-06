@@ -76,6 +76,16 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 
+	zoneNodeSelectorExpression := []apiv1.PreferredSchedulingTerm{
+		{
+			Weight: 100,
+			Preference: apiv1.NodeSelectorTerm{
+				MatchExpressions: []apiv1.NodeSelectorRequirement{
+					{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
+				},
+			},
+		},
+	}
 	if s.NodeLocal {
 		//  Create Netperf client on the same node as the server.
 		cdp := DeploymentParams{
@@ -89,16 +99,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if z != "" {
 			cdp.NodeAffinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-					{
-						Weight: 100,
-						Preference: apiv1.NodeSelectorTerm{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
-							},
-						},
-					},
-				},
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
 			}
 		}
 		s.Client, err = deployDeployment(client, cdp)
@@ -152,43 +153,28 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:        NetperfServerCtlPort,
 	}
+	workerNodeSelectorExpression := &apiv1.NodeSelector{
+		NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+			{
+				MatchExpressions: []apiv1.NodeSelectorRequirement{
+					{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+				},
+			},
+		},
+	}
 	if z != "" {
 		if num_nodes > 1 {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-					{
-						Weight: 100,
-						Preference: apiv1.NodeSelectorTerm{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
-							},
-						},
-					},
-				},
-				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-						{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
-							},
-						},
-					},
-				},
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
 		} else {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-						{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
-							},
-						},
-					},
-				},
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
 		}
 	}
+
 	if ncount > 1 {
 		if s.HostNetwork {
 			s.ClientHost, err = deployDeployment(client, cdpHostAcross)
@@ -225,37 +211,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		affinity := apiv1.NodeAffinity{}
 		if num_nodes > 1 {
 			affinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.PreferredSchedulingTerm{
-					{
-						Weight: 100,
-						Preference: apiv1.NodeSelectorTerm{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
-							},
-						},
-					},
-				},
-				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-						{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
-							},
-						},
-					},
-				},
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
 		} else {
 			affinity = apiv1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-					NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-						{
-							MatchExpressions: []apiv1.NodeSelectorRequirement{
-								{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
-							},
-						},
-					},
-				},
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
 		}
 		sdp.NodeAffinity = affinity
