@@ -15,6 +15,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	math "github.com/aclements/go-moremath/stats"
 )
 
 // Specify Language specific case wrapper as global variable
@@ -65,6 +66,11 @@ func Average(vals []float64) (float64, error) {
 // Percentile accepts array of floats and the desired %tile to calculate
 func Percentile(vals []float64, ptile float64) (float64, error) {
 	return stats.Percentile(vals, ptile)
+}
+
+// Confidence accepts array of floats to calculate average
+func confidenceInterval(vals []float64, ci float64) (float64, float64, float64) {
+        return math.MeanCI(vals, ci)
 }
 
 // CheckResults will check to see if there are results with a specific Profile like TCP_STREAM
@@ -168,12 +174,16 @@ func ShowNodeCPU(s ScenarioResults) {
 
 // Abstracts out the common code for results
 func renderResults(s ScenarioResults, testType string) {
-	table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value"})
+	table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value", "95% Confidence Interval"})
 	for _, r := range s.Results {
 		if strings.Contains(r.Profile, testType) {
 			if len(r.Driver) > 0 {
 				avg, _ := Average(r.ThroughputSummary)
-				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric)})
+				var lo, hi float64
+				if r.Samples > 1 {
+					_, lo, hi = confidenceInterval(r.ThroughputSummary, 0.95)
+				}
+				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
 			}
 		}
 	}

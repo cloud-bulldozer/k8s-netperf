@@ -141,14 +141,18 @@ var rootCmd = &cobra.Command{
 				sr.Results = append(sr.Results, npr)
 				if iperf3 {
 					ipr := executeWorkload(nc, s, true, true)
-					sr.Results = append(sr.Results, ipr)
+					if len(ipr.Profile) > 1 {
+						sr.Results = append(sr.Results, ipr)
+					}
 				}
 			}
 			npr := executeWorkload(nc, s, false, false)
 			sr.Results = append(sr.Results, npr)
 			if iperf3 {
 				ipr := executeWorkload(nc, s, false, true)
-				sr.Results = append(sr.Results, ipr)
+				if len(ipr.Profile) > 1 {
+					sr.Results = append(sr.Results, ipr)
+				}
 			}
 		}
 
