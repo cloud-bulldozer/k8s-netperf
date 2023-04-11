@@ -166,7 +166,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if numNodes > 1 {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
-				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
@@ -212,7 +212,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if numNodes > 1 {
 			affinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
-				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
 			affinity = apiv1.NodeAffinity{
@@ -325,7 +325,7 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	numNodes := 0
 	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", numNodes, fmt.Errorf("Unable to query nodes")
+		return "", numNodes, fmt.Errorf("unable to query nodes")
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {

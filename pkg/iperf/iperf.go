@@ -53,7 +53,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	config.Show(nc, workload)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {
-		return bytes.Buffer{}, fmt.Errorf(" Unable to run iperf3 with non-stream tests ")
+		return bytes.Buffer{}, fmt.Errorf("unable to run iperf3 with non-stream tests")
 	}
 	if strings.Contains(nc.Profile, "UDP") {
 		tcp = false
@@ -63,16 +63,16 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		if tcp {
 			cmd = []string{"iperf3", "-P", "1", "-c",
 				serverIP, "-J", "-t",
-				fmt.Sprintf("%d", nc.Duration),
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration),
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 			}
 		} else {
 			cmd = []string{"iperf3", "-P", "1", "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration), "-u", "-J",
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration), "-u", "-J",
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 				"-b", "0",
 			}
 		}
@@ -80,16 +80,16 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		if tcp {
 			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration),
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration),
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 			}
 		} else {
 			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration), "-u",
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration), "-u",
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 				"-b", "0",
 			}
 		}

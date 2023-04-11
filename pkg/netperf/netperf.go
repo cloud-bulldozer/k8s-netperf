@@ -37,21 +37,21 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	if nc.Service {
 		cmd = []string{"bash", "super-netperf", "1", "-H",
 			serverIP, "-l",
-			fmt.Sprintf("%d", nc.Duration),
+			fmt.Sprint(nc.Duration),
 			"-t", nc.Profile,
 			"--",
 			"-k", fmt.Sprint(omniOptions),
-			"-m", fmt.Sprintf("%d", nc.MessageSize),
-			"-P", fmt.Sprintf("%d", ServerDataPort),
+			"-m", fmt.Sprint(nc.MessageSize),
+			"-P", fmt.Sprint(ServerDataPort),
 			"-R", "1"}
 	} else {
 		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
 			serverIP, "-l",
-			fmt.Sprintf("%d", nc.Duration),
+			fmt.Sprint(nc.Duration),
 			"-t", nc.Profile,
 			"--",
 			"-k", fmt.Sprint(omniOptions),
-			"-m", fmt.Sprintf("%d", nc.MessageSize),
+			"-m", fmt.Sprint(nc.MessageSize),
 			"-R", "1"}
 	}
 	log.Debug(cmd)
