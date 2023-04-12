@@ -157,7 +157,7 @@ func NodeDetails(conn PromConnect) Details {
 			d, _ := s.MarshalJSON()
 			error := json.Unmarshal(d, &pd)
 			if error != nil {
-				logging.Error(" Cannot unmarshal node information ")
+				logging.Error("cannot unmarshal node information")
 			} else {
 				break
 			}
