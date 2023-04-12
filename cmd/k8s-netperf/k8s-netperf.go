@@ -34,6 +34,7 @@ var (
 	searchURL   string
 	showMetrics bool
 	tcpt        float64
+	json        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -46,6 +47,10 @@ var rootCmd = &cobra.Command{
 		} else {
 			u := uuid.New()
 			uid = u.String()
+		}
+
+		if json {
+			log.SetError()
 		}
 
 		if debug {
@@ -202,12 +207,16 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		result.ShowStreamResult(sr)
-		result.ShowRRResult(sr)
-		result.ShowLatencyResult(sr)
-		if showMetrics {
-			result.ShowNodeCPU(sr)
-			result.ShowPodCPU(sr)
+		if !json {
+			result.ShowStreamResult(sr)
+			result.ShowRRResult(sr)
+			result.ShowLatencyResult(sr)
+			if showMetrics {
+				result.ShowNodeCPU(sr)
+				result.ShowPodCPU(sr)
+			}
+		} else {
+			archive.WriteJSONResult(sr)
 		}
 		err = archive.WriteCSVResult(sr)
 		if err != nil {
@@ -312,6 +321,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
+	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with pod/server on the same node")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
