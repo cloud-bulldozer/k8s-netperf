@@ -23,5 +23,4 @@ jobs:
       uses: golangci/golangci-lint-action@v3
       with:
         version:  latest
-      run:
-        timeout:  5m
+        args: --timeout=5m
