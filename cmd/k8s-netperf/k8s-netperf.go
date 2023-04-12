@@ -216,7 +216,10 @@ var rootCmd = &cobra.Command{
 				result.ShowPodCPU(sr)
 			}
 		} else {
-			archive.WriteJSONResult(sr)
+			err = archive.WriteJSONResult(sr)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 		err = archive.WriteCSVResult(sr)
 		if err != nil {
