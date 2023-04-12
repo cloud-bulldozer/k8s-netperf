@@ -48,7 +48,7 @@ $ oc adm policy add-scc-to-user hostnetwork -z netperf
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
-$ ./bin/arch/k8s-netperf --help
+$ ./bin/amd64/k8s-netperf --help
 A tool to run network performance tests in Kubernetes cluster
 
 Usage:
@@ -60,6 +60,7 @@ Flags:
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
       --iperf                 Use iperf3 as load driver (along with netperf)
+      --json                  Instead of human-readable output, return JSON to stdout
       --local                 Run network performance tests with pod/server on the same node
       --metrics               Show all system metrics retrieved from prom
       --prom string           Prometheus URL
@@ -67,6 +68,8 @@ Flags:
       --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
       --uuid string           User provided UUID
 ```
+
+Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors. 
 
 `--prom` accepts a string (URL). Example  http://localhost:9090
 

@@ -25,6 +25,11 @@ func init() {
 	defaultLog = new()
 }
 
+// SetError - Switch to ERROR level
+func SetError() {
+	SetLevel(defaultLog, logrus.ErrorLevel)
+}
+
 // SetDebug - Switch to DEBUG level
 func SetDebug() {
 	SetLevel(defaultLog, logrus.DebugLevel)
