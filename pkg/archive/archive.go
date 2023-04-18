@@ -1,22 +1,17 @@
 package archive
 
 import (
-	"context"
-	"crypto/tls"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
-	"github.com/opensearch-project/opensearch-go"
-	"github.com/opensearch-project/opensearch-go/opensearchapi"
+	"github.com/vishnuchalla/go-commons/indexers"
 )
 
 const index = "k8s-netperf"
@@ -45,26 +40,31 @@ type Doc struct {
 }
 
 // Connect returns a client connected to the desired cluster.
-func Connect(url string, skip bool) (*opensearch.Client, error) {
-	config := opensearch.Config{
-		Addresses: []string{url},
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: skip},
-		},
+func Connect(url string, skip bool) (*indexers.Indexer, error) {
+	var err error
+	var indexer *indexers.Indexer
+	indexerConfig := indexers.IndexerConfig{
+		Type:               "opensearch",
+		ESServers:          []string{url},
+		DefaultIndex:       index,
+		Port:               0,
+		InsecureSkipVerify: true,
+		Enabled:            true,
 	}
-	client, err := opensearch.NewClient(config)
+	indexer, err = indexers.NewIndexer(indexerConfig)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to connect OpenSearch")
+		logging.Errorf("%v indexer: %v", indexerConfig.Type, err.Error())
+		return nil, fmt.Errorf("Failure while connnecting to Opensearch")
 	}
-	logging.Infof("Connected to : %s\n", config.Addresses)
-	return client, nil
+	logging.Infof("Connected to : %s\n", url)
+	return indexer, nil
 }
 
 // BuildDocs returns the documents that need to be indexed or an error.
-func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
+func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 	time := time.Now().UTC()
 
-	var docs []Doc
+	var docs []interface{}
 	if len(sr.Results) < 1 {
 		return nil, fmt.Errorf("No result documents")
 	}
@@ -72,51 +72,29 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 		if len(r.Driver) < 1 {
 			continue
 		}
-		var d Doc
-		d.UUID = uuid
-		d.Timestamp = time
-		d.Driver = r.Driver
-		d.HostNetwork = r.HostNetwork
-		d.Parallelism = r.Parallelism
-		d.Profile = r.Profile
-		d.Duration = r.Duration
-		d.Samples = r.Samples
-		d.Messagesize = r.MessageSize
+		d := Doc{
+			UUID:          uuid,
+			Timestamp:     time,
+			Driver:        r.Driver,
+			HostNetwork:   r.HostNetwork,
+			Parallelism:   r.Parallelism,
+			Profile:       r.Profile,
+			Duration:      r.Duration,
+			Samples:       r.Samples,
+			Messagesize:   r.MessageSize,
+			TputMetric:    r.Metric,
+			LtcyMetric:    ltcyMetric,
+			ServerNodeCPU: r.ServerMetrics,
+			ClientNodeCPU: r.ClientMetrics,
+			ServerPodCPU:  r.ServerPodCPU.Results,
+			ClientPodCPU:  r.ClientPodCPU.Results,
+			Metadata:      sr.Metadata,
+		}
 		d.Throughput, _ = result.Average(r.ThroughputSummary)
 		d.Latency, _ = result.Average(r.LatencySummary)
-		d.TputMetric = r.Metric
-		d.LtcyMetric = ltcyMetric
-		d.ServerNodeCPU = r.ServerMetrics
-		d.ClientNodeCPU = r.ClientMetrics
-		d.ServerPodCPU = r.ServerPodCPU.Results
-		d.ClientPodCPU = r.ClientPodCPU.Results
-		d.Metadata = sr.Metadata
 		docs = append(docs, d)
 	}
 	return docs, nil
-}
-
-// IndexDocs indexes results from k8s-netperf returns failures if any happen.
-func IndexDocs(client *opensearch.Client, docs []Doc) error {
-	logging.Infof("Attempting to index %d documents", len(docs))
-	for _, doc := range docs {
-		jdoc, err := json.Marshal(doc)
-		if err != nil {
-			return err
-		}
-		body := strings.NewReader(string(jdoc))
-		logging.Debug(body)
-		r := opensearchapi.IndexRequest{
-			Index: index,
-			Body:  body,
-		}
-		resp, err := r.Do(context.Background(), client)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-	}
-	return nil
 }
 
 // Common csv header fields.
@@ -135,7 +113,7 @@ func commonCsvHeaderFields() []string {
 }
 
 // Common csv data fields.
-func commonCsvDataFeilds(row result.Data) []string{
+func commonCsvDataFeilds(row result.Data) []string {
 	return []string{
 		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
@@ -153,8 +131,8 @@ func commonCsvDataFeilds(row result.Data) []string{
 func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU) error {
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
-		if err := podarchive.Write(append(append(roleFieldData, 
-			commonCsvDataFeilds(row)...), 
+		if err := podarchive.Write(append(append(roleFieldData,
+			commonCsvDataFeilds(row)...),
 			fmt.Sprintf("%s", pod.Name),
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -166,7 +144,7 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 	if role == "Server" {
 		cpu = row.ServerMetrics
 	}
-	if err := cpuarchive.Write(append(append(roleFieldData, 
+	if err := cpuarchive.Write(append(append(roleFieldData,
 		commonCsvDataFeilds(row)...),
 		fmt.Sprintf("%f", cpu.Idle),
 		fmt.Sprintf("%f", cpu.User),
@@ -199,8 +177,8 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	podarchive := csv.NewWriter(podfp)
 	defer podarchive.Flush()
 	roleField := []string{"Role"}
-	cpudata := append(append(roleField, 
-		commonCsvHeaderFields()...), 
+	cpudata := append(append(roleField,
+		commonCsvHeaderFields()...),
 		"Idle CPU",
 		"User CPU",
 		"System CPU",

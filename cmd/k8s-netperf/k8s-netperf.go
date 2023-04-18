@@ -18,6 +18,7 @@ import (
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	"github.com/spf13/cobra"
+	"github.com/vishnuchalla/go-commons/indexers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -203,11 +204,7 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 				os.Exit(1)
 			}
-			err = archive.IndexDocs(esClient, jdocs)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
+			(*esClient).Index(jdocs, indexers.IndexingOpts{MetricName: "k8s-netperf-metrics"})
 		}
 
 		if !json {
