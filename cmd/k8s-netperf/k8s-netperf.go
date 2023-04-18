@@ -23,9 +23,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const namespace = "netperf"
+
 var (
 	cfgfile     string
 	nl          bool
+	clean       bool
 	iperf3      bool
 	full        bool
 	debug       bool
@@ -243,6 +246,25 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", tcpt, diff)
 			os.Exit(1)
 		}
+		if clean {
+			svcList, err := k8s.GetServices(client, namespace)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			for svc := range svcList.Items {
+				k8s.DestroyService(client, svcList.Items[svc])
+
+			}
+			dpList, err := k8s.GetDeployments(client, namespace)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			for dp := range dpList.Items {
+				k8s.DestroyDeployment(client, dpList.Items[dp])
+			}
+		}
 	},
 }
 
@@ -321,6 +343,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
+	rootCmd.Flags().BoolVar(&clean, "clean", false, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with pod/server on the same node")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")

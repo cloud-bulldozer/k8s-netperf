@@ -56,6 +56,7 @@ Usage:
 
 Flags:
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
+      --clean                 Clean-up resources created by k8s-netperf
       --config string         K8s netperf Configuration File (default "netperf.yml")
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
@@ -70,6 +71,8 @@ Flags:
 ```
 
 Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors. 
+
+`--clean=true` will delete all the resources the project creates (deployments and services)
 
 `--prom` accepts a string (URL). Example  http://localhost:9090
 
