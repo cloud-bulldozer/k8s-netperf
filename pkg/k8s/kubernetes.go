@@ -43,13 +43,13 @@ const sa string = "netperf"
 // NetperfServerCtlPort control port for the service
 const NetperfServerCtlPort = 12865
 
-// ServerCtlPort control port for the service
+// IperfServerCtlPort control port for the service
 const IperfServerCtlPort = 22865
 
 // NetperfServerDataPort data port for the service
 const NetperfServerDataPort = 42424
 
-// NetperfServerDataPort data port for the service
+// IperfServerDataPort data port for the service
 const IperfServerDataPort = 43433
 
 // Labels we will apply to k8s assets.
@@ -63,7 +63,7 @@ const hostNetClientRole = "host-client"
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
-	z, num_nodes, err := GetZone(client)
+	z, numNodes, err := GetZone(client)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -163,10 +163,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		},
 	}
 	if z != "" {
-		if num_nodes > 1 {
+		if numNodes > 1 {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
-				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
@@ -209,10 +209,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	if z != "" {
 		affinity := apiv1.NodeAffinity{}
-		if num_nodes > 1 {
+		if numNodes > 1 {
 			affinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
-				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
 			affinity = apiv1.NodeAffinity{
@@ -322,18 +322,18 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	zones := map[string]int{}
 	zone := ""
 	lz := ""
-	num_nodes := 0
+	numNodes := 0
 	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", num_nodes, fmt.Errorf("Unable to query nodes")
+		return "", numNodes, fmt.Errorf("Unable to query nodes")
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
-			return "", num_nodes, fmt.Errorf("⚠️  No zone label")
+			return "", numNodes, fmt.Errorf("⚠️  No zone label")
 		}
 		if _, ok := zones[l.GetLabels()["topology.kubernetes.io/zone"]]; ok {
 			zone = l.GetLabels()["topology.kubernetes.io/zone"]
-			num_nodes = 2
+			numNodes = 2
 			// Simple check, no need to determine all the zones with > 1 node.
 			break
 		} else {
@@ -344,10 +344,10 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	// No zone had > 1, use the last zone.
 	if zone == "" {
 		log.Warn("⚠️  Single node per zone")
-		num_nodes = 1
+		numNodes = 1
 		zone = lz
 	}
-	return zone, num_nodes, nil
+	return zone, numNodes, nil
 }
 
 // CreateDeployment will create the different deployments we need to do network performance tests
@@ -500,8 +500,34 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Servi
 	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
 }
 
-// DestroyDeployment cleans up a specific deployment
-func DestroyDeployment(client *kubernetes.Clientset, dp *appsv1.Deployment) error {
+// GetServices retrieve all services for a given namespoace, in this case for netperf
+func GetServices(client *kubernetes.Clientset, namespace string) (*apiv1.ServiceList, error) {
+	services, err := client.CoreV1().Services(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return services, nil
+}
+
+// GetDeployments retrieve all deployments for a given namespace, in this case for netperf
+func GetDeployments(client *kubernetes.Clientset, namespace string) (*appsv1.DeploymentList, error) {
+	dps, err := client.AppsV1().Deployments(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return dps, nil
+}
+
+// DestroyService cleans up a specific service from a namespace
+func DestroyService(client *kubernetes.Clientset, serv apiv1.Service) error {
+	deletePolicy := metav1.DeletePropagationForeground
+	return client.CoreV1().Services(serv.Namespace).Delete(context.TODO(), serv.Name, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
+}
+
+// DestroyDeployment cleans up a specific deployment from a namespace
+func DestroyDeployment(client *kubernetes.Clientset, dp appsv1.Deployment) error {
 	deletePolicy := metav1.DeletePropagationForeground
 	return client.AppsV1().Deployments(dp.Namespace).Delete(context.TODO(), dp.Name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
