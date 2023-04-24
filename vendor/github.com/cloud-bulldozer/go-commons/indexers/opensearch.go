@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	logger "github.com/sirupsen/logrus"
 	"net/http"
 	"runtime"
 	"strings"
@@ -32,15 +31,15 @@ func init() {
 	indexerMap[indexer] = &OpenSearch{}
 }
 
-// Returns new index for OpenSearch
+// Returns new indexer for OpenSearch
 func (OpenSearchIndexer *OpenSearch) new(indexerConfig IndexerConfig) error {
 	OpenSearchConfig := indexerConfig
-	if OpenSearchConfig.DefaultIndex == "" {
+	if OpenSearchConfig.Index == "" {
 		return fmt.Errorf("index name not specified")
 	}
-	OpenSearchIndex := strings.ToLower(OpenSearchConfig.DefaultIndex)
+	OpenSearchIndex := strings.ToLower(OpenSearchConfig.Index)
 	cfg := opensearch.Config{
-		Addresses: OpenSearchConfig.ESServers,
+		Addresses: OpenSearchConfig.Servers,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: OpenSearchConfig.InsecureSkipVerify}},
 	}
 	OpenSearchClient, err := opensearch.NewClient(cfg)
@@ -58,7 +57,6 @@ func (OpenSearchIndexer *OpenSearch) new(indexerConfig IndexerConfig) error {
 	OpenSearchIndexer.index = OpenSearchIndex
 	r, _ = OpenSearchIndexer.client.Indices.Exists([]string{OpenSearchIndex})
 	if r.IsError() {
-		logger.Infof("Creating index %s", OpenSearchIndex)
 		r, _ = OpenSearchIndexer.client.Indices.Create(OpenSearchIndex)
 		if r.IsError() {
 			return fmt.Errorf("error creating index %s on OpenSearch: %s", OpenSearchIndex, r.String())
@@ -68,10 +66,9 @@ func (OpenSearchIndexer *OpenSearch) new(indexerConfig IndexerConfig) error {
 }
 
 // Index uses bulkIndexer to index the documents in the given index
-func (OpenSearchIndexer *OpenSearch) Index(documents []interface{}, opts IndexingOpts) {
+func (OpenSearchIndexer *OpenSearch) Index(documents []interface{}, opts IndexingOpts) (string, error) {
 	var statString string
 	var indexerStatsLock sync.Mutex
-	logger.Infof("Indexing metric %s", opts.MetricName)
 	indexerStats := make(map[string]int)
 	hasher := sha256.New()
 	bi, err := opensearchutil.NewBulkIndexer(opensearchutil.BulkIndexerConfig{
@@ -82,14 +79,13 @@ func (OpenSearchIndexer *OpenSearch) Index(documents []interface{}, opts Indexin
 		Timeout:    10 * time.Minute, // TODO: hardcoded
 	})
 	if err != nil {
-		logger.Errorf("Error creating the indexer: %s", err)
+		return "", fmt.Errorf("Error creating the indexer: %s", err)
 	}
 	start := time.Now().UTC()
-	logger.Debugf("Indexing [%d] documents in %s", len(documents), OpenSearchIndexer.index)
 	for _, document := range documents {
 		j, err := json.Marshal(document)
 		if err != nil {
-			logger.Errorf("Cannot encode document %s: %s", document, err)
+			return "", fmt.Errorf("Cannot encode document %s: %s", document, err)
 		}
 		hasher.Write(j)
 		err = bi.Add(
@@ -106,16 +102,16 @@ func (OpenSearchIndexer *OpenSearch) Index(documents []interface{}, opts Indexin
 			},
 		)
 		if err != nil {
-			logger.Errorf("Unexpected OpenSearch indexing error: %s", err)
+			return "", fmt.Errorf("Unexpected OpenSearch indexing error: %s", err)
 		}
 		hasher.Reset()
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		logger.Fatalf("Unexpected OpenSearch error: %s", err)
+		return "", fmt.Errorf("Unexpected OpenSearch error: %s", err)
 	}
 	dur := time.Since(start)
 	for stat, val := range indexerStats {
 		statString += fmt.Sprintf(" %s=%d", stat, val)
 	}
-	logger.Debugf("Indexing finished in %v:%v", dur.Truncate(time.Millisecond), statString)
+	return fmt.Sprintf("Indexing finished in %v:%v", dur.Truncate(time.Millisecond), statString), nil
 }

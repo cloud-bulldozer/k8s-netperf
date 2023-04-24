@@ -11,7 +11,7 @@ import (
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
-	"github.com/vishnuchalla/go-commons/indexers"
+	"github.com/cloud-bulldozer/go-commons/indexers"
 )
 
 const index = "k8s-netperf"
@@ -45,8 +45,8 @@ func Connect(url string, skip bool) (*indexers.Indexer, error) {
 	var indexer *indexers.Indexer
 	indexerConfig := indexers.IndexerConfig{
 		Type:               "opensearch",
-		ESServers:          []string{url},
-		DefaultIndex:       index,
+		Servers:          []string{url},
+		Index:       index,
 		Port:               0,
 		InsecureSkipVerify: true,
 		Enabled:            true,

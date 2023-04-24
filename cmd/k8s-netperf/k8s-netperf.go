@@ -18,7 +18,7 @@ import (
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	"github.com/spf13/cobra"
-	"github.com/vishnuchalla/go-commons/indexers"
+	"github.com/cloud-bulldozer/go-commons/indexers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"

@@ -19,14 +19,14 @@ const (
 	// Elastic indexer that sends metrics to the configured ES instance
 	ElasticIndexer IndexerType = "elastic"
 	// OpenSearch indexer that sends metrics to the configured Search Instance
-	OpenSearchIndexer IndexerType = "opensearch" 
+	OpenSearchIndexer IndexerType = "opensearch"
 	// Local indexer that writes metrics to local directory
 	LocalIndexer IndexerType = "local"
 )
 
 // Indexer indexer interface
 type Indexer interface {
-	Index([]interface{}, IndexingOpts)
+	Index([]interface{}, IndexingOpts) (string, error)
 	new(IndexerConfig) error
 }
 
@@ -43,15 +43,15 @@ type IndexerType string
 type IndexerConfig struct {
 	// Type type of indexer
 	Type IndexerType `yaml:"type"`
-	// ESServers List of ElasticSearch instances
-	ESServers []string `yaml:"esServers"`
-	// DefaultIndex default index to send prometheus metrics
-	DefaultIndex string `yaml:"defaultIndex"`
+	// Servers List of ElasticSearch instances
+	Servers []string `yaml:"esServers"`
+	// Index index to send documents to server
+	Index string `yaml:"defaultIndex"`
 	// Port indexer port
 	Port int `yaml:"port"`
 	// InsecureSkipVerify disable TLS ceriticate verification
 	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
-	// Enabled enable indexer
+	// Enabled flag to enable indexer
 	Enabled bool `yaml:"enabled"`
 	// Directory to save metrics files in
 	MetricsDirectory string `yaml:"metricsDirectory"`

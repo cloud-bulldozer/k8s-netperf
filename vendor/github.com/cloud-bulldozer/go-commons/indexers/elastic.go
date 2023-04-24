@@ -22,7 +22,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	logger "github.com/sirupsen/logrus"
 	"net/http"
 	"runtime"
 	"strings"
@@ -46,15 +45,15 @@ func init() {
 	indexerMap[elastic] = &Elastic{}
 }
 
-// Returns new index for elastic search
+// Returns new indexer for elastic search
 func (esIndexer *Elastic) new(indexerConfig IndexerConfig) error {
 	esConfig := indexerConfig
-	if esConfig.DefaultIndex == "" {
+	if esConfig.Index == "" {
 		return fmt.Errorf("index name not specified")
 	}
-	esIndex := strings.ToLower(esConfig.DefaultIndex)
+	esIndex := strings.ToLower(esConfig.Index)
 	cfg := elasticsearch.Config{
-		Addresses: esConfig.ESServers,
+		Addresses: esConfig.Servers,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: esConfig.InsecureSkipVerify}},
 	}
 	ESClient, err := elasticsearch.NewClient(cfg)
@@ -72,7 +71,6 @@ func (esIndexer *Elastic) new(indexerConfig IndexerConfig) error {
 	esIndexer.index = esIndex
 	r, _ = esIndexer.client.Indices.Exists([]string{esIndex})
 	if r.IsError() {
-		logger.Infof("Creating index %s", esIndex)
 		r, _ = esIndexer.client.Indices.Create(esIndex)
 		if r.IsError() {
 			return fmt.Errorf("error creating index %s on ES: %s", esIndex, r.String())
@@ -82,10 +80,9 @@ func (esIndexer *Elastic) new(indexerConfig IndexerConfig) error {
 }
 
 // Index uses bulkIndexer to index the documents in the given index
-func (esIndexer *Elastic) Index(documents []interface{}, opts IndexingOpts) {
+func (esIndexer *Elastic) Index(documents []interface{}, opts IndexingOpts) (string, error) {
 	var statString string
 	var indexerStatsLock sync.Mutex
-	logger.Infof("Indexing metric %s", opts.MetricName)
 	indexerStats := make(map[string]int)
 	hasher := sha256.New()
 	bi, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
@@ -96,14 +93,13 @@ func (esIndexer *Elastic) Index(documents []interface{}, opts IndexingOpts) {
 		Timeout:    10 * time.Minute, // TODO: hardcoded
 	})
 	if err != nil {
-		logger.Errorf("Error creating the indexer: %s", err)
+		return "", fmt.Errorf("Error creating the indexer: %s", err)
 	}
 	start := time.Now().UTC()
-	logger.Debugf("Indexing [%d] documents in %s", len(documents), esIndexer.index)
 	for _, document := range documents {
 		j, err := json.Marshal(document)
 		if err != nil {
-			logger.Errorf("Cannot encode document %s: %s", document, err)
+			return "", fmt.Errorf("Cannot encode document %s: %s", document, err)
 		}
 		hasher.Write(j)
 		err = bi.Add(
@@ -120,16 +116,16 @@ func (esIndexer *Elastic) Index(documents []interface{}, opts IndexingOpts) {
 			},
 		)
 		if err != nil {
-			logger.Errorf("Unexpected ES indexing error: %s", err)
+			return "", fmt.Errorf("Unexpected ES indexing error: %s", err)
 		}
 		hasher.Reset()
 	}
 	if err := bi.Close(context.Background()); err != nil {
-		logger.Fatalf("Unexpected ES error: %s", err)
+		return "", fmt.Errorf("Unexpected ES error: %s", err)
 	}
 	dur := time.Since(start)
 	for stat, val := range indexerStats {
 		statString += fmt.Sprintf(" %s=%d", stat, val)
 	}
-	logger.Debugf("Indexing finished in %v:%v", dur.Truncate(time.Millisecond), statString)
+	return fmt.Sprintf("Indexing finished in %v:%v", dur.Truncate(time.Millisecond), statString), nil
 }
