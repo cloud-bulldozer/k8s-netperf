@@ -194,7 +194,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		HostNetwork: true,
 		Image:       "quay.io/jtaleric/netperf:beta",
 		Labels:      map[string]string{"role": hostNetServerRole},
-		Command:     []string{"/bin/bash", "-c", "netserver && iperf3 -s -p %d && sleep 10000000", "IperfServerCtlPort"},
+		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
 		Port:        NetperfServerCtlPort,
 	}
 	// Start netperf server
@@ -204,7 +204,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Replicas:  1,
 		Image:     "quay.io/jtaleric/netperf:beta",
 		Labels:    map[string]string{"role": serverRole},
-		Command:   []string{"/bin/bash", "-c", "netserver && iperf3 -s -p %d && sleep 10000000", "IperfServerCtlPort"},
+		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
 		Port:      NetperfServerCtlPort,
 	}
 	if z != "" {
