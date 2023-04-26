@@ -84,8 +84,6 @@ With OpenShift, we attempt to discover the OpenShift route. If that route is not
 
 `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 
-`--netperf` Our default load driver. However, users can pass `--netperf=false --iperf3` which will disable netperf, and enable iperf3, for just stream tests.
-
 ### Config file
 `netperf.yml` contains a default set of tests.
 

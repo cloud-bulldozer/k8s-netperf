@@ -238,19 +238,21 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		// Initially we are just checking against TCP_STREAM results.
+		retCode := 0
 		if result.CheckHostResults(sr) {
 			diff, err := result.TCPThroughputDiff(sr)
 			if err != nil {
 				fmt.Println("Unable to calculate difference between HostNetwork and PodNetwork")
-				os.Exit(1)
+				retCode = 1
 			}
 			if diff < tcpt {
-				os.Exit(0)
+				retCode = 0
 			}
 			fmt.Printf("😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", tcpt, diff)
-			os.Exit(1)
+			retCode = 1
 		}
 		if clean {
+			log.Debug("Cleaning resources created by k8s-netperf")
 			svcList, err := k8s.GetServices(client, namespace)
 			if err != nil {
 				log.Error(err)
@@ -269,6 +271,7 @@ var rootCmd = &cobra.Command{
 				k8s.DestroyDeployment(client, dpList.Items[dp])
 			}
 		}
+		os.Exit(retCode)
 	},
 }
 
