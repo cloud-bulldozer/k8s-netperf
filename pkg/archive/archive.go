@@ -8,13 +8,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/indexers"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
-	"github.com/cloud-bulldozer/go-commons/indexers"
 )
 
-const index = "k8s-netperf"
 const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
@@ -40,17 +39,18 @@ type Doc struct {
 }
 
 // Connect returns a client connected to the desired cluster.
-func Connect(url string, skip bool) (*indexers.Indexer, error) {
+func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 	var err error
 	var indexer *indexers.Indexer
 	indexerConfig := indexers.IndexerConfig{
 		Type:               "opensearch",
-		Servers:          []string{url},
-		Index:       index,
+		Servers:            []string{url},
+		Index:              index,
 		Port:               0,
 		InsecureSkipVerify: true,
 		Enabled:            true,
 	}
+	logging.Infof("📁 Creating indexer: %s", indexerConfig.Type)
 	indexer, err = indexers.NewIndexer(indexerConfig)
 	if err != nil {
 		logging.Errorf("%v indexer: %v", indexerConfig.Type, err.Error())

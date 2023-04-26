@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/indexers"
 	"github.com/google/uuid"
 	"github.com/jtaleric/k8s-netperf/pkg/archive"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
@@ -18,13 +19,13 @@ import (
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	"github.com/spf13/cobra"
-	"github.com/cloud-bulldozer/go-commons/indexers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 const namespace = "netperf"
+const index = "k8s-netperf"
 
 var (
 	cfgfile     string
@@ -199,12 +200,18 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 				os.Exit(1)
 			}
-			esClient, err := archive.Connect(searchURL, true)
+			esClient, err := archive.Connect(searchURL, index, true)
 			if err != nil {
 				log.Error(err)
 				os.Exit(1)
 			}
-			(*esClient).Index(jdocs, indexers.IndexingOpts{MetricName: "k8s-netperf-metrics"})
+			log.Debugf("Indexing [%d] documents in %s", len(jdocs), index)
+			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
+			if err != nil {
+				log.Error(err.Error())
+			} else {
+				log.Debug(resp)
+			}
 		}
 
 		if !json {

@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
+	math "github.com/aclements/go-moremath/stats"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	stats "github.com/montanaflynn/stats"
 	"github.com/olekukonko/tablewriter"
-	math "github.com/aclements/go-moremath/stats"
 )
 
 // Data describes the result data
@@ -65,7 +65,7 @@ func Percentile(vals []float64, ptile float64) (float64, error) {
 
 // Confidence accepts array of floats to calculate average
 func confidenceInterval(vals []float64, ci float64) (float64, float64, float64) {
-        return math.MeanCI(vals, ci)
+	return math.MeanCI(vals, ci)
 }
 
 // CheckResults will check to see if there are results with a specific Profile like TCP_STREAM
@@ -207,13 +207,13 @@ func ShowRRResult(s ScenarioResults) {
 func ShowLatencyResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
 		logging.Debug("Rendering RR P99 Latency results")
-        	table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
-        	for _, r := range s.Results {
-                	if strings.Contains(r.Profile, "RR") {
-                        	p99, _ := Average(r.LatencySummary)
-                        	table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
-                	}
+		table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
+		for _, r := range s.Results {
+			if strings.Contains(r.Profile, "RR") {
+				p99, _ := Average(r.LatencySummary)
+				table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
+			}
 		}
-        	table.Render()
+		table.Render()
 	}
 }
