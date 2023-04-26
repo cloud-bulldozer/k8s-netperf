@@ -205,7 +205,7 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 				os.Exit(1)
 			}
-			log.Debugf("Indexing [%d] documents in %s", len(jdocs), index)
+			log.Infof("Indexing [%d] documents in %s", len(jdocs), index)
 			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
 			if err != nil {
 				log.Error(err.Error())
