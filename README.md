@@ -56,6 +56,7 @@ Usage:
 
 Flags:
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
+      --clean                 Clean-up resources created by k8s-netperf
       --config string         K8s netperf Configuration File (default "netperf.yml")
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
@@ -71,6 +72,8 @@ Flags:
 
 Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors. 
 
+`--clean=true` will delete all the resources the project creates (deployments and services)
+
 `--prom` accepts a string (URL). Example  http://localhost:9090
 
 When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
@@ -80,8 +83,6 @@ With OpenShift, we attempt to discover the OpenShift route. If that route is not
 `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
 
 `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
-
-`--netperf` Our default load driver. However, users can pass `--netperf=false --iperf3` which will disable netperf, and enable iperf3, for just stream tests.
 
 ### Config file
 `netperf.yml` contains a default set of tests.

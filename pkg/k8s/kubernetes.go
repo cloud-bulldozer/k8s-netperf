@@ -43,13 +43,13 @@ const sa string = "netperf"
 // NetperfServerCtlPort control port for the service
 const NetperfServerCtlPort = 12865
 
-// ServerCtlPort control port for the service
+// IperfServerCtlPort control port for the service
 const IperfServerCtlPort = 22865
 
 // NetperfServerDataPort data port for the service
 const NetperfServerDataPort = 42424
 
-// NetperfServerDataPort data port for the service
+// IperfServerDataPort data port for the service
 const IperfServerDataPort = 43433
 
 // Labels we will apply to k8s assets.
@@ -500,8 +500,34 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Servi
 	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
 }
 
-// DestroyDeployment cleans up a specific deployment
-func DestroyDeployment(client *kubernetes.Clientset, dp *appsv1.Deployment) error {
+// GetServices retrieve all services for a given namespoace, in this case for netperf
+func GetServices(client *kubernetes.Clientset, namespace string) (*apiv1.ServiceList, error) {
+	services, err := client.CoreV1().Services(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return services, nil
+}
+
+// GetDeployments retrieve all deployments for a given namespace, in this case for netperf
+func GetDeployments(client *kubernetes.Clientset, namespace string) (*appsv1.DeploymentList, error) {
+	dps, err := client.AppsV1().Deployments(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return dps, nil
+}
+
+// DestroyService cleans up a specific service from a namespace
+func DestroyService(client *kubernetes.Clientset, serv apiv1.Service) error {
+	deletePolicy := metav1.DeletePropagationForeground
+	return client.CoreV1().Services(serv.Namespace).Delete(context.TODO(), serv.Name, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
+}
+
+// DestroyDeployment cleans up a specific deployment from a namespace
+func DestroyDeployment(client *kubernetes.Clientset, dp appsv1.Deployment) error {
 	deletePolicy := metav1.DeletePropagationForeground
 	return client.AppsV1().Deployments(dp.Namespace).Delete(context.TODO(), dp.Name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
