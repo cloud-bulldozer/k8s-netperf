@@ -1,25 +1,19 @@
 package archive
 
 import (
-	"context"
-	"crypto/tls"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/indexers"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
 	result "github.com/jtaleric/k8s-netperf/pkg/results"
-	"github.com/opensearch-project/opensearch-go"
-	"github.com/opensearch-project/opensearch-go/opensearchapi"
 )
 
-const index = "k8s-netperf"
 const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
@@ -45,26 +39,32 @@ type Doc struct {
 }
 
 // Connect returns a client connected to the desired cluster.
-func Connect(url string, skip bool) (*opensearch.Client, error) {
-	config := opensearch.Config{
-		Addresses: []string{url},
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: skip},
-		},
+func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
+	var err error
+	var indexer *indexers.Indexer
+	indexerConfig := indexers.IndexerConfig{
+		Type:               "opensearch",
+		Servers:            []string{url},
+		Index:              index,
+		Port:               0,
+		InsecureSkipVerify: true,
+		Enabled:            true,
 	}
-	client, err := opensearch.NewClient(config)
+	logging.Infof("📁 Creating indexer: %s", indexerConfig.Type)
+	indexer, err = indexers.NewIndexer(indexerConfig)
 	if err != nil {
-		return nil, fmt.Errorf("unable to connect OpenSearch")
+		logging.Errorf("%v indexer: %v", indexerConfig.Type, err.Error())
+		return nil, fmt.Errorf("Failure while connnecting to Opensearch")
 	}
-	logging.Infof("Connected to : %s\n", config.Addresses)
-	return client, nil
+	logging.Infof("Connected to : %s\n", url)
+	return indexer, nil
 }
 
 // BuildDocs returns the documents that need to be indexed or an error.
-func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
+func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 	time := time.Now().UTC()
 
-	var docs []Doc
+	var docs []interface{}
 	if len(sr.Results) < 1 {
 		return nil, fmt.Errorf("no result documents")
 	}
@@ -72,51 +72,29 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 		if len(r.Driver) < 1 {
 			continue
 		}
-		var d Doc
-		d.UUID = uuid
-		d.Timestamp = time
-		d.Driver = r.Driver
-		d.HostNetwork = r.HostNetwork
-		d.Parallelism = r.Parallelism
-		d.Profile = r.Profile
-		d.Duration = r.Duration
-		d.Samples = r.Samples
-		d.Messagesize = r.MessageSize
+		d := Doc{
+			UUID:          uuid,
+			Timestamp:     time,
+			Driver:        r.Driver,
+			HostNetwork:   r.HostNetwork,
+			Parallelism:   r.Parallelism,
+			Profile:       r.Profile,
+			Duration:      r.Duration,
+			Samples:       r.Samples,
+			Messagesize:   r.MessageSize,
+			TputMetric:    r.Metric,
+			LtcyMetric:    ltcyMetric,
+			ServerNodeCPU: r.ServerMetrics,
+			ClientNodeCPU: r.ClientMetrics,
+			ServerPodCPU:  r.ServerPodCPU.Results,
+			ClientPodCPU:  r.ClientPodCPU.Results,
+			Metadata:      sr.Metadata,
+		}
 		d.Throughput, _ = result.Average(r.ThroughputSummary)
 		d.Latency, _ = result.Average(r.LatencySummary)
-		d.TputMetric = r.Metric
-		d.LtcyMetric = ltcyMetric
-		d.ServerNodeCPU = r.ServerMetrics
-		d.ClientNodeCPU = r.ClientMetrics
-		d.ServerPodCPU = r.ServerPodCPU.Results
-		d.ClientPodCPU = r.ClientPodCPU.Results
-		d.Metadata = sr.Metadata
 		docs = append(docs, d)
 	}
 	return docs, nil
-}
-
-// IndexDocs indexes results from k8s-netperf returns failures if any happen.
-func IndexDocs(client *opensearch.Client, docs []Doc) error {
-	logging.Infof("Attempting to index %d documents", len(docs))
-	for _, doc := range docs {
-		jdoc, err := json.Marshal(doc)
-		if err != nil {
-			return err
-		}
-		body := strings.NewReader(string(jdoc))
-		logging.Debug(body)
-		r := opensearchapi.IndexRequest{
-			Index: index,
-			Body:  body,
-		}
-		resp, err := r.Do(context.Background(), client)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-	}
-	return nil
 }
 
 // Common csv header fields.

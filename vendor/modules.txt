@@ -3,9 +3,19 @@
 github.com/aclements/go-moremath/mathx
 github.com/aclements/go-moremath/stats
 github.com/aclements/go-moremath/vec
+# github.com/cloud-bulldozer/go-commons v1.0.0
+## explicit; go 1.19
+github.com/cloud-bulldozer/go-commons/indexers
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
+# github.com/elastic/go-elasticsearch/v7 v7.13.1
+## explicit; go 1.11
+github.com/elastic/go-elasticsearch/v7
+github.com/elastic/go-elasticsearch/v7/esapi
+github.com/elastic/go-elasticsearch/v7/estransport
+github.com/elastic/go-elasticsearch/v7/esutil
+github.com/elastic/go-elasticsearch/v7/internal/version
 # github.com/emicklei/go-restful/v3 v3.9.0
 ## explicit; go 1.13
 github.com/emicklei/go-restful/v3
@@ -100,6 +110,7 @@ github.com/opensearch-project/opensearch-go
 github.com/opensearch-project/opensearch-go/internal/version
 github.com/opensearch-project/opensearch-go/opensearchapi
 github.com/opensearch-project/opensearch-go/opensearchtransport
+github.com/opensearch-project/opensearch-go/opensearchutil
 github.com/opensearch-project/opensearch-go/signer
 # github.com/openshift/api v0.0.0-20230111143458-54592eea5539
 ## explicit; go 1.18
