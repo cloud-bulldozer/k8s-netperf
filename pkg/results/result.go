@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	math "github.com/aclements/go-moremath/stats"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
@@ -15,7 +16,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	math "github.com/aclements/go-moremath/stats"
 )
 
 // Specify Language specific case wrapper as global variable
@@ -70,7 +70,7 @@ func Percentile(vals []float64, ptile float64) (float64, error) {
 
 // Confidence accepts array of floats to calculate average
 func confidenceInterval(vals []float64, ci float64) (float64, float64, float64) {
-        return math.MeanCI(vals, ci)
+	return math.MeanCI(vals, ci)
 }
 
 // CheckResults will check to see if there are results with a specific Profile like TCP_STREAM
@@ -95,26 +95,69 @@ func CheckHostResults(s ScenarioResults) bool {
 	return false
 }
 
+type DiffData struct {
+	MessageSize int
+	HostPerf    float64
+	PodPerf     float64
+}
+
+type Diff struct {
+	MessageSize int
+	Result      float64
+}
+
 // TCPThroughputDiff accepts the Scenario Results and calculates the %diff.
 // returns
-func TCPThroughputDiff(s ScenarioResults) (float64, error) {
+func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 	// We will focus on TCP STREAM
-	hostPerf := 0.0
-	podPerf := 0.0
-	for t := range s.Results {
-		if !s.Results[t].Service {
-			if s.Results[t].HostNetwork {
-				if s.Results[t].Profile == "TCP_STREAM" {
-					hostPerf, _ = Average(s.Results[t].ThroughputSummary)
+	diffRes := []DiffData{}
+	for _, t := range s.Results {
+		if t.Profile == "TCP_STREAM" {
+			hostPerf := 0.0
+			podPerf := 0.0
+			diff := DiffData{}
+			if !t.Service {
+				if t.HostNetwork {
+					hostPerf, _ = Average(t.ThroughputSummary)
+					diff.MessageSize = t.MessageSize
+					diff.HostPerf = hostPerf
+				} else {
+					podPerf, _ = Average(t.ThroughputSummary)
+					diff.MessageSize = t.MessageSize
+					diff.PodPerf = podPerf
 				}
-			} else {
-				if s.Results[t].Profile == "TCP_STREAM" {
-					podPerf, _ = Average(s.Results[t].ThroughputSummary)
-				}
+				diffRes = append(diffRes, diff)
 			}
 		}
 	}
-	return calDiff(hostPerf, podPerf), nil
+	res := []Diff{}
+	for _, msg := range s.Results {
+		if !msg.Service && msg.Parallelism == 1 && msg.HostNetwork && msg.Profile == "TCP_STREAM" {
+			r := Diff{
+				Result:      doPerfDiff(&diffRes, msg.Config.MessageSize),
+				MessageSize: msg.Config.MessageSize,
+			}
+			res = append(res, r)
+		}
+	}
+	return res, nil
+}
+
+func doPerfDiff(diff *[]DiffData, msg int) float64 {
+	host := 0.0
+	pod := 0.0
+	for _, d := range *diff {
+		if d.MessageSize == msg {
+			if d.HostPerf > 0.0 {
+				host = d.HostPerf
+			}
+			if d.PodPerf > 0.0 {
+				pod = d.PodPerf
+			}
+		}
+	}
+	logging.Debugf("Message Size %d : PodNetwork throughput %f, HostNetwork throughput %f", msg, pod, host)
+	return calDiff(host, pod)
 }
 
 // Method to init common table structure.
@@ -212,13 +255,13 @@ func ShowRRResult(s ScenarioResults) {
 func ShowLatencyResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
 		logging.Debug("Rendering RR P99 Latency results")
-        	table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
-        	for _, r := range s.Results {
-                	if strings.Contains(r.Profile, "RR") {
-                        	p99, _ := Average(r.LatencySummary)
-                        	table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
-                	}
+		table := initTable([]string{"Result Type", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
+		for _, r := range s.Results {
+			if strings.Contains(r.Profile, "RR") {
+				p99, _ := Average(r.LatencySummary)
+				table.Append([]string{"RR Latency Results", r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
+			}
 		}
-        	table.Render()
+		table.Render()
 	}
 }

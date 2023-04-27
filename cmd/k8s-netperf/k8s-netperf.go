@@ -239,16 +239,18 @@ var rootCmd = &cobra.Command{
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
 		if result.CheckHostResults(sr) {
-			diff, err := result.TCPThroughputDiff(sr)
+			diffs, err := result.TCPThroughputDiff(&sr)
 			if err != nil {
 				fmt.Println("Unable to calculate difference between HostNetwork and PodNetwork")
-				retCode = 1 //nolint:all
+				retCode = 1
+			} else {
+				for _, diff := range diffs {
+					if tcpt < diff.Result {
+						fmt.Printf("😥 TCP Single Stream (Message Size : %d) percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", diff.MessageSize, tcpt, diff.Result)
+						retCode = 1
+					}
+				}
 			}
-			if diff < tcpt {
-				retCode = 0 //nolint:all
-			}
-			fmt.Printf("😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", tcpt, diff)
-			retCode = 1
 		}
 		if clean {
 			log.Debug("Cleaning resources created by k8s-netperf")
