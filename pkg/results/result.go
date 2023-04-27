@@ -14,7 +14,13 @@ import (
 	"github.com/jtaleric/k8s-netperf/pkg/sample"
 	stats "github.com/montanaflynn/stats"
 	"github.com/olekukonko/tablewriter"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	math "github.com/aclements/go-moremath/stats"
 )
+
+// Specify Language specific case wrapper as global variable
+var caser = cases.Title(language.English)
 
 // Data describes the result data
 type Data struct {
@@ -178,7 +184,7 @@ func renderResults(s ScenarioResults, testType string) {
 				if r.Samples > 1 {
 					_, lo, hi = confidenceInterval(r.ThroughputSummary, 0.95)
 				}
-				table.Append([]string{fmt.Sprintf("📊 %s Results", strings.Title(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
+				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
 			}
 		}
 	}

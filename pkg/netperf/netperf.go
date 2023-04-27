@@ -2,6 +2,7 @@ package netperf
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -32,25 +33,25 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, workload)
-	cmd := []string{}
+	var cmd []string
 	if nc.Service {
 		cmd = []string{"bash", "super-netperf", "1", "-H",
 			serverIP, "-l",
-			fmt.Sprintf("%d", nc.Duration),
+			fmt.Sprint(nc.Duration),
 			"-t", nc.Profile,
 			"--",
-			"-k", fmt.Sprintf("%s", omniOptions),
-			"-m", fmt.Sprintf("%d", nc.MessageSize),
-			"-P", fmt.Sprintf("%d", ServerDataPort),
+			"-k", fmt.Sprint(omniOptions),
+			"-m", fmt.Sprint(nc.MessageSize),
+			"-P", fmt.Sprint(ServerDataPort),
 			"-R", "1"}
 	} else {
 		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
 			serverIP, "-l",
-			fmt.Sprintf("%d", nc.Duration),
+			fmt.Sprint(nc.Duration),
 			"-t", nc.Profile,
 			"--",
-			"-k", fmt.Sprintf("%s", omniOptions),
-			"-m", fmt.Sprintf("%d", nc.MessageSize),
+			"-k", fmt.Sprint(omniOptions),
+			"-m", fmt.Sprint(nc.MessageSize),
 			"-R", "1"}
 	}
 	log.Debug(cmd)
@@ -73,7 +74,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		return stdout, err
 	}
 	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdin:  nil,
 		Stdout: &stdout,
 		Stderr: &stderr,

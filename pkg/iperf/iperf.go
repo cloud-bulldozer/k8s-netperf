@@ -2,6 +2,7 @@ package iperf
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -52,26 +53,26 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	config.Show(nc, workload)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {
-		return bytes.Buffer{}, fmt.Errorf("Unable to run iperf3 with non-stream tests")
+		return bytes.Buffer{}, fmt.Errorf("unable to run iperf3 with non-stream tests")
 	}
 	if strings.Contains(nc.Profile, "UDP") {
 		tcp = false
 	}
-	cmd := []string{}
+	var cmd []string
 	if nc.Service {
 		if tcp {
 			cmd = []string{"iperf3", "-P", "1", "-c",
 				serverIP, "-J", "-t",
-				fmt.Sprintf("%d", nc.Duration),
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration),
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 			}
 		} else {
 			cmd = []string{"iperf3", "-P", "1", "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration), "-u", "-J",
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration), "-u", "-J",
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 				"-b", "0",
 			}
 		}
@@ -79,16 +80,16 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		if tcp {
 			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration),
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration),
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 			}
 		} else {
 			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
 				serverIP, "-t",
-				fmt.Sprintf("%d", nc.Duration), "-u",
-				"-l", fmt.Sprintf("%d", nc.MessageSize),
-				"-p", fmt.Sprintf("%d", ServerCtlPort),
+				fmt.Sprint(nc.Duration), "-u",
+				"-l", fmt.Sprint(nc.MessageSize),
+				"-p", fmt.Sprint(ServerCtlPort),
 				"-b", "0",
 			}
 		}
@@ -113,7 +114,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 		return stdout, err
 	}
 	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdin:  nil,
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -133,7 +134,10 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample.Driver = workload
 	result := Result{}
 	sample.Metric = "Mb/s"
-	json.NewDecoder(stdout).Decode(&result)
+	error := json.NewDecoder(stdout).Decode(&result)
+	if error != nil {
+		log.Error(" Issue while decoding ")
+	}
 	if result.Data.TCPStream.Rate > 0 {
 		sample.Throughput = float64(result.Data.TCPStream.Rate) / 1000000
 
