@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	math "github.com/aclements/go-moremath/stats"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
