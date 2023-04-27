@@ -95,26 +95,69 @@ func CheckHostResults(s ScenarioResults) bool {
 	return false
 }
 
+type DiffData struct {
+	MessageSize int
+	HostPerf    float64
+	PodPerf     float64
+}
+
+type Diff struct {
+	MessageSize int
+	Result      float64
+}
+
 // TCPThroughputDiff accepts the Scenario Results and calculates the %diff.
 // returns
-func TCPThroughputDiff(s ScenarioResults) (float64, error) {
+func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 	// We will focus on TCP STREAM
-	hostPerf := 0.0
-	podPerf := 0.0
-	for t := range s.Results {
-		if !s.Results[t].Service {
-			if s.Results[t].HostNetwork {
-				if s.Results[t].Profile == "TCP_STREAM" {
-					hostPerf, _ = Average(s.Results[t].ThroughputSummary)
+	diffRes := []DiffData{}
+	for _, t := range s.Results {
+		if t.Profile == "TCP_STREAM" {
+			hostPerf := 0.0
+			podPerf := 0.0
+			diff := DiffData{}
+			if !t.Service {
+				if t.HostNetwork {
+					hostPerf, _ = Average(t.ThroughputSummary)
+					diff.MessageSize = t.MessageSize
+					diff.HostPerf = hostPerf
+				} else {
+					podPerf, _ = Average(t.ThroughputSummary)
+					diff.MessageSize = t.MessageSize
+					diff.PodPerf = podPerf
 				}
-			} else {
-				if s.Results[t].Profile == "TCP_STREAM" {
-					podPerf, _ = Average(s.Results[t].ThroughputSummary)
-				}
+				diffRes = append(diffRes, diff)
 			}
 		}
 	}
-	return calDiff(hostPerf, podPerf), nil
+	res := []Diff{}
+	for _, msg := range s.Results {
+		if !msg.Service && msg.Parallelism == 1 && msg.HostNetwork && msg.Profile == "TCP_STREAM" {
+			r := Diff{
+				Result:      doPerfDiff(&diffRes, msg.Config.MessageSize),
+				MessageSize: msg.Config.MessageSize,
+			}
+			res = append(res, r)
+		}
+	}
+	return res, nil
+}
+
+func doPerfDiff(diff *[]DiffData, msg int) float64 {
+	host := 0.0
+	pod := 0.0
+	for _, d := range *diff {
+		if d.MessageSize == msg {
+			if d.HostPerf > 0.0 {
+				host = d.HostPerf
+			}
+			if d.PodPerf > 0.0 {
+				pod = d.PodPerf
+			}
+		}
+	}
+	logging.Debugf("Message Size %d : PodNetwork throughput %f, HostNetwork throughput %f", msg, pod, host)
+	return calDiff(host, pod)
 }
 
 // Method to init common table structure.
