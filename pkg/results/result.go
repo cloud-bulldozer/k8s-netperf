@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	math "github.com/aclements/go-moremath/stats"
 	"github.com/jtaleric/k8s-netperf/pkg/config"
 	"github.com/jtaleric/k8s-netperf/pkg/logging"
 	"github.com/jtaleric/k8s-netperf/pkg/metrics"
@@ -15,7 +16,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	math "github.com/aclements/go-moremath/stats"
 )
 
 // Specify Language specific case wrapper as global variable

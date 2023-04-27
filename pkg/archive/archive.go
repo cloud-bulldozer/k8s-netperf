@@ -133,7 +133,7 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 	for _, pod := range podResults {
 		if err := podarchive.Write(append(append(roleFieldData,
 			commonCsvDataFeilds(row)...),
-			fmt.Sprintf("%s", pod.Name),
+			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
 			return fmt.Errorf("failed to write archive to file")
