@@ -54,7 +54,7 @@ func Connect(url string, skip bool) (*opensearch.Client, error) {
 	}
 	client, err := opensearch.NewClient(config)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to connect OpenSearch")
+		return nil, fmt.Errorf("unable to connect OpenSearch")
 	}
 	logging.Infof("Connected to : %s\n", config.Addresses)
 	return client, nil
@@ -66,7 +66,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]Doc, error) {
 
 	var docs []Doc
 	if len(sr.Results) < 1 {
-		return nil, fmt.Errorf("No result documents")
+		return nil, fmt.Errorf("no result documents")
 	}
 	for _, r := range sr.Results {
 		if len(r.Driver) < 1 {
@@ -135,7 +135,7 @@ func commonCsvHeaderFields() []string {
 }
 
 // Common csv data fields.
-func commonCsvDataFeilds(row result.Data) []string{
+func commonCsvDataFeilds(row result.Data) []string {
 	return []string{
 		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
@@ -153,12 +153,12 @@ func commonCsvDataFeilds(row result.Data) []string{
 func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU) error {
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
-		if err := podarchive.Write(append(append(roleFieldData, 
-			commonCsvDataFeilds(row)...), 
-			fmt.Sprintf("%s", pod.Name),
+		if err := podarchive.Write(append(append(roleFieldData,
+			commonCsvDataFeilds(row)...),
+			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
-			return fmt.Errorf("Failed to write archive to file")
+			return fmt.Errorf("failed to write archive to file")
 		}
 	}
 
@@ -166,7 +166,7 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 	if role == "Server" {
 		cpu = row.ServerMetrics
 	}
-	if err := cpuarchive.Write(append(append(roleFieldData, 
+	if err := cpuarchive.Write(append(append(roleFieldData,
 		commonCsvDataFeilds(row)...),
 		fmt.Sprintf("%f", cpu.Idle),
 		fmt.Sprintf("%f", cpu.User),
@@ -176,7 +176,7 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 		fmt.Sprintf("%f", cpu.Softirq),
 		fmt.Sprintf("%f", cpu.Irq),
 	)); err != nil {
-		return fmt.Errorf("Failed to write archive to file")
+		return fmt.Errorf("failed to write archive to file")
 	}
 	return nil
 }
@@ -185,22 +185,22 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 func WritePromCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	podfp, err := os.Create(fmt.Sprintf("podcpu-result-%d.csv", d))
+	if err != nil {
+		return fmt.Errorf("failed to open pod cpu archive file")
+	}
 	defer podfp.Close()
-	if err != nil {
-		return fmt.Errorf("Failed to open pod cpu archive file")
-	}
 	cpufp, err := os.Create(fmt.Sprintf("cpu-result-%d.csv", d))
-	defer cpufp.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to open cpu archive file")
+		return fmt.Errorf("failed to open cpu archive file")
 	}
+	defer cpufp.Close()
 	cpuarchive := csv.NewWriter(cpufp)
 	defer cpuarchive.Flush()
 	podarchive := csv.NewWriter(podfp)
 	defer podarchive.Flush()
 	roleField := []string{"Role"}
-	cpudata := append(append(roleField, 
-		commonCsvHeaderFields()...), 
+	cpudata := append(append(roleField,
+		commonCsvHeaderFields()...),
 		"Idle CPU",
 		"User CPU",
 		"System CPU",
@@ -215,10 +215,10 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		"Utilization",
 	)
 	if err := cpuarchive.Write(cpudata); err != nil {
-		return fmt.Errorf("Failed to write cpu archive to file")
+		return fmt.Errorf("failed to write cpu archive to file")
 	}
 	if err := podarchive.Write(poddata); err != nil {
-		return fmt.Errorf("Failed to write pod archive to file")
+		return fmt.Errorf("failed to write pod archive to file")
 	}
 	for _, row := range r.Results {
 		if err := writeArchive(cpuarchive, podarchive, "Client", row, row.ClientPodCPU.Results); err != nil {
@@ -249,10 +249,10 @@ func WriteJSONResult(r result.ScenarioResults) error {
 func WriteCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
 	fp, err := os.Create(fmt.Sprintf("result-%d.csv", d))
-	defer fp.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to open archive file")
+		return fmt.Errorf("failed to open archive file")
 	}
+	defer fp.Close()
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()
 
@@ -264,7 +264,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	)
 
 	if err := archive.Write(data); err != nil {
-		return fmt.Errorf("Failed to write result archive to file")
+		return fmt.Errorf("failed to write result archive to file")
 	}
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
@@ -276,7 +276,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 			"usec",
 		)
 		if err := archive.Write(data); err != nil {
-			return fmt.Errorf("Failed to write archive to file")
+			return fmt.Errorf("failed to write archive to file")
 		}
 	}
 	return nil

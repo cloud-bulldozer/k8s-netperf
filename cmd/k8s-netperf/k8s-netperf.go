@@ -49,7 +49,7 @@ var rootCmd = &cobra.Command{
 			uid = id
 		} else {
 			u := uuid.New()
-			uid = fmt.Sprintf("%s", u.String())
+			uid = u.String()
 		}
 
 		if json {
@@ -219,7 +219,10 @@ var rootCmd = &cobra.Command{
 				result.ShowPodCPU(sr)
 			}
 		} else {
-			archive.WriteJSONResult(sr)
+			err = archive.WriteJSONResult(sr)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 		err = archive.WriteCSVResult(sr)
 		if err != nil {
@@ -239,10 +242,10 @@ var rootCmd = &cobra.Command{
 			diff, err := result.TCPThroughputDiff(sr)
 			if err != nil {
 				fmt.Println("Unable to calculate difference between HostNetwork and PodNetwork")
-				retCode = 1
+				retCode = 1 //nolint:all
 			}
 			if diff < tcpt {
-				retCode = 0
+				retCode = 0 //nolint:all
 			}
 			fmt.Printf("😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", tcpt, diff)
 			retCode = 1
@@ -255,8 +258,10 @@ var rootCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			for svc := range svcList.Items {
-				k8s.DestroyService(client, svcList.Items[svc])
-
+				err = k8s.DestroyService(client, svcList.Items[svc])
+				if err != nil {
+					log.Error(err)
+				}
 			}
 			dpList, err := k8s.GetDeployments(client, namespace)
 			if err != nil {
@@ -264,7 +269,10 @@ var rootCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			for dp := range dpList.Items {
-				k8s.DestroyDeployment(client, dpList.Items[dp])
+				err = k8s.DestroyDeployment(client, dpList.Items[dp])
+				if err != nil {
+					log.Error(err)
+				}
 			}
 		}
 		os.Exit(retCode)
