@@ -14,7 +14,7 @@ Running Networking Performance Tests against K8s
 
 ## Setup
 ```shell
-$ git clone http://github.com/jtaleric/k8s-netperf
+$ git clone http://github.com/cloud-bulldozer/k8s-netperf
 $ cd k8s-netperf
 $ make build
 ```
@@ -22,7 +22,7 @@ $ make build
 ## Build Container Image
 
 ```shell
-$ git clone http://github.com/jtaleric/k8s-netperf
+$ git clone http://github.com/cloud-bulldozer/k8s-netperf
 $ cd k8s-netperf 
 $ make docker-build
 ```
