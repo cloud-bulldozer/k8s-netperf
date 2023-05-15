@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jtaleric/k8s-netperf/pkg/config"
-	log "github.com/jtaleric/k8s-netperf/pkg/logging"
-	"github.com/jtaleric/k8s-netperf/pkg/metrics"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
+	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,7 +92,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Name:      "client",
 			Namespace: "netperf",
 			Replicas:  1,
-			Image:     "quay.io/jtaleric/netperf:beta",
+			Image:     "quay.io/cloud-bulldozer/netperf:latest",
 			Labels:    map[string]string{"role": clientRole},
 			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 			Port:      NetperfServerCtlPort,
@@ -138,7 +138,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:      "client-across",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/jtaleric/netperf:beta",
+		Image:     "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:    map[string]string{"role": clientAcrossRole},
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:      NetperfServerCtlPort,
@@ -148,7 +148,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/jtaleric/netperf:beta",
+		Image:       "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:        NetperfServerCtlPort,
@@ -192,7 +192,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/jtaleric/netperf:beta",
+		Image:       "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:      map[string]string{"role": hostNetServerRole},
 		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
 		Port:        NetperfServerCtlPort,
@@ -202,7 +202,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:      "server",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/jtaleric/netperf:beta",
+		Image:     "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:    map[string]string{"role": serverRole},
 		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
 		Port:      NetperfServerCtlPort,

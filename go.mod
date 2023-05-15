@@ -1,4 +1,4 @@
-module github.com/jtaleric/k8s-netperf
+module github.com/cloud-bulldozer/k8s-netperf
 
 go 1.18
 

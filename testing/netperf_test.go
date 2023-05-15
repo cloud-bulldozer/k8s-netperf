@@ -3,7 +3,7 @@ package netperf
 import (
 	"testing"
 
-	"github.com/jtaleric/k8s-netperf/pkg/config"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 )
 
 // TestParseConf Test for success. Ensure we successfully parse a good config file
