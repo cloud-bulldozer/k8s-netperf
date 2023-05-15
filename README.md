@@ -62,7 +62,7 @@ Flags:
   -h, --help                  help for k8s-netperf
       --iperf                 Use iperf3 as load driver (along with netperf)
       --json                  Instead of human-readable output, return JSON to stdout
-      --local                 Run network performance tests with pod/server on the same node
+      --local                 Run network performance tests with Server-Pods/Client-Pods on the same Node
       --metrics               Show all system metrics retrieved from prom
       --prom string           Prometheus URL
       --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
