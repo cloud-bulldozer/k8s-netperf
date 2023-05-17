@@ -218,6 +218,7 @@ var rootCmd = &cobra.Command{
 			result.ShowStreamResult(sr)
 			result.ShowRRResult(sr)
 			result.ShowLatencyResult(sr)
+			result.ShowSpecificResults(sr)
 			if showMetrics {
 				result.ShowNodeCPU(sr)
 				result.ShowPodCPU(sr)
@@ -239,6 +240,11 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 				os.Exit(1)
 			}
+		}
+		err = archive.WriteSpecificCSV(sr)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
 		}
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
@@ -348,6 +354,8 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 				os.Exit(1)
 			}
 		}
+		npr.LossSummary = append(npr.LossSummary, float64(nr.LossPercent))
+		npr.RetransmitSummary = append(npr.RetransmitSummary, nr.Retransmits)
 		npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
 		npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 	}

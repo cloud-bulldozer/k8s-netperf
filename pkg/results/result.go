@@ -36,6 +36,8 @@ type Data struct {
 	Service           bool
 	ThroughputSummary []float64
 	LatencySummary    []float64
+	LossSummary       []float64
+	RetransmitSummary []float64
 	ClientMetrics     metrics.NodeCPU
 	ServerMetrics     metrics.NodeCPU
 	ClientPodCPU      metrics.PodValues
@@ -211,6 +213,22 @@ func ShowNodeCPU(s ScenarioResults) {
 			"Node CPU Utilization", r.Driver, "Server", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%t", r.SameNode),
 			fmt.Sprintf("%f", scpu.Idle), fmt.Sprintf("%f", scpu.User), fmt.Sprintf("%f", scpu.System), fmt.Sprintf("%f", scpu.Steal), fmt.Sprintf("%f", scpu.Iowait), fmt.Sprintf("%f", scpu.Nice), fmt.Sprintf("%f", scpu.Softirq), fmt.Sprintf("%f", scpu.Irq),
 		})
+	}
+	table.Render()
+}
+
+// ShowiPerfSpecificResults
+func ShowSpecificResults(s ScenarioResults) {
+	table := initTable([]string{"Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value"})
+	for _, r := range s.Results {
+		if strings.Contains(r.Profile, "TCP") {
+			rt, _ := Average(r.RetransmitSummary)
+			table.Append([]string{"TCP Retransmissions", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (rt))})
+		}
+		if strings.Contains(r.Profile, "UDP") {
+			loss, _ := Average(r.LossSummary)
+			table.Append([]string{"UDP Loss Percent", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (loss))})
+		}
 	}
 	table.Render()
 }

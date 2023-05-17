@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloud-bulldozer/go-commons/indexers"
@@ -18,24 +19,26 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID          string           `json:"uuid"`
-	Timestamp     time.Time        `json:"timestamp"`
-	HostNetwork   bool             `json:"hostNetwork"`
-	Driver        string           `json:"driver"`
-	Parallelism   int              `json:"parallelism"`
-	Profile       string           `json:"profile"`
-	Duration      int              `json:"duration"`
-	Samples       int              `json:"samples"`
-	Messagesize   int              `json:"messageSize"`
-	Throughput    float64          `json:"throughput"`
-	Latency       float64          `json:"latency"`
-	TputMetric    string           `json:"tputMetric"`
-	LtcyMetric    string           `json:"ltcyMetric"`
-	Metadata      result.Metadata  `json:"metadata"`
-	ServerNodeCPU metrics.NodeCPU  `json:"serverCPU"`
-	ServerPodCPU  []metrics.PodCPU `json:"serverPods"`
-	ClientNodeCPU metrics.NodeCPU  `json:"clientCPU"`
-	ClientPodCPU  []metrics.PodCPU `json:"clientPods"`
+	UUID           string           `json:"uuid"`
+	Timestamp      time.Time        `json:"timestamp"`
+	HostNetwork    bool             `json:"hostNetwork"`
+	Driver         string           `json:"driver"`
+	Parallelism    int              `json:"parallelism"`
+	Profile        string           `json:"profile"`
+	Duration       int              `json:"duration"`
+	Samples        int              `json:"samples"`
+	Messagesize    int              `json:"messageSize"`
+	Throughput     float64          `json:"throughput"`
+	Latency        float64          `json:"latency"`
+	TputMetric     string           `json:"tputMetric"`
+	LtcyMetric     string           `json:"ltcyMetric"`
+	TCPRetransmit  float64          `json:"TCPRetransmits"`
+	UDPLossPercent float64          `json:"UDPLossPercent"`
+	Metadata       result.Metadata  `json:"metadata"`
+	ServerNodeCPU  metrics.NodeCPU  `json:"serverCPU"`
+	ServerPodCPU   []metrics.PodCPU `json:"serverPods"`
+	ClientNodeCPU  metrics.NodeCPU  `json:"clientCPU"`
+	ClientPodCPU   []metrics.PodCPU `json:"clientPods"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -90,6 +93,8 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			ClientPodCPU:  r.ClientPodCPU.Results,
 			Metadata:      sr.Metadata,
 		}
+		d.UDPLossPercent, _ = result.Average(r.LossSummary)
+		d.TCPRetransmit, _ = result.Average(r.RetransmitSummary)
 		d.Throughput, _ = result.Average(r.ThroughputSummary)
 		d.Latency, _ = result.Average(r.LatencySummary)
 		docs = append(docs, d)
@@ -204,6 +209,43 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		}
 		if err := writeArchive(cpuarchive, podarchive, "Server", row, row.ServerPodCPU.Results); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// WriteiPerfSpecificCSV
+func WriteSpecificCSV(r result.ScenarioResults) error {
+	d := time.Now().Unix()
+	fp, err := os.Create(fmt.Sprintf("loss-rt-result-%d.csv", d))
+	if err != nil {
+		return fmt.Errorf("failed to open archive file")
+	}
+	defer fp.Close()
+	archive := csv.NewWriter(fp)
+	defer archive.Flush()
+	iperfdata := append(append([]string{"Type"}, commonCsvHeaderFields()...), "Value")
+	if err := archive.Write(iperfdata); err != nil {
+		return fmt.Errorf("failed to write result archive to file")
+	}
+	for _, row := range r.Results {
+		if strings.Contains(row.Profile, "UDP") {
+			loss, _ := result.Average(row.LossSummary)
+			header := []string{"UDP Percent Loss"}
+			data := append(header, commonCsvDataFeilds(row)...)
+			iperfdata = append(data, fmt.Sprintf("%f", loss))
+			if err := archive.Write(iperfdata); err != nil {
+				return fmt.Errorf("failed to write result archive to file")
+			}
+		}
+		if strings.Contains(row.Profile, "TCP") {
+			rt, _ := result.Average(row.RetransmitSummary)
+			header := []string{"TCP Retransmissions"}
+			data := append(header, commonCsvDataFeilds(row)...)
+			iperfdata = append(data, fmt.Sprintf("%f", rt))
+			if err := archive.Write(iperfdata); err != nil {
+				return fmt.Errorf("failed to write result archive to file")
+			}
 		}
 	}
 	return nil
