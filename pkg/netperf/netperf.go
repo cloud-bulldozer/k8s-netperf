@@ -24,7 +24,7 @@ const workload = "netperf"
 const ServerDataPort = 42424
 
 // omniOptions are netperf specific options that we will pass to the netperf client.
-const omniOptions = "rt_latency,p99_latency,throughput,throughput_units"
+const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_recv_calls,local_send_calls,local_transport_retrans"
 
 // Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
@@ -91,6 +91,8 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = workload
+	send := 0.0
+	recv := 0.0
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
 		if len(l) < 2 {
@@ -104,7 +106,14 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 			sample.Latency99ptile, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "RT_LATENCY") {
 			sample.Latency, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "LOCAL_SEND_CALLS") {
+			send, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "REMOTE_RECV_CALLS") {
+			recv, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "LOCAL_TRANSPORT_RETRANS") {
+			sample.Retransmits, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		}
 	}
+	sample.LossPercent = 100 - (recv/send*100)
 	return sample, nil
 }
