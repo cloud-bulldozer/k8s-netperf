@@ -114,6 +114,6 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 			sample.Retransmits, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		}
 	}
-	sample.LossPercent = 100 - recv/send*100
+	sample.LossPercent = 100 - (recv/send*100)
 	return sample, nil
 }
