@@ -217,15 +217,15 @@ func ShowNodeCPU(s ScenarioResults) {
 	table.Render()
 }
 
-// ShowiPerfSpecificResults
+// ShowSpecificResults
 func ShowSpecificResults(s ScenarioResults) {
 	table := initTable([]string{"Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value"})
 	for _, r := range s.Results {
-		if strings.Contains(r.Profile, "TCP") {
+		if strings.Contains(r.Profile, "TCP_STREAM") {
 			rt, _ := Average(r.RetransmitSummary)
 			table.Append([]string{"TCP Retransmissions", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (rt))})
 		}
-		if strings.Contains(r.Profile, "UDP") {
+		if strings.Contains(r.Profile, "UDP_STREAM") {
 			loss, _ := Average(r.LossSummary)
 			table.Append([]string{"UDP Loss Percent", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (loss))})
 		}
