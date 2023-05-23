@@ -229,7 +229,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		return fmt.Errorf("failed to write result archive to file")
 	}
 	for _, row := range r.Results {
-		if strings.Contains(row.Profile, "UDP") {
+		if strings.Contains(row.Profile, "UDP_STREAM") {
 			loss, _ := result.Average(row.LossSummary)
 			header := []string{"UDP Percent Loss"}
 			data := append(header, commonCsvDataFeilds(row)...)
@@ -238,7 +238,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 				return fmt.Errorf("failed to write result archive to file")
 			}
 		}
-		if strings.Contains(row.Profile, "TCP") {
+		if strings.Contains(row.Profile, "TCP_STREAM") {
 			rt, _ := result.Average(row.RetransmitSummary)
 			header := []string{"TCP Retransmissions"}
 			data := append(header, commonCsvDataFeilds(row)...)

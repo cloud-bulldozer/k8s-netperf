@@ -197,6 +197,18 @@ Same node refers to how the pods were deployed. If the cluster has > 2 nodes wit
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
 ```
 
+### Loss/Retransmissions
+k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drivers (netperf and iperf).
+```shell
++---------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-----------+
+|        TYPE         | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES | AVG VALUE |
++---------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-----------+
+| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 54.666667 |
+| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 15.000000 |
+| UDP Loss Percent    | netperf | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 0.067031  |
++---------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+-----------+
+```
+
 ### Output to CSV
 `k8s-netperf` will write a csv file, after it has completed the desired performance tests.
 
