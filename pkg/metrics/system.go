@@ -11,16 +11,11 @@ import (
 	"time"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
-	routev1 "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
+	ocpmetadata "github.com/cloud-bulldozer/go-commons/ocp-metadata"
 	api "github.com/prometheus/client_golang/api"
 	prom "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
-	auth "k8s.io/api/authentication/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/utils/pointer"
 )
 
 // NodeInfo stores the node metadata like IP and Hostname
@@ -77,58 +72,20 @@ func Discover() (PromConnect, bool) {
 		logging.Error(err)
 		return conn, false
 	}
-	client, err := kubernetes.NewForConfig(config)
+	ocpMetadata, err := ocpmetadata.NewMetadata(config)
 	if err != nil {
 		logging.Error(err)
 		return conn, false
 	}
-	found := false
-	_, err = client.CoreV1().Namespaces().Get(context.TODO(), "openshift-monitoring", metav1.GetOptions{})
+	conn.URL, conn.Token, err = ocpMetadata.GetPrometheus()
 	if err != nil {
-		logging.Info("😥 openshift-monitoring namespace not found")
-		_, err := client.CoreV1().Namespaces().Get(context.TODO(), "monitoring", metav1.GetOptions{})
-		if err != nil {
-			logging.Info("😥 monitoring namespace not found")
-		} else {
-			logging.Info("🔬 monitoring namespace found")
-			// Not much we can do here, if the user provided URL fails, it could be due to a bad port-forward
-			found = true
-			conn.OpenShift = false
-		}
-	} else {
-		expire := time.Hour * 2
-		logging.Info("🔬 openshift-monitoring namespace found")
-		conn.Verify = true
-		found = true
-		r, err := routev1.NewForConfig(config)
-		if err != nil {
-			logging.Error(err)
-			return conn, false
-		}
-		proute, err := r.Routes("openshift-monitoring").Get(context.TODO(), "prometheus-k8s", metav1.GetOptions{})
-		if err != nil {
-			logging.Error(err)
-			return conn, false
-		}
-		logging.Debugf("Found OpenShift Monitoring Route : %s", proute.Spec.Host)
-		conn.URL = fmt.Sprintf("https://%s", proute.Spec.Host)
-		request := auth.TokenRequest{
-			Spec: auth.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64(int64(expire.Seconds())),
-			},
-		}
-		token, err := client.CoreV1().ServiceAccounts("openshift-monitoring").CreateToken(context.TODO(), "prometheus-k8s", &request, v1.CreateOptions{})
-		if err != nil {
-			logging.Error(err)
-			return conn, false
-		}
-		conn.Token = token.Status.Token
-		logging.Debugf("Token : %s", conn.Token)
-		conn.OpenShift = true
-	}
-	if !found {
+		logging.Info("😥 prometheus discovery failure")
+		logging.Error(err)
 		return conn, false
 	}
+	logging.Info("🔬 prometheus discovered at openshift-monitoring")
+	conn.Verify = true
+	conn.OpenShift = true
 	return conn, true
 }
 
