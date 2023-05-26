@@ -40,11 +40,9 @@ func newMLOpenJobFunc(t Transport) MLOpenJob {
 // MLOpenJob - Opens one or more anomaly detection jobs.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/ml-open-job.html.
-//
 type MLOpenJob func(job_id string, o ...func(*MLOpenJobRequest)) (*Response, error)
 
 // MLOpenJobRequest configures the ML Open Job API request.
-//
 type MLOpenJobRequest struct {
 	JobID string
 
@@ -59,7 +57,6 @@ type MLOpenJobRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r MLOpenJobRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -141,7 +138,6 @@ func (r MLOpenJobRequest) Do(ctx context.Context, transport Transport) (*Respons
 }
 
 // WithContext sets the request context.
-//
 func (f MLOpenJob) WithContext(v context.Context) func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		r.ctx = v
@@ -149,7 +145,6 @@ func (f MLOpenJob) WithContext(v context.Context) func(*MLOpenJobRequest) {
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f MLOpenJob) WithPretty() func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		r.Pretty = true
@@ -157,7 +152,6 @@ func (f MLOpenJob) WithPretty() func(*MLOpenJobRequest) {
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f MLOpenJob) WithHuman() func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		r.Human = true
@@ -165,7 +159,6 @@ func (f MLOpenJob) WithHuman() func(*MLOpenJobRequest) {
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f MLOpenJob) WithErrorTrace() func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		r.ErrorTrace = true
@@ -173,7 +166,6 @@ func (f MLOpenJob) WithErrorTrace() func(*MLOpenJobRequest) {
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f MLOpenJob) WithFilterPath(v ...string) func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		r.FilterPath = v
@@ -181,7 +173,6 @@ func (f MLOpenJob) WithFilterPath(v ...string) func(*MLOpenJobRequest) {
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f MLOpenJob) WithHeader(h map[string]string) func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		if r.Header == nil {
@@ -194,7 +185,6 @@ func (f MLOpenJob) WithHeader(h map[string]string) func(*MLOpenJobRequest) {
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f MLOpenJob) WithOpaqueID(s string) func(*MLOpenJobRequest) {
 	return func(r *MLOpenJobRequest) {
 		if r.Header == nil {

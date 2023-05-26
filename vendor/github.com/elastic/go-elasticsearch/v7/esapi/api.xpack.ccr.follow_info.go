@@ -40,11 +40,9 @@ func newCCRFollowInfoFunc(t Transport) CCRFollowInfo {
 // CCRFollowInfo - Retrieves information about all follower indices, including parameters and status for each follower index
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/ccr-get-follow-info.html.
-//
 type CCRFollowInfo func(index []string, o ...func(*CCRFollowInfoRequest)) (*Response, error)
 
 // CCRFollowInfoRequest configures the CCR Follow Info API request.
-//
 type CCRFollowInfoRequest struct {
 	Index []string
 
@@ -59,7 +57,6 @@ type CCRFollowInfoRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r CCRFollowInfoRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -139,7 +136,6 @@ func (r CCRFollowInfoRequest) Do(ctx context.Context, transport Transport) (*Res
 }
 
 // WithContext sets the request context.
-//
 func (f CCRFollowInfo) WithContext(v context.Context) func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		r.ctx = v
@@ -147,7 +143,6 @@ func (f CCRFollowInfo) WithContext(v context.Context) func(*CCRFollowInfoRequest
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f CCRFollowInfo) WithPretty() func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		r.Pretty = true
@@ -155,7 +150,6 @@ func (f CCRFollowInfo) WithPretty() func(*CCRFollowInfoRequest) {
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f CCRFollowInfo) WithHuman() func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		r.Human = true
@@ -163,7 +157,6 @@ func (f CCRFollowInfo) WithHuman() func(*CCRFollowInfoRequest) {
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f CCRFollowInfo) WithErrorTrace() func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		r.ErrorTrace = true
@@ -171,7 +164,6 @@ func (f CCRFollowInfo) WithErrorTrace() func(*CCRFollowInfoRequest) {
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f CCRFollowInfo) WithFilterPath(v ...string) func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		r.FilterPath = v
@@ -179,7 +171,6 @@ func (f CCRFollowInfo) WithFilterPath(v ...string) func(*CCRFollowInfoRequest) {
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f CCRFollowInfo) WithHeader(h map[string]string) func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		if r.Header == nil {
@@ -192,7 +183,6 @@ func (f CCRFollowInfo) WithHeader(h map[string]string) func(*CCRFollowInfoReques
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f CCRFollowInfo) WithOpaqueID(s string) func(*CCRFollowInfoRequest) {
 	return func(r *CCRFollowInfoRequest) {
 		if r.Header == nil {

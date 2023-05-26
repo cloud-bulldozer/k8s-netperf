@@ -22,8 +22,8 @@ import (
 
 // Prometheus describes the prometheus connection
 type Prometheus struct {
-	Api           apiv1.API
-	Endpoint      string
+	Api      apiv1.API
+	Endpoint string
 }
 
 // This object implements RoundTripper

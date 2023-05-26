@@ -42,11 +42,9 @@ func newAutoscalingGetAutoscalingDecisionFunc(t Transport) AutoscalingGetAutosca
 // This API is experimental.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/autoscaling-get-autoscaling-decision.html.
-//
 type AutoscalingGetAutoscalingDecision func(o ...func(*AutoscalingGetAutoscalingDecisionRequest)) (*Response, error)
 
 // AutoscalingGetAutoscalingDecisionRequest configures the Autoscaling Get Autoscaling Decision API request.
-//
 type AutoscalingGetAutoscalingDecisionRequest struct {
 	Pretty     bool
 	Human      bool
@@ -59,7 +57,6 @@ type AutoscalingGetAutoscalingDecisionRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r AutoscalingGetAutoscalingDecisionRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -134,7 +131,6 @@ func (r AutoscalingGetAutoscalingDecisionRequest) Do(ctx context.Context, transp
 }
 
 // WithContext sets the request context.
-//
 func (f AutoscalingGetAutoscalingDecision) WithContext(v context.Context) func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		r.ctx = v
@@ -142,7 +138,6 @@ func (f AutoscalingGetAutoscalingDecision) WithContext(v context.Context) func(*
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f AutoscalingGetAutoscalingDecision) WithPretty() func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		r.Pretty = true
@@ -150,7 +145,6 @@ func (f AutoscalingGetAutoscalingDecision) WithPretty() func(*AutoscalingGetAuto
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f AutoscalingGetAutoscalingDecision) WithHuman() func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		r.Human = true
@@ -158,7 +152,6 @@ func (f AutoscalingGetAutoscalingDecision) WithHuman() func(*AutoscalingGetAutos
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f AutoscalingGetAutoscalingDecision) WithErrorTrace() func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		r.ErrorTrace = true
@@ -166,7 +159,6 @@ func (f AutoscalingGetAutoscalingDecision) WithErrorTrace() func(*AutoscalingGet
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f AutoscalingGetAutoscalingDecision) WithFilterPath(v ...string) func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		r.FilterPath = v
@@ -174,7 +166,6 @@ func (f AutoscalingGetAutoscalingDecision) WithFilterPath(v ...string) func(*Aut
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f AutoscalingGetAutoscalingDecision) WithHeader(h map[string]string) func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		if r.Header == nil {
@@ -187,7 +178,6 @@ func (f AutoscalingGetAutoscalingDecision) WithHeader(h map[string]string) func(
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f AutoscalingGetAutoscalingDecision) WithOpaqueID(s string) func(*AutoscalingGetAutoscalingDecisionRequest) {
 	return func(r *AutoscalingGetAutoscalingDecisionRequest) {
 		if r.Header == nil {

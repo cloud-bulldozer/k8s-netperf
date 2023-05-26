@@ -40,11 +40,9 @@ func newSecurityClearCachedRolesFunc(t Transport) SecurityClearCachedRoles {
 // SecurityClearCachedRoles - Evicts roles from the native role cache.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/security-api-clear-role-cache.html.
-//
 type SecurityClearCachedRoles func(name []string, o ...func(*SecurityClearCachedRolesRequest)) (*Response, error)
 
 // SecurityClearCachedRolesRequest configures the Security Clear Cached Roles API request.
-//
 type SecurityClearCachedRolesRequest struct {
 	Name []string
 
@@ -59,7 +57,6 @@ type SecurityClearCachedRolesRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r SecurityClearCachedRolesRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -141,7 +138,6 @@ func (r SecurityClearCachedRolesRequest) Do(ctx context.Context, transport Trans
 }
 
 // WithContext sets the request context.
-//
 func (f SecurityClearCachedRoles) WithContext(v context.Context) func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		r.ctx = v
@@ -149,7 +145,6 @@ func (f SecurityClearCachedRoles) WithContext(v context.Context) func(*SecurityC
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f SecurityClearCachedRoles) WithPretty() func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		r.Pretty = true
@@ -157,7 +152,6 @@ func (f SecurityClearCachedRoles) WithPretty() func(*SecurityClearCachedRolesReq
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f SecurityClearCachedRoles) WithHuman() func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		r.Human = true
@@ -165,7 +159,6 @@ func (f SecurityClearCachedRoles) WithHuman() func(*SecurityClearCachedRolesRequ
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f SecurityClearCachedRoles) WithErrorTrace() func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		r.ErrorTrace = true
@@ -173,7 +166,6 @@ func (f SecurityClearCachedRoles) WithErrorTrace() func(*SecurityClearCachedRole
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f SecurityClearCachedRoles) WithFilterPath(v ...string) func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		r.FilterPath = v
@@ -181,7 +173,6 @@ func (f SecurityClearCachedRoles) WithFilterPath(v ...string) func(*SecurityClea
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f SecurityClearCachedRoles) WithHeader(h map[string]string) func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		if r.Header == nil {
@@ -194,7 +185,6 @@ func (f SecurityClearCachedRoles) WithHeader(h map[string]string) func(*Security
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f SecurityClearCachedRoles) WithOpaqueID(s string) func(*SecurityClearCachedRolesRequest) {
 	return func(r *SecurityClearCachedRolesRequest) {
 		if r.Header == nil {

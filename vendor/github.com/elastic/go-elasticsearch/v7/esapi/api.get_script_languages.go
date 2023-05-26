@@ -42,11 +42,9 @@ func newGetScriptLanguagesFunc(t Transport) GetScriptLanguages {
 // This API is experimental.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/master/modules-scripting.html.
-//
 type GetScriptLanguages func(o ...func(*GetScriptLanguagesRequest)) (*Response, error)
 
 // GetScriptLanguagesRequest configures the Get Script Languages API request.
-//
 type GetScriptLanguagesRequest struct {
 	Pretty     bool
 	Human      bool
@@ -59,7 +57,6 @@ type GetScriptLanguagesRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r GetScriptLanguagesRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -134,7 +131,6 @@ func (r GetScriptLanguagesRequest) Do(ctx context.Context, transport Transport) 
 }
 
 // WithContext sets the request context.
-//
 func (f GetScriptLanguages) WithContext(v context.Context) func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		r.ctx = v
@@ -142,7 +138,6 @@ func (f GetScriptLanguages) WithContext(v context.Context) func(*GetScriptLangua
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f GetScriptLanguages) WithPretty() func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		r.Pretty = true
@@ -150,7 +145,6 @@ func (f GetScriptLanguages) WithPretty() func(*GetScriptLanguagesRequest) {
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f GetScriptLanguages) WithHuman() func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		r.Human = true
@@ -158,7 +152,6 @@ func (f GetScriptLanguages) WithHuman() func(*GetScriptLanguagesRequest) {
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f GetScriptLanguages) WithErrorTrace() func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		r.ErrorTrace = true
@@ -166,7 +159,6 @@ func (f GetScriptLanguages) WithErrorTrace() func(*GetScriptLanguagesRequest) {
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f GetScriptLanguages) WithFilterPath(v ...string) func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		r.FilterPath = v
@@ -174,7 +166,6 @@ func (f GetScriptLanguages) WithFilterPath(v ...string) func(*GetScriptLanguages
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f GetScriptLanguages) WithHeader(h map[string]string) func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		if r.Header == nil {
@@ -187,7 +178,6 @@ func (f GetScriptLanguages) WithHeader(h map[string]string) func(*GetScriptLangu
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f GetScriptLanguages) WithOpaqueID(s string) func(*GetScriptLanguagesRequest) {
 	return func(r *GetScriptLanguagesRequest) {
 		if r.Header == nil {

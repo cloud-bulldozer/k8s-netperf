@@ -42,11 +42,9 @@ func newTransformUpdateTransformFunc(t Transport) TransformUpdateTransform {
 // TransformUpdateTransform - Updates certain properties of a transform.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/update-transform.html.
-//
 type TransformUpdateTransform func(body io.Reader, transform_id string, o ...func(*TransformUpdateTransformRequest)) (*Response, error)
 
 // TransformUpdateTransformRequest configures the Transform Update Transform API request.
-//
 type TransformUpdateTransformRequest struct {
 	Body io.Reader
 
@@ -65,7 +63,6 @@ type TransformUpdateTransformRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r TransformUpdateTransformRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -153,7 +150,6 @@ func (r TransformUpdateTransformRequest) Do(ctx context.Context, transport Trans
 }
 
 // WithContext sets the request context.
-//
 func (f TransformUpdateTransform) WithContext(v context.Context) func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.ctx = v
@@ -161,7 +157,6 @@ func (f TransformUpdateTransform) WithContext(v context.Context) func(*Transform
 }
 
 // WithDeferValidation - if validations should be deferred until transform starts, defaults to false..
-//
 func (f TransformUpdateTransform) WithDeferValidation(v bool) func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.DeferValidation = &v
@@ -169,7 +164,6 @@ func (f TransformUpdateTransform) WithDeferValidation(v bool) func(*TransformUpd
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f TransformUpdateTransform) WithPretty() func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.Pretty = true
@@ -177,7 +171,6 @@ func (f TransformUpdateTransform) WithPretty() func(*TransformUpdateTransformReq
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f TransformUpdateTransform) WithHuman() func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.Human = true
@@ -185,7 +178,6 @@ func (f TransformUpdateTransform) WithHuman() func(*TransformUpdateTransformRequ
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f TransformUpdateTransform) WithErrorTrace() func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.ErrorTrace = true
@@ -193,7 +185,6 @@ func (f TransformUpdateTransform) WithErrorTrace() func(*TransformUpdateTransfor
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f TransformUpdateTransform) WithFilterPath(v ...string) func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		r.FilterPath = v
@@ -201,7 +192,6 @@ func (f TransformUpdateTransform) WithFilterPath(v ...string) func(*TransformUpd
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f TransformUpdateTransform) WithHeader(h map[string]string) func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		if r.Header == nil {
@@ -214,7 +204,6 @@ func (f TransformUpdateTransform) WithHeader(h map[string]string) func(*Transfor
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f TransformUpdateTransform) WithOpaqueID(s string) func(*TransformUpdateTransformRequest) {
 	return func(r *TransformUpdateTransformRequest) {
 		if r.Header == nil {

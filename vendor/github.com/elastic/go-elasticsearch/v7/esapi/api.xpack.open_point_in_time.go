@@ -41,11 +41,9 @@ func newOpenPointInTimeFunc(t Transport) OpenPointInTime {
 // OpenPointInTime - Open a point in time that can be used in subsequent searches
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/master/point-in-time-api.html.
-//
 type OpenPointInTime func(o ...func(*OpenPointInTimeRequest)) (*Response, error)
 
 // OpenPointInTimeRequest configures the Open Point In Time API request.
-//
 type OpenPointInTimeRequest struct {
 	Index []string
 
@@ -66,7 +64,6 @@ type OpenPointInTimeRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r OpenPointInTimeRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -166,7 +163,6 @@ func (r OpenPointInTimeRequest) Do(ctx context.Context, transport Transport) (*R
 }
 
 // WithContext sets the request context.
-//
 func (f OpenPointInTime) WithContext(v context.Context) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.ctx = v
@@ -174,7 +170,6 @@ func (f OpenPointInTime) WithContext(v context.Context) func(*OpenPointInTimeReq
 }
 
 // WithIndex - a list of index names to open point in time; use _all to perform the operation on all indices.
-//
 func (f OpenPointInTime) WithIndex(v ...string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.Index = v
@@ -182,7 +177,6 @@ func (f OpenPointInTime) WithIndex(v ...string) func(*OpenPointInTimeRequest) {
 }
 
 // WithExpandWildcards - whether to expand wildcard expression to concrete indices that are open, closed or both..
-//
 func (f OpenPointInTime) WithExpandWildcards(v string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.ExpandWildcards = v
@@ -190,7 +184,6 @@ func (f OpenPointInTime) WithExpandWildcards(v string) func(*OpenPointInTimeRequ
 }
 
 // WithIgnoreUnavailable - whether specified concrete indices should be ignored when unavailable (missing or closed).
-//
 func (f OpenPointInTime) WithIgnoreUnavailable(v bool) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.IgnoreUnavailable = &v
@@ -198,7 +191,6 @@ func (f OpenPointInTime) WithIgnoreUnavailable(v bool) func(*OpenPointInTimeRequ
 }
 
 // WithKeepAlive - specific the time to live for the point in time.
-//
 func (f OpenPointInTime) WithKeepAlive(v string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.KeepAlive = v
@@ -206,7 +198,6 @@ func (f OpenPointInTime) WithKeepAlive(v string) func(*OpenPointInTimeRequest) {
 }
 
 // WithPreference - specify the node or shard the operation should be performed on (default: random).
-//
 func (f OpenPointInTime) WithPreference(v string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.Preference = v
@@ -214,7 +205,6 @@ func (f OpenPointInTime) WithPreference(v string) func(*OpenPointInTimeRequest) 
 }
 
 // WithRouting - specific routing value.
-//
 func (f OpenPointInTime) WithRouting(v string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.Routing = v
@@ -222,7 +212,6 @@ func (f OpenPointInTime) WithRouting(v string) func(*OpenPointInTimeRequest) {
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f OpenPointInTime) WithPretty() func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.Pretty = true
@@ -230,7 +219,6 @@ func (f OpenPointInTime) WithPretty() func(*OpenPointInTimeRequest) {
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f OpenPointInTime) WithHuman() func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.Human = true
@@ -238,7 +226,6 @@ func (f OpenPointInTime) WithHuman() func(*OpenPointInTimeRequest) {
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f OpenPointInTime) WithErrorTrace() func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.ErrorTrace = true
@@ -246,7 +233,6 @@ func (f OpenPointInTime) WithErrorTrace() func(*OpenPointInTimeRequest) {
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f OpenPointInTime) WithFilterPath(v ...string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		r.FilterPath = v
@@ -254,7 +240,6 @@ func (f OpenPointInTime) WithFilterPath(v ...string) func(*OpenPointInTimeReques
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f OpenPointInTime) WithHeader(h map[string]string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		if r.Header == nil {
@@ -267,7 +252,6 @@ func (f OpenPointInTime) WithHeader(h map[string]string) func(*OpenPointInTimeRe
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f OpenPointInTime) WithOpaqueID(s string) func(*OpenPointInTimeRequest) {
 	return func(r *OpenPointInTimeRequest) {
 		if r.Header == nil {

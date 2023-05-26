@@ -42,11 +42,9 @@ func newGraphExploreFunc(t Transport) GraphExplore {
 // GraphExplore - Explore extracted and summarized information about the documents and terms in an index.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/graph-explore-api.html.
-//
 type GraphExplore func(index []string, o ...func(*GraphExploreRequest)) (*Response, error)
 
 // GraphExploreRequest configures the Graph Explore API request.
-//
 type GraphExploreRequest struct {
 	Index        []string
 	DocumentType []string
@@ -67,7 +65,6 @@ type GraphExploreRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r GraphExploreRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -163,7 +160,6 @@ func (r GraphExploreRequest) Do(ctx context.Context, transport Transport) (*Resp
 }
 
 // WithContext sets the request context.
-//
 func (f GraphExplore) WithContext(v context.Context) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.ctx = v
@@ -171,7 +167,6 @@ func (f GraphExplore) WithContext(v context.Context) func(*GraphExploreRequest) 
 }
 
 // WithBody - Graph Query DSL.
-//
 func (f GraphExplore) WithBody(v io.Reader) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.Body = v
@@ -179,7 +174,6 @@ func (f GraphExplore) WithBody(v io.Reader) func(*GraphExploreRequest) {
 }
 
 // WithDocumentType - a list of document types to search; leave empty to perform the operation on all types.
-//
 func (f GraphExplore) WithDocumentType(v ...string) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.DocumentType = v
@@ -187,7 +181,6 @@ func (f GraphExplore) WithDocumentType(v ...string) func(*GraphExploreRequest) {
 }
 
 // WithRouting - specific routing value.
-//
 func (f GraphExplore) WithRouting(v string) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.Routing = v
@@ -195,7 +188,6 @@ func (f GraphExplore) WithRouting(v string) func(*GraphExploreRequest) {
 }
 
 // WithTimeout - explicit operation timeout.
-//
 func (f GraphExplore) WithTimeout(v time.Duration) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.Timeout = v
@@ -203,7 +195,6 @@ func (f GraphExplore) WithTimeout(v time.Duration) func(*GraphExploreRequest) {
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f GraphExplore) WithPretty() func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.Pretty = true
@@ -211,7 +202,6 @@ func (f GraphExplore) WithPretty() func(*GraphExploreRequest) {
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f GraphExplore) WithHuman() func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.Human = true
@@ -219,7 +209,6 @@ func (f GraphExplore) WithHuman() func(*GraphExploreRequest) {
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f GraphExplore) WithErrorTrace() func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.ErrorTrace = true
@@ -227,7 +216,6 @@ func (f GraphExplore) WithErrorTrace() func(*GraphExploreRequest) {
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f GraphExplore) WithFilterPath(v ...string) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		r.FilterPath = v
@@ -235,7 +223,6 @@ func (f GraphExplore) WithFilterPath(v ...string) func(*GraphExploreRequest) {
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f GraphExplore) WithHeader(h map[string]string) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		if r.Header == nil {
@@ -248,7 +235,6 @@ func (f GraphExplore) WithHeader(h map[string]string) func(*GraphExploreRequest)
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f GraphExplore) WithOpaqueID(s string) func(*GraphExploreRequest) {
 	return func(r *GraphExploreRequest) {
 		if r.Header == nil {

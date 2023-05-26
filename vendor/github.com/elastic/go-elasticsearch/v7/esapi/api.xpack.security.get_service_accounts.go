@@ -42,11 +42,9 @@ func newSecurityGetServiceAccountsFunc(t Transport) SecurityGetServiceAccounts {
 // This API is beta.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/current/security-api-get-service-accounts.html.
-//
 type SecurityGetServiceAccounts func(o ...func(*SecurityGetServiceAccountsRequest)) (*Response, error)
 
 // SecurityGetServiceAccountsRequest configures the Security Get Service Accounts API request.
-//
 type SecurityGetServiceAccountsRequest struct {
 	Namespace string
 	Service   string
@@ -62,7 +60,6 @@ type SecurityGetServiceAccountsRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r SecurityGetServiceAccountsRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -148,7 +145,6 @@ func (r SecurityGetServiceAccountsRequest) Do(ctx context.Context, transport Tra
 }
 
 // WithContext sets the request context.
-//
 func (f SecurityGetServiceAccounts) WithContext(v context.Context) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.ctx = v
@@ -156,7 +152,6 @@ func (f SecurityGetServiceAccounts) WithContext(v context.Context) func(*Securit
 }
 
 // WithNamespace - an identifier for the namespace.
-//
 func (f SecurityGetServiceAccounts) WithNamespace(v string) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.Namespace = v
@@ -164,7 +159,6 @@ func (f SecurityGetServiceAccounts) WithNamespace(v string) func(*SecurityGetSer
 }
 
 // WithService - an identifier for the service name.
-//
 func (f SecurityGetServiceAccounts) WithService(v string) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.Service = v
@@ -172,7 +166,6 @@ func (f SecurityGetServiceAccounts) WithService(v string) func(*SecurityGetServi
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f SecurityGetServiceAccounts) WithPretty() func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.Pretty = true
@@ -180,7 +173,6 @@ func (f SecurityGetServiceAccounts) WithPretty() func(*SecurityGetServiceAccount
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f SecurityGetServiceAccounts) WithHuman() func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.Human = true
@@ -188,7 +180,6 @@ func (f SecurityGetServiceAccounts) WithHuman() func(*SecurityGetServiceAccounts
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f SecurityGetServiceAccounts) WithErrorTrace() func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.ErrorTrace = true
@@ -196,7 +187,6 @@ func (f SecurityGetServiceAccounts) WithErrorTrace() func(*SecurityGetServiceAcc
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f SecurityGetServiceAccounts) WithFilterPath(v ...string) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		r.FilterPath = v
@@ -204,7 +194,6 @@ func (f SecurityGetServiceAccounts) WithFilterPath(v ...string) func(*SecurityGe
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f SecurityGetServiceAccounts) WithHeader(h map[string]string) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		if r.Header == nil {
@@ -217,7 +206,6 @@ func (f SecurityGetServiceAccounts) WithHeader(h map[string]string) func(*Securi
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f SecurityGetServiceAccounts) WithOpaqueID(s string) func(*SecurityGetServiceAccountsRequest) {
 	return func(r *SecurityGetServiceAccountsRequest) {
 		if r.Header == nil {

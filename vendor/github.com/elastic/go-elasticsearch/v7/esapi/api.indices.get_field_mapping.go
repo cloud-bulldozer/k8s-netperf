@@ -41,11 +41,9 @@ func newIndicesGetFieldMappingFunc(t Transport) IndicesGetFieldMapping {
 // IndicesGetFieldMapping returns mapping for one or more fields.
 //
 // See full documentation at https://www.elastic.co/guide/en/elasticsearch/reference/master/indices-get-field-mapping.html.
-//
 type IndicesGetFieldMapping func(fields []string, o ...func(*IndicesGetFieldMappingRequest)) (*Response, error)
 
 // IndicesGetFieldMappingRequest configures the Indices Get Field Mapping API request.
-//
 type IndicesGetFieldMappingRequest struct {
 	Index        []string
 	DocumentType []string
@@ -70,7 +68,6 @@ type IndicesGetFieldMappingRequest struct {
 }
 
 // Do executes the request and returns response or error.
-//
 func (r IndicesGetFieldMappingRequest) Do(ctx context.Context, transport Transport) (*Response, error) {
 	var (
 		method string
@@ -182,7 +179,6 @@ func (r IndicesGetFieldMappingRequest) Do(ctx context.Context, transport Transpo
 }
 
 // WithContext sets the request context.
-//
 func (f IndicesGetFieldMapping) WithContext(v context.Context) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.ctx = v
@@ -190,7 +186,6 @@ func (f IndicesGetFieldMapping) WithContext(v context.Context) func(*IndicesGetF
 }
 
 // WithIndex - a list of index names.
-//
 func (f IndicesGetFieldMapping) WithIndex(v ...string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.Index = v
@@ -198,7 +193,6 @@ func (f IndicesGetFieldMapping) WithIndex(v ...string) func(*IndicesGetFieldMapp
 }
 
 // WithDocumentType - a list of document types.
-//
 func (f IndicesGetFieldMapping) WithDocumentType(v ...string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.DocumentType = v
@@ -206,7 +200,6 @@ func (f IndicesGetFieldMapping) WithDocumentType(v ...string) func(*IndicesGetFi
 }
 
 // WithAllowNoIndices - whether to ignore if a wildcard indices expression resolves into no concrete indices. (this includes `_all` string or when no indices have been specified).
-//
 func (f IndicesGetFieldMapping) WithAllowNoIndices(v bool) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.AllowNoIndices = &v
@@ -214,7 +207,6 @@ func (f IndicesGetFieldMapping) WithAllowNoIndices(v bool) func(*IndicesGetField
 }
 
 // WithExpandWildcards - whether to expand wildcard expression to concrete indices that are open, closed or both..
-//
 func (f IndicesGetFieldMapping) WithExpandWildcards(v string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.ExpandWildcards = v
@@ -222,7 +214,6 @@ func (f IndicesGetFieldMapping) WithExpandWildcards(v string) func(*IndicesGetFi
 }
 
 // WithIgnoreUnavailable - whether specified concrete indices should be ignored when unavailable (missing or closed).
-//
 func (f IndicesGetFieldMapping) WithIgnoreUnavailable(v bool) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.IgnoreUnavailable = &v
@@ -230,7 +221,6 @@ func (f IndicesGetFieldMapping) WithIgnoreUnavailable(v bool) func(*IndicesGetFi
 }
 
 // WithIncludeDefaults - whether the default mapping values should be returned as well.
-//
 func (f IndicesGetFieldMapping) WithIncludeDefaults(v bool) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.IncludeDefaults = &v
@@ -238,7 +228,6 @@ func (f IndicesGetFieldMapping) WithIncludeDefaults(v bool) func(*IndicesGetFiel
 }
 
 // WithIncludeTypeName - whether a type should be returned in the body of the mappings..
-//
 func (f IndicesGetFieldMapping) WithIncludeTypeName(v bool) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.IncludeTypeName = &v
@@ -246,7 +235,6 @@ func (f IndicesGetFieldMapping) WithIncludeTypeName(v bool) func(*IndicesGetFiel
 }
 
 // WithLocal - return local information, do not retrieve the state from master node (default: false).
-//
 func (f IndicesGetFieldMapping) WithLocal(v bool) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.Local = &v
@@ -254,7 +242,6 @@ func (f IndicesGetFieldMapping) WithLocal(v bool) func(*IndicesGetFieldMappingRe
 }
 
 // WithPretty makes the response body pretty-printed.
-//
 func (f IndicesGetFieldMapping) WithPretty() func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.Pretty = true
@@ -262,7 +249,6 @@ func (f IndicesGetFieldMapping) WithPretty() func(*IndicesGetFieldMappingRequest
 }
 
 // WithHuman makes statistical values human-readable.
-//
 func (f IndicesGetFieldMapping) WithHuman() func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.Human = true
@@ -270,7 +256,6 @@ func (f IndicesGetFieldMapping) WithHuman() func(*IndicesGetFieldMappingRequest)
 }
 
 // WithErrorTrace includes the stack trace for errors in the response body.
-//
 func (f IndicesGetFieldMapping) WithErrorTrace() func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.ErrorTrace = true
@@ -278,7 +263,6 @@ func (f IndicesGetFieldMapping) WithErrorTrace() func(*IndicesGetFieldMappingReq
 }
 
 // WithFilterPath filters the properties of the response body.
-//
 func (f IndicesGetFieldMapping) WithFilterPath(v ...string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		r.FilterPath = v
@@ -286,7 +270,6 @@ func (f IndicesGetFieldMapping) WithFilterPath(v ...string) func(*IndicesGetFiel
 }
 
 // WithHeader adds the headers to the HTTP request.
-//
 func (f IndicesGetFieldMapping) WithHeader(h map[string]string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		if r.Header == nil {
@@ -299,7 +282,6 @@ func (f IndicesGetFieldMapping) WithHeader(h map[string]string) func(*IndicesGet
 }
 
 // WithOpaqueID adds the X-Opaque-Id header to the HTTP request.
-//
 func (f IndicesGetFieldMapping) WithOpaqueID(s string) func(*IndicesGetFieldMappingRequest) {
 	return func(r *IndicesGetFieldMappingRequest) {
 		if r.Header == nil {

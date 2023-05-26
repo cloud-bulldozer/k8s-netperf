@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
-	"github.com/vishnuchalla/go-commons/prometheus"
 	routev1 "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
 	"github.com/prometheus/common/model"
+	"github.com/vishnuchalla/go-commons/prometheus"
 	auth "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,7 +53,7 @@ type PodValues struct {
 type PromConnect struct {
 	URL       string
 	Token     string
-	Client	  *prometheus.Prometheus
+	Client    *prometheus.Prometheus
 	Verify    bool
 	OpenShift bool
 }
@@ -144,7 +144,7 @@ func NodeDetails(conn PromConnect) Details {
 		return pd
 	}
 	status := unmarshalVector(value, &pd)
-	if (!status) {
+	if !status {
 		logging.Error("cannot unmarshal node information")
 	}
 	return pd
@@ -169,7 +169,7 @@ func Platform(conn PromConnect) string {
 		return ""
 	}
 	status := unmarshalVector(value, &pd)
-	if (!status) {
+	if !status {
 		logging.Error("cannot unmarshal prom query")
 	}
 	return pd.Metric.Platform
@@ -196,7 +196,7 @@ func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
 		return ver
 	}
 	status := unmarshalVector(value, &vd)
-	if (!status) {
+	if !status {
 		logging.Error("Cannot unmarshal the OCP Cluster information")
 	}
 	return vd.Metric.Version
@@ -308,7 +308,7 @@ func avg(data []model.SamplePair) float64 {
 }
 
 // Unmarshals the vector to a given type
-func unmarshalVector(value model.Value, pd interface{}) (bool) {
+func unmarshalVector(value model.Value, pd interface{}) bool {
 	v := value.(model.Vector)
 	for _, s := range v {
 		d, _ := s.MarshalJSON()
