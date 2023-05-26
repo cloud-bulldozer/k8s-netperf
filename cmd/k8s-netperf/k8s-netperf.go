@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloud-bulldozer/go-commons/indexers"
+	"github.com/vishnuchalla/go-commons/indexers"
+	"github.com/vishnuchalla/go-commons/prometheus"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/iperf"
@@ -102,30 +103,14 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		pavail := false
-		pcon, found := metrics.Discover()
-		if !found {
-			// Assume we are not running against OpenShift
-			if len(promURL) > 1 {
-				pcon.URL = promURL
-				pavail = metrics.PromCheck(pcon)
-			}
-		} else {
-			// If the env isn't OpenShift assume the user is providing the path to prom
-			if !pcon.OpenShift {
-				pcon.URL = promURL
-				if len(promURL) > 1 {
-					pavail = metrics.PromCheck(pcon)
-				}
-			} else {
-				if len(promURL) > 1 {
-					pcon.URL = promURL
-				}
-				pavail = metrics.PromCheck(pcon)
-			}
+		pavail := true
+		pcon, _ := metrics.Discover()
+		if len(promURL) > 1 {
+			pcon.URL = promURL
 		}
-
-		if !pavail {
+		pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.Verify)
+		if err != nil {
+			pavail = false
 			log.Warn("😥 Prometheus is not available")
 		}
 
