@@ -143,15 +143,9 @@ func NodeDetails(conn PromConnect) Details {
 		logging.Error("Issue querying Prometheus")
 		return pd
 	}
-	v := value.(model.Vector)
-	for _, s := range v {
-		d, _ := s.MarshalJSON()
-		error := json.Unmarshal(d, &pd)
-		if error != nil {
-			logging.Error("cannot unmarshal node information")
-		} else {
-			break
-		}
+	status := unmarshalVector(value, &pd)
+	if (!status) {
+		logging.Error("cannot unmarshal node information")
 	}
 	return pd
 }
@@ -174,15 +168,9 @@ func Platform(conn PromConnect) string {
 		logging.Error("Issue querying Prometheus")
 		return ""
 	}
-	v := value.(model.Vector)
-	for _, s := range v {
-		d, _ := s.MarshalJSON()
-		error := json.Unmarshal(d, &pd)
-		if error != nil {
-			logging.Error("cannot unmarshal prom query")
-		} else {
-			break
-		}
+	status := unmarshalVector(value, &pd)
+	if (!status) {
+		logging.Error("cannot unmarshal prom query")
 	}
 	return pd.Metric.Platform
 
@@ -207,15 +195,9 @@ func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
 		logging.Error("Issue querying Prometheus")
 		return ver
 	}
-	v := value.(model.Vector)
-	for _, s := range v {
-		d, _ := s.MarshalJSON()
-		error := json.Unmarshal(d, &vd)
-		if error != nil {
-			logging.Error("Cannot unmarshal the OCP Cluster information")
-		} else {
-			break
-		}
+	status := unmarshalVector(value, &vd)
+	if (!status) {
+		logging.Error("Cannot unmarshal the OCP Cluster information")
 	}
 	return vd.Metric.Version
 }
@@ -228,15 +210,9 @@ func NodeMTU(conn PromConnect) (int, error) {
 	query := `node_network_mtu_bytes`
 	value, err := conn.Client.QueryRange(query, time.Now().Add(-time.Minute*1), time.Now(), time.Minute)
 	if err != nil {
-		return 0, fmt.Errorf("Issue querying Prometheus")
+		return 0, fmt.Errorf("Issue querying openshift mtu info from prometheus")
 	}
-	var mtu int
-	v := value.(model.Matrix)
-	for _, s := range v {
-		d := s.Values
-		mtu = int(d[0].Value)
-		break
-	}
+	mtu := int(value.(model.Matrix)[0].Values[0].Value)
 	return mtu, nil
 }
 
@@ -246,17 +222,11 @@ func IPSecEnabled(conn PromConnect, start time.Time, end time.Time) (bool, error
 		return false, fmt.Errorf(" Not able to collect OpenShift specific ovn ipsec info ")
 	}
 	query := `ovnkube_master_ipsec_enabled`
-	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
+	value, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
-		return false, fmt.Errorf("Issue querying Prometheus")
+		return false, fmt.Errorf("Issue querying openshift ovn ipsec info from prometheus")
 	}
-	var ipsec int
-	v := val.(model.Matrix)
-	for _, s := range v {
-		d := s.Values
-		ipsec = int(d[0].Value)
-		break
-	}
+	ipsec := int(value.(model.Matrix)[0].Values[0].Value)
 	if ipsec == 0 {
 		return false, nil
 	}
@@ -328,10 +298,26 @@ func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 	return pods, true
 }
 
+// Calculates average for the given data
 func avg(data []model.SamplePair) float64 {
 	sum := 0.0
 	for s := range data {
 		sum += float64(data[s].Value)
 	}
 	return sum / float64(len(data))
+}
+
+// Unmarshals the vector to a given type
+func unmarshalVector(value model.Value, pd interface{}) (bool) {
+	v := value.(model.Vector)
+	for _, s := range v {
+		d, _ := s.MarshalJSON()
+		error := json.Unmarshal(d, &pd)
+		if error != nil {
+			continue
+		} else {
+			return true
+		}
+	}
+	return false
 }
