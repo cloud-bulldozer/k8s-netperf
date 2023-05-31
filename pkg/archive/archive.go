@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/indexers"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
-	"github.com/vishnuchalla/go-commons/indexers"
 )
 
 const ltcyMetric = "usec"

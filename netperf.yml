@@ -3,7 +3,7 @@ TCPStream:
    parallelism: 1
    profile: "TCP_STREAM"
    duration: 10
-   samples: 3
+   samples: 1
    messagesize: 1024
 
 TCPStream2:

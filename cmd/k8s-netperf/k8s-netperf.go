@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloud-bulldozer/go-commons/indexers"
+	"github.com/cloud-bulldozer/go-commons/prometheus"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/iperf"
@@ -18,8 +20,6 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
-	"github.com/vishnuchalla/go-commons/indexers"
-	"github.com/vishnuchalla/go-commons/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -47,6 +47,7 @@ var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
 	Short: "A tool to run network performance tests in Kubernetes cluster",
 	Run: func(cmd *cobra.Command, args []string) {
+
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -82,6 +83,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
+		}
+		if clean {
+			cleanup(client)
 		}
 		s := config.PerfScenarios{
 			HostNetwork: full,
@@ -248,32 +252,42 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		if clean {
-			log.Debug("Cleaning resources created by k8s-netperf")
-			svcList, err := k8s.GetServices(client, namespace)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-			for svc := range svcList.Items {
-				err = k8s.DestroyService(client, svcList.Items[svc])
-				if err != nil {
-					log.Error(err)
-				}
-			}
-			dpList, err := k8s.GetDeployments(client, namespace)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-			for dp := range dpList.Items {
-				err = k8s.DestroyDeployment(client, dpList.Items[dp])
-				if err != nil {
-					log.Error(err)
-				}
-			}
+			cleanup(client)
 		}
 		os.Exit(retCode)
 	},
+}
+
+func cleanup(client *kubernetes.Clientset) {
+	log.Info("Cleaning resources created by k8s-netperf")
+	svcList, err := k8s.GetServices(client, namespace)
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
+	for svc := range svcList.Items {
+		err = k8s.DestroyService(client, svcList.Items[svc])
+		if err != nil {
+			log.Error(err)
+		}
+	}
+	dpList, err := k8s.GetDeployments(client, namespace)
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
+	for dp := range dpList.Items {
+		err = k8s.DestroyDeployment(client, dpList.Items[dp])
+		if err != nil {
+			log.Error(err)
+		}
+		_, err := k8s.WaitForDelete(client, dpList.Items[dp])
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+	}
+
 }
 
 func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool) result.Data {
@@ -353,7 +367,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
-	rootCmd.Flags().BoolVar(&clean, "clean", false, "Clean-up resources created by k8s-netperf")
+	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
@@ -368,4 +382,5 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
 }
