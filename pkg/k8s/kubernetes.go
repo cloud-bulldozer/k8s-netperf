@@ -11,6 +11,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -54,7 +55,7 @@ const IperfServerDataPort = 43433
 
 // Labels we will apply to k8s assets.
 const serverRole = "server"
-const clientRole = "client"
+const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
@@ -67,7 +68,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if err != nil {
 		log.Warn(err)
 	}
-	log.Infof("Deploying in %s zone", z)
+	if numNodes > 1 {
+		log.Infof("Deploying in %s zone", z)
+	}
+
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
@@ -75,6 +79,17 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
+
+	// Schedule pods to nodes with role worker=
+	workerNodeSelectorExpression := &apiv1.NodeSelector{
+		NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+			{
+				MatchExpressions: []apiv1.NodeSelectorRequirement{
+					{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+				},
+			},
+		},
+	}
 
 	zoneNodeSelectorExpression := []apiv1.PreferredSchedulingTerm{
 		{
@@ -86,6 +101,18 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			},
 		},
 	}
+
+	clientRoleAffinity := []apiv1.PodAffinityTerm{
+		{
+			LabelSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientRole}},
+				},
+			},
+			TopologyKey: "kubernetes.io/hostname",
+		},
+	}
+
 	if s.NodeLocal {
 		//  Create Netperf client on the same node as the server.
 		cdp := DeploymentParams{
@@ -97,10 +124,26 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 			Port:      NetperfServerCtlPort,
 		}
-		if z != "" {
+		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
 			}
+			cdp.PodAffinity = apiv1.PodAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{serverRole}},
+							},
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			}
+		}
+
+		cdp.NodeAffinity = apiv1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 		}
 		s.Client, err = deployDeployment(client, cdp)
 		if err != nil {
@@ -143,6 +186,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:      NetperfServerCtlPort,
 	}
+	cdpAcross.PodAntiAffinity = apiv1.PodAntiAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
+	}
+
 	cdpHostAcross := DeploymentParams{
 		Name:        "client-host",
 		Namespace:   "netperf",
@@ -152,15 +199,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
 		Port:        NetperfServerCtlPort,
-	}
-	workerNodeSelectorExpression := &apiv1.NodeSelector{
-		NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-			{
-				MatchExpressions: []apiv1.NodeSelectorRequirement{
-					{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
-				},
-			},
-		},
 	}
 	if z != "" {
 		if numNodes > 1 {
@@ -177,6 +215,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	if ncount > 1 {
 		if s.HostNetwork {
+			cdpHostAcross.NodeAffinity = apiv1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+			}
+			cdpHostAcross.PodAntiAffinity = apiv1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
+			}
 			s.ClientHost, err = deployDeployment(client, cdpHostAcross)
 		}
 		if err != nil {
@@ -207,6 +251,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
 		Port:      NetperfServerCtlPort,
 	}
+	if s.NodeLocal {
+		sdp.PodAffinity = apiv1.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
+		}
+	}
 	if z != "" {
 		var affinity apiv1.NodeAffinity
 		if numNodes > 1 {
@@ -224,33 +273,27 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	if ncount > 1 {
 		antiAffinity := apiv1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
+			RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
 				{
-					Weight: 100,
-					PodAffinityTerm: apiv1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRole}},
-							},
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRole}},
 						},
-						TopologyKey: "kubernetes.io/hostname",
 					},
+					TopologyKey: "kubernetes.io/hostname",
 				},
 			},
 		}
 		sdp.PodAntiAffinity = antiAffinity
 		antiAffinity = apiv1.PodAntiAffinity{
-			PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
+			RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
 				{
-					Weight: 100,
-					PodAffinityTerm: apiv1.PodAffinityTerm{
-						LabelSelector: &metav1.LabelSelector{
-							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRole}},
-							},
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRole}},
 						},
-						TopologyKey: "kubernetes.io/hostname",
 					},
+					TopologyKey: "kubernetes.io/hostname",
 				},
 			},
 		}
@@ -315,6 +358,24 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 		}
 	}
 	return false, fmt.Errorf("❌ Deployment had issues")
+}
+
+// WaitForDelete return true if the deployment is deleted, false otherwise. Error if it goes bad.
+func WaitForDelete(c *kubernetes.Clientset, dp appsv1.Deployment) (bool, error) {
+	log.Infof("⏰ Waiting for %s Deployment to deleted...", dp.Name)
+	// Timeout in seconds
+	timeout := int64(180)
+	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{TimeoutSeconds: &timeout})
+	if err != nil {
+		return false, err
+	}
+	defer dw.Stop()
+	for event := range dw.ResultChan() {
+		if event.Type == watch.Deleted {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("❌ Deployment delete issues")
 }
 
 // GetZone will determine if we have a multiAZ/Zone cloud.
