@@ -29,4 +29,4 @@ clean: $(BIN_PATH)
 	rm -rf bin/$(ARCH)
 
 $(BIN_PATH): $(SOURCES)
-	GOARCH=$(ARCH) CGO_ENABLED=$(CGO) go build -v -mod vendor -o $(BIN_PATH) ./cmd/k8s-netperf
+	GOARCH=$(ARCH) CGO_ENABLED=$(CGO) go build -v -o $(BIN_PATH) ./cmd/k8s-netperf
