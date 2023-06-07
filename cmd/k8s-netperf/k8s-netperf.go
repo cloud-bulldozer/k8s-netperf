@@ -126,6 +126,15 @@ var rootCmd = &cobra.Command{
 		}
 
 		var sr result.ScenarioResults
+		// If the client and server needs to be across zones
+		_, nodesInZone, _ := k8s.GetZone(client)
+		var acrossAZ bool
+		if nodesInZone > 1 {
+			acrossAZ = false
+		} else {
+			acrossAZ = true
+		}
+
 		// Run through each test
 		for _, nc := range s.Configs {
 			// Determine the metric for the test
@@ -134,6 +143,7 @@ var rootCmd = &cobra.Command{
 				metric = "Mb/s"
 			}
 			nc.Metric = metric
+			nc.AcrossAZ = acrossAZ
 
 			if s.HostNetwork {
 				npr := executeWorkload(nc, s, true, false)
@@ -194,7 +204,7 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 				os.Exit(1)
 			}
-			log.Infof("Indexing [%d] documents in %s", len(jdocs), index)
+			log.Infof("Indexing [%d] documents in %s with UUID %s", len(jdocs), index, uid)
 			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
 			if err != nil {
 				log.Error(err.Error())
@@ -240,12 +250,12 @@ var rootCmd = &cobra.Command{
 		if result.CheckHostResults(sr) {
 			diffs, err := result.TCPThroughputDiff(&sr)
 			if err != nil {
-				fmt.Println("Unable to calculate difference between HostNetwork and PodNetwork")
+				log.Error("Unable to calculate difference between HostNetwork and PodNetwork")
 				retCode = 1
 			} else {
 				for _, diff := range diffs {
 					if tcpt < diff.Result {
-						fmt.Printf("😥 TCP Single Stream (Message Size : %d) percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent)\r\n", diff.MessageSize, tcpt, diff.Result)
+						log.Errorf("😥 TCP Single Stream (Message Size : %d) percent difference when comparing hostNetwork to podNetwork is greater than %.1f percent (%.1f percent) for %d streams", diff.MessageSize, tcpt, diff.Result, diff.Streams)
 						retCode = 1
 					}
 				}
@@ -325,7 +335,9 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 	npr.Service = service
 	npr.SameNode = sameNode
 	npr.HostNetwork = hostNet
+	npr.AcrossAZ = nc.AcrossAZ
 	npr.StartTime = time.Now()
+	log.Debugf("Executing workloads. Server on %s client on %s, hostNetwork is %t, service is %t", s.ServerNodeInfo.Hostname, s.ClientNodeInfo.Hostname, hostNet, service)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
 		if iperf3 {
@@ -361,6 +373,9 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 	npr.EndTime = time.Now()
 	npr.ClientNodeInfo = s.ClientNodeInfo
 	npr.ServerNodeInfo = s.ServerNodeInfo
+	npr.ServerNodeLabels, _ = k8s.GetNodeLabels(s.ClientSet, s.ServerNodeInfo.Hostname)
+	npr.ClientNodeLabels, _ = k8s.GetNodeLabels(s.ClientSet, s.ClientNodeInfo.Hostname)
+
 	return npr
 }
 
