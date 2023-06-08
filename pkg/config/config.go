@@ -23,6 +23,7 @@ type Config struct {
 	MessageSize int    `yaml:"messagesize,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
 	Metric      string
+	AcrossAZ    bool
 }
 
 // PerfScenarios describes the different scenarios
@@ -50,7 +51,7 @@ const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr|udp_crr|sctp_str
 // describes which tests to run
 // Returns Config struct
 func ParseConf(fn string) ([]Config, error) {
-	log.Infof("📒 Reading %s file.\n", fn)
+	log.Infof("📒 Reading %s file. ", fn)
 	buf, err := ioutil.ReadFile(fn)
 	if err != nil {
 		return nil, err
@@ -93,5 +94,5 @@ func ParseConf(fn string) ([]Config, error) {
 
 // Show Display the netperf config
 func Show(c Config, driver string) {
-	log.Infof("🗒️  Running %s %s (service %t) for %ds\n", driver, c.Profile, c.Service, c.Duration)
+	log.Infof("🗒️  Running %s %s (service %t) for %ds ", driver, c.Profile, c.Service, c.Duration)
 }

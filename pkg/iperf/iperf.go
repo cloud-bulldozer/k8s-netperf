@@ -55,7 +55,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	id := uuid.New()
 	file := fmt.Sprintf("/tmp/iperf-%s", id.String())
 	pod := client.Items[0]
-	log.Debugf("🔥 Client (%s,%s) starting iperf3 against server : %s\n", pod.Name, pod.Status.PodIP, serverIP)
+	log.Debugf("🔥 Client (%s,%s) starting iperf3 against server : %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, workload)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {

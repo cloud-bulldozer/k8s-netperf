@@ -70,8 +70,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	if numNodes > 1 {
 		log.Infof("Deploying in %s zone", z)
+	} else {
+		log.Warn("⚠️  Single node per zone")
 	}
-
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
@@ -404,7 +405,6 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	}
 	// No zone had > 1, use the last zone.
 	if zone == "" {
-		log.Warn("⚠️  Single node per zone")
 		numNodes = 1
 		zone = lz
 	}
@@ -458,6 +458,15 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	return dc.Create(context.TODO(), deployment, metav1.CreateOptions{})
 }
 
+// GetNodeLabels Return Labels for a specific node
+func GetNodeLabels(c *kubernetes.Clientset, node string) (map[string]string, error) {
+	nodeInfo, err := c.CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return nodeInfo.GetLabels(), nil
+}
+
 // GetPodNodeInfo collects the node information for a specific pod
 func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeInfo, error) {
 	var info metrics.NodeInfo
@@ -482,6 +491,7 @@ func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeI
 			info.Hostname = p.Spec.NodeName
 		}
 	}
+	log.Debugf("%s Running on %s with IP %s", d.Name, info.Hostname, info.IP)
 	return info, nil
 }
 

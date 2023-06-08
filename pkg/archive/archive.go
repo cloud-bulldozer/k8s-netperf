@@ -19,26 +19,31 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID           string           `json:"uuid"`
-	Timestamp      time.Time        `json:"timestamp"`
-	HostNetwork    bool             `json:"hostNetwork"`
-	Driver         string           `json:"driver"`
-	Parallelism    int              `json:"parallelism"`
-	Profile        string           `json:"profile"`
-	Duration       int              `json:"duration"`
-	Samples        int              `json:"samples"`
-	Messagesize    int              `json:"messageSize"`
-	Throughput     float64          `json:"throughput"`
-	Latency        float64          `json:"latency"`
-	TputMetric     string           `json:"tputMetric"`
-	LtcyMetric     string           `json:"ltcyMetric"`
-	TCPRetransmit  float64          `json:"TCPRetransmits"`
-	UDPLossPercent float64          `json:"UDPLossPercent"`
-	Metadata       result.Metadata  `json:"metadata"`
-	ServerNodeCPU  metrics.NodeCPU  `json:"serverCPU"`
-	ServerPodCPU   []metrics.PodCPU `json:"serverPods"`
-	ClientNodeCPU  metrics.NodeCPU  `json:"clientCPU"`
-	ClientPodCPU   []metrics.PodCPU `json:"clientPods"`
+	UUID             string            `json:"uuid"`
+	Timestamp        time.Time         `json:"timestamp"`
+	HostNetwork      bool              `json:"hostNetwork"`
+	Driver           string            `json:"driver"`
+	Parallelism      int               `json:"parallelism"`
+	Profile          string            `json:"profile"`
+	Duration         int               `json:"duration"`
+	Local            bool              `json:"local"`
+	AcrossAZ         bool              `json:"acrossAZ"`
+	Samples          int               `json:"samples"`
+	MTU              int               `json:"mtu"`
+	Messagesize      int               `json:"messageSize"`
+	Throughput       float64           `json:"throughput"`
+	Latency          float64           `json:"latency"`
+	TputMetric       string            `json:"tputMetric"`
+	LtcyMetric       string            `json:"ltcyMetric"`
+	TCPRetransmit    float64           `json:"tcpRetransmits"`
+	UDPLossPercent   float64           `json:"udpLossPercent"`
+	Metadata         result.Metadata   `json:"metadata"`
+	ServerNodeCPU    metrics.NodeCPU   `json:"serverCPU"`
+	ServerPodCPU     []metrics.PodCPU  `json:"serverPods"`
+	ClientNodeCPU    metrics.NodeCPU   `json:"clientCPU"`
+	ClientPodCPU     []metrics.PodCPU  `json:"clientPods"`
+	ClientNodeLabels map[string]string `json:"clientNodeLabels"`
+	ServerNodeLabels map[string]string `json:"serverNodeLabels"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -59,7 +64,7 @@ func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 		logging.Errorf("%v indexer: %v", indexerConfig.Type, err.Error())
 		return nil, fmt.Errorf("Failure while connnecting to Opensearch")
 	}
-	logging.Infof("Connected to : %s\n", url)
+	logging.Infof("Connected to : %s ", url)
 	return indexer, nil
 }
 
@@ -76,22 +81,25 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			continue
 		}
 		d := Doc{
-			UUID:          uuid,
-			Timestamp:     time,
-			Driver:        r.Driver,
-			HostNetwork:   r.HostNetwork,
-			Parallelism:   r.Parallelism,
-			Profile:       r.Profile,
-			Duration:      r.Duration,
-			Samples:       r.Samples,
-			Messagesize:   r.MessageSize,
-			TputMetric:    r.Metric,
-			LtcyMetric:    ltcyMetric,
-			ServerNodeCPU: r.ServerMetrics,
-			ClientNodeCPU: r.ClientMetrics,
-			ServerPodCPU:  r.ServerPodCPU.Results,
-			ClientPodCPU:  r.ClientPodCPU.Results,
-			Metadata:      sr.Metadata,
+			UUID:             uuid,
+			Timestamp:        time,
+			Driver:           r.Driver,
+			HostNetwork:      r.HostNetwork,
+			Parallelism:      r.Parallelism,
+			Profile:          r.Profile,
+			Duration:         r.Duration,
+			Samples:          r.Samples,
+			Messagesize:      r.MessageSize,
+			TputMetric:       r.Metric,
+			LtcyMetric:       ltcyMetric,
+			ServerNodeCPU:    r.ServerMetrics,
+			ClientNodeCPU:    r.ClientMetrics,
+			ServerPodCPU:     r.ServerPodCPU.Results,
+			ClientPodCPU:     r.ClientPodCPU.Results,
+			Metadata:         sr.Metadata,
+			ServerNodeLabels: r.ServerNodeLabels,
+			ClientNodeLabels: r.ClientNodeLabels,
+			AcrossAZ:         r.AcrossAZ,
 		}
 		d.UDPLossPercent, _ = result.Average(r.LossSummary)
 		d.TCPRetransmit, _ = result.Average(r.RetransmitSummary)

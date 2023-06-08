@@ -34,6 +34,7 @@ type Data struct {
 	StartTime         time.Time
 	EndTime           time.Time
 	Service           bool
+	AcrossAZ          bool
 	ThroughputSummary []float64
 	LatencySummary    []float64
 	LossSummary       []float64
@@ -42,6 +43,8 @@ type Data struct {
 	ServerMetrics     metrics.NodeCPU
 	ClientPodCPU      metrics.PodValues
 	ServerPodCPU      metrics.PodValues
+	ClientNodeLabels  map[string]string
+	ServerNodeLabels  map[string]string
 }
 
 // ScenarioResults each scenario could have multiple results
@@ -99,6 +102,7 @@ func CheckHostResults(s ScenarioResults) bool {
 
 type DiffData struct {
 	MessageSize int
+	Streams     int
 	HostPerf    float64
 	PodPerf     float64
 }
@@ -106,6 +110,7 @@ type DiffData struct {
 type Diff struct {
 	MessageSize int
 	Result      float64
+	Streams     int
 }
 
 // TCPThroughputDiff accepts the Scenario Results and calculates the %diff.
@@ -123,10 +128,12 @@ func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 					hostPerf, _ = Average(t.ThroughputSummary)
 					diff.MessageSize = t.MessageSize
 					diff.HostPerf = hostPerf
+					diff.Streams = t.Parallelism
 				} else {
 					podPerf, _ = Average(t.ThroughputSummary)
 					diff.MessageSize = t.MessageSize
 					diff.PodPerf = podPerf
+					diff.Streams = t.Parallelism
 				}
 				diffRes = append(diffRes, diff)
 			}
@@ -136,8 +143,9 @@ func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 	for _, msg := range s.Results {
 		if !msg.Service && msg.Parallelism == 1 && msg.HostNetwork && msg.Profile == "TCP_STREAM" {
 			r := Diff{
-				Result:      doPerfDiff(&diffRes, msg.Config.MessageSize),
+				Result:      doPerfDiff(&diffRes, msg.Config.MessageSize, 1),
 				MessageSize: msg.Config.MessageSize,
+				Streams:     msg.Parallelism,
 			}
 			res = append(res, r)
 		}
@@ -145,11 +153,11 @@ func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 	return res, nil
 }
 
-func doPerfDiff(diff *[]DiffData, msg int) float64 {
+func doPerfDiff(diff *[]DiffData, msg int, streams int) float64 {
 	host := 0.0
 	pod := 0.0
 	for _, d := range *diff {
-		if d.MessageSize == msg {
+		if d.MessageSize == msg && d.Streams == streams {
 			if d.HostPerf > 0.0 {
 				host = d.HostPerf
 			}
@@ -158,7 +166,7 @@ func doPerfDiff(diff *[]DiffData, msg int) float64 {
 			}
 		}
 	}
-	logging.Debugf("Message Size %d : PodNetwork throughput %f, HostNetwork throughput %f", msg, pod, host)
+	logging.Debugf("Message Size %d : PodNetwork throughput %f, HostNetwork throughput %f for %d streams", msg, pod, host, streams)
 	return calDiff(host, pod)
 }
 

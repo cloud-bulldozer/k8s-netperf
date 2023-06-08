@@ -18,6 +18,7 @@ import (
 type NodeInfo struct {
 	IP       string
 	Hostname string
+	NodeName string
 }
 
 // NodeCPU stores CPU information for a specific Node
