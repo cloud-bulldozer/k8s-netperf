@@ -29,7 +29,6 @@ type Doc struct {
 	Local            bool              `json:"local"`
 	AcrossAZ         bool              `json:"acrossAZ"`
 	Samples          int               `json:"samples"`
-	MTU              int               `json:"mtu"`
 	Messagesize      int               `json:"messageSize"`
 	Throughput       float64           `json:"throughput"`
 	Latency          float64           `json:"latency"`

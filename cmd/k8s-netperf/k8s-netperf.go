@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -178,22 +179,25 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		if len(searchURL) > 1 {
-			// Metadata
-			node := metrics.NodeDetails(pcon)
-			sr.Metadata.Kernel = node.Metric.Kernel
-			sr.Metadata.Kubelet = node.Metric.Kubelet
-			sr.Metadata.OCPVersion = metrics.OCPversion(pcon, fTime, lTime)
-			sr.Metadata.Platform = metrics.Platform(pcon)
-			sec, err := metrics.IPSecEnabled(pcon, fTime, lTime)
-			if err == nil {
-				sr.Metadata.IPsec = sec
-			}
-			mtu, err := metrics.NodeMTU(pcon)
-			if err == nil {
-				sr.Metadata.MTU = mtu
-			}
+		// Metadata
+		node := metrics.NodeDetails(pcon)
+		sr.Metadata.Kernel = node.Metric.Kernel
+		sr.Metadata.Kubelet = node.Metric.Kubelet
+		sr.Metadata.OCPVersion = metrics.OCPversion(pcon, fTime, lTime)
+		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
+		short := shortReg.FindString(sr.Metadata.OCPVersion)
+		sr.Metadata.OCPShortVersion = short
+		sr.Metadata.Platform = metrics.Platform(pcon)
+		sec, err := metrics.IPSecEnabled(pcon, fTime, lTime)
+		if err == nil {
+			sr.Metadata.IPsec = sec
+		}
+		mtu, err := metrics.NodeMTU(pcon)
+		if err == nil {
+			sr.Metadata.MTU = mtu
+		}
 
+		if len(searchURL) > 1 {
 			jdocs, err := archive.BuildDocs(sr, uid)
 			if err != nil {
 				log.Error(err)
