@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloud-bulldozer/go-commons/indexers"
+	ocpmetadata "github.com/cloud-bulldozer/go-commons/ocp-metadata"
 	"github.com/cloud-bulldozer/go-commons/prometheus"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
@@ -180,9 +181,18 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Metadata
+		meta, err := ocpmetadata.NewMetadata(&s.RestConfig)
+		if err == nil {
+			metadata, err := meta.GetClusterMetadata()
+			if err == nil {
+				sr.Metadata.ClusterMetadata = metadata
+			} else {
+				log.Error(" issue getting common metadata using go-commons")
+			}
+		}
+
 		node := metrics.NodeDetails(pcon)
 		sr.Metadata.Kernel = node.Metric.Kernel
-		sr.Metadata.Kubelet = node.Metric.Kubelet
 		sr.Metadata.OCPVersion = metrics.OCPversion(pcon, fTime, lTime)
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.Metadata.OCPVersion)

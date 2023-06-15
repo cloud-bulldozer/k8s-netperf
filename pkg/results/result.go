@@ -8,6 +8,7 @@ import (
 	"time"
 
 	math "github.com/aclements/go-moremath/stats"
+	ocpmeta "github.com/cloud-bulldozer/go-commons/ocp-metadata"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
@@ -55,6 +56,7 @@ type ScenarioResults struct {
 
 // Metadata for the run
 type Metadata struct {
+	ocpmeta.ClusterMetadata
 	Platform        string `json:"platform"`
 	Kernel          string `json:"kernel"`
 	Kubelet         string `json:"kubelet"`
