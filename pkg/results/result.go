@@ -57,10 +57,7 @@ type ScenarioResults struct {
 // Metadata for the run
 type Metadata struct {
 	ocpmeta.ClusterMetadata
-	Platform        string `json:"platform"`
 	Kernel          string `json:"kernel"`
-	Kubelet         string `json:"kubelet"`
-	OCPVersion      string `json:"ocpVersion"`
 	OCPShortVersion string `json:"ocpShortVersion"`
 	IPsec           bool   `json:"ipsec"`
 	MTU             int    `json:"mtu"`
