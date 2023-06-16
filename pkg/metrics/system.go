@@ -107,58 +107,6 @@ func NodeDetails(conn PromConnect) Details {
 	return pd
 }
 
-// Platform returns the platform
-func Platform(conn PromConnect) string {
-	type Data struct {
-		Metric struct {
-			Platform string `json:"type"`
-		}
-	}
-	pd := Data{}
-	if !conn.OpenShift {
-		logging.Warn("Not able to collect OpenShift Specific version info")
-		return ""
-	}
-	query := `cluster_infrastructure_provider`
-	value, err := conn.Client.Query(query, time.Now())
-	if err != nil {
-		logging.Error("Issue querying Prometheus")
-		return ""
-	}
-	status := unmarshalVector(value, &pd)
-	if !status {
-		logging.Error("cannot unmarshal prom query")
-	}
-	return pd.Metric.Platform
-
-}
-
-// OCPversion returns the Cluster version
-func OCPversion(conn PromConnect, start time.Time, end time.Time) string {
-	type Data struct {
-		Metric struct {
-			Version string `json:"version"`
-		}
-	}
-	vd := Data{}
-	ver := ""
-	if !conn.OpenShift {
-		logging.Warn("Not able to collect OpenShift Specific version info")
-		return ver
-	}
-	query := `cluster_version{type="current"}`
-	value, err := conn.Client.Query(query, time.Now())
-	if err != nil {
-		logging.Error("Issue querying Prometheus")
-		return ver
-	}
-	status := unmarshalVector(value, &vd)
-	if !status {
-		logging.Error("Cannot unmarshal the OCP Cluster information")
-	}
-	return vd.Metric.Version
-}
-
 // NodeMTU return mtu
 func NodeMTU(conn PromConnect) (int, error) {
 	if !conn.OpenShift {

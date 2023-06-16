@@ -193,11 +193,9 @@ var rootCmd = &cobra.Command{
 
 		node := metrics.NodeDetails(pcon)
 		sr.Metadata.Kernel = node.Metric.Kernel
-		sr.Metadata.OCPVersion = metrics.OCPversion(pcon, fTime, lTime)
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.Metadata.OCPVersion)
 		sr.Metadata.OCPShortVersion = short
-		sr.Metadata.Platform = metrics.Platform(pcon)
 		sec, err := metrics.IPSecEnabled(pcon, fTime, lTime)
 		if err == nil {
 			sr.Metadata.IPsec = sec
