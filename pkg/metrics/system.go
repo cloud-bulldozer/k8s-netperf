@@ -131,7 +131,12 @@ func IPSecEnabled(conn PromConnect, start time.Time, end time.Time) (bool, error
 	if err != nil {
 		return false, fmt.Errorf("Issue querying openshift ovn ipsec info from prometheus")
 	}
-	ipsec := int(value.(model.Matrix)[0].Values[0].Value)
+	ipsec := 0
+	if len(value.(model.Matrix)) > 1 {
+		ipsec = int(value.(model.Matrix)[0].Values[0].Value)
+	} else {
+		return false, fmt.Errorf(" Issue capturing ipsec information")
+	}
 	if ipsec == 0 {
 		return false, nil
 	}

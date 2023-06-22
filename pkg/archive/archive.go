@@ -26,6 +26,7 @@ type Doc struct {
 	Parallelism      int               `json:"parallelism"`
 	Profile          string            `json:"profile"`
 	Duration         int               `json:"duration"`
+	Service          bool              `json:"service"`
 	Local            bool              `json:"local"`
 	AcrossAZ         bool              `json:"acrossAZ"`
 	Samples          int               `json:"samples"`
@@ -88,6 +89,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			Profile:          r.Profile,
 			Duration:         r.Duration,
 			Samples:          r.Samples,
+			Service:          r.Service,
 			Messagesize:      r.MessageSize,
 			TputMetric:       r.Metric,
 			LtcyMetric:       ltcyMetric,
