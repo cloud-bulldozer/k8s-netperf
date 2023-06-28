@@ -78,15 +78,26 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if err != nil {
 		return err
 	}
-	ncount := len(nodes.Items)
-	log.Debugf("Number of nodes with role worker: %d", ncount)
 
-	// Schedule pods to nodes with role worker=
+	ncount := 0
+	for _, node := range nodes.Items {
+		if _, ok := node.Labels["node-role.kubernetes.io/infra"]; !ok {
+			ncount++
+		}
+	}
+	log.Debugf("Number of nodes with role worker: %d", ncount)
+	if !s.NodeLocal && ncount < 2 {
+		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
+	}
+
+	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
 	workerNodeSelectorExpression := &apiv1.NodeSelector{
 		NodeSelectorTerms: []apiv1.NodeSelectorTerm{
 			{
 				MatchExpressions: []apiv1.NodeSelectorRequirement{
 					{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
+					{Key: "node-role.kubernetes.io/infra", Operator: apiv1.NodeSelectorOpNotIn, Values: []string{""}},
+					{Key: "node-role.kubernetes.io/workload", Operator: apiv1.NodeSelectorOpNotIn, Values: []string{""}},
 				},
 			},
 		},
