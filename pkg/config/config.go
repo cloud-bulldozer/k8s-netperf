@@ -9,7 +9,7 @@ import (
 
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -47,6 +47,32 @@ type PerfScenarios struct {
 // Tests we will support in k8s-netperf
 const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr|udp_crr|sctp_stream|sctp_rr|sctp_crr"
 
+func validConfig(cfg Config) (bool, error) {
+	preEval := regexp.MustCompile("(?i)" + validTests)
+	p := preEval.MatchString(cfg.Profile)
+	if !p {
+		return false, fmt.Errorf("unknown netperf profile")
+	}
+	if cfg.Duration < 1 {
+		return false, fmt.Errorf("duration must be > 0")
+	}
+	if cfg.Samples < 1 {
+		return false, fmt.Errorf("samples must be > 0")
+	}
+	if cfg.MessageSize < 1 {
+		return false, fmt.Errorf("messagesize must be > 0")
+	}
+	if cfg.Parallelism < 1 {
+		return false, fmt.Errorf("parallelism must be > 0")
+	}
+	if cfg.Service {
+		if cfg.Parallelism > 1 {
+			return false, fmt.Errorf("parallelism must be 1 when using a service")
+		}
+	}
+	return true, nil
+}
+
 // ParseConf will read in the netperf configuration file which
 // describes which tests to run
 // Returns Config struct
@@ -64,30 +90,46 @@ func ParseConf(fn string) ([]Config, error) {
 	// Ignore the key
 	// Pull out the specific tests
 	var tests []Config
-	preEval := regexp.MustCompile("(?i)" + validTests)
 	for _, value := range c {
-		p := preEval.MatchString(value.Profile)
-		if !p {
-			return nil, fmt.Errorf("unknown netperf profile")
-		}
-		if value.Duration < 1 {
-			return nil, fmt.Errorf("duration must be > 0")
-		}
-		if value.Samples < 1 {
-			return nil, fmt.Errorf("samples must be > 0")
-		}
-		if value.MessageSize < 1 {
-			return nil, fmt.Errorf("messagesize must be > 0")
-		}
-		if value.Parallelism < 1 {
-			return nil, fmt.Errorf("parallelism must be > 0")
-		}
-		if value.Service {
-			if value.Parallelism > 1 {
-				return nil, fmt.Errorf("parallelism must be 1 when using a service")
-			}
+		ok, err := validConfig(value)
+		if !ok {
+			return nil, err
 		}
 		tests = append(tests, value)
+	}
+	return tests, nil
+}
+
+// ParseV2Conf will read in the netperf configuration file which
+// describes which tests to run
+// Returns Config struct
+func ParseV2Conf(fn string) ([]Config, error) {
+	log.Infof("📒 Reading %s file - using ConfigV2 Method. ", fn)
+	buf, err := ioutil.ReadFile(fn)
+	if err != nil {
+		return nil, err
+	}
+	c := make(map[string][]Config)
+	// New YAML structure :
+	// tests :
+	//   - Test_name :
+	//     profile: <xyz> ...
+	err = yaml.Unmarshal(buf, &c)
+	if err != nil {
+		return nil, fmt.Errorf("in file %q: %v", fn, err)
+	}
+
+	// Ignore the key
+	// Pull out the specific tests
+	var tests []Config
+	for _, cf := range c {
+		for _, cfg := range cf {
+			ok, err := validConfig(cfg)
+			if !ok {
+				return nil, err
+			}
+			tests = append(tests, cfg)
+		}
 	}
 	return tests, nil
 }

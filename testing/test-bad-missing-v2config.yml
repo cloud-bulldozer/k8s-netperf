@@ -1,0 +1,6 @@
+---
+tests:
+- TCPStream:
+  profile: "TC_STREAM"
+  duration: 10
+  messagesize: 16384
