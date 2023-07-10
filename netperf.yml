@@ -1,43 +1,44 @@
 ---
-TCPStream:
-   parallelism: 1
-   profile: "TCP_STREAM"
-   duration: 10
-   samples: 3
-   messagesize: 1024
+tests:
+  - TCPStream:
+    parallelism: 1
+    profile: "TCP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 1024
 
-TCPStream2:
-   parallelism: 1
-   profile: "TCP_STREAM"
-   duration: 10
-   samples: 3
-   messagesize: 8192
+  - TCPStream2:
+    parallelism: 1
+    profile: "TCP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 8192
 
-UDPStream:
-   parallelism: 1
-   profile: "UDP_STREAM"
-   duration: 10
-   samples: 3
-   messagesize: 1024
+  - UDPStream:
+    parallelism: 1
+    profile: "UDP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 1024
 
-CRR:
-   parallelism: 1
-   profile: "TCP_CRR"
-   duration: 10
-   samples: 3
-   messagesize: 1024
+  - CRR:
+    parallelism: 1
+    profile: "TCP_CRR"
+    duration: 10
+    samples: 3
+    messagesize: 1024
 
-CRRService:
-   parallelism: 1
-   profile: "TCP_CRR"
-   duration: 10
-   samples: 3
-   messagesize: 1024
-   service: True
+  - CRRService:
+    parallelism: 1
+    profile: "TCP_CRR"
+    duration: 10
+    samples: 3
+    messagesize: 1024
+    service: True
 
-RR:
-   parallelism: 1
-   profile: "TCP_RR"
-   duration: 10
-   samples: 3
-   messagesize: 1024
+  - RR:
+    parallelism: 1
+    profile: "TCP_RR"
+    duration: 10
+    samples: 3
+    messagesize: 1024

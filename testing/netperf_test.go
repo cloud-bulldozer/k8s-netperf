@@ -15,10 +15,19 @@ func TestParseConf(t *testing.T) {
 	}
 }
 
+// TestParseConf Test for success. Ensure we successfully parse a good config file
+func TestParseV2Conf(t *testing.T) {
+	file := "test-v2config.yml"
+	_, err := config.ParseV2Conf(file)
+	if err != nil {
+		t.Fatal("Parsing config file failed")
+	}
+}
+
 // TestParseConf Test for success. Ensure we successfully parse the default config
 func TestShippingConf(t *testing.T) {
 	file := "../netperf.yml"
-	_, err := config.ParseConf(file)
+	_, err := config.ParseV2Conf(file)
 	if err != nil {
 		t.Fatal("Parsing config file failed")
 	}
@@ -28,6 +37,15 @@ func TestShippingConf(t *testing.T) {
 func TestMissingParseConf(t *testing.T) {
 	file := "test-bad-missing-config.yml"
 	_, err := config.ParseConf(file)
+	if err == nil {
+		t.Fatal("Parsing config file should have failed but succeeded")
+	}
+}
+
+// TestMissingParseV2Conf Testing for failure. Test profile regex
+func TestMissingParseV2Conf(t *testing.T) {
+	file := "test-bad-missing-v2config.yml"
+	_, err := config.ParseV2Conf(file)
 	if err == nil {
 		t.Fatal("Parsing config file should have failed but succeeded")
 	}

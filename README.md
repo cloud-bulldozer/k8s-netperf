@@ -70,7 +70,7 @@ Flags:
       --uuid string           User provided UUID
 ```
 
-Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors. 
+Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
 
 `--clean=true` will delete all the resources the project creates (deployments and services)
 
@@ -85,6 +85,20 @@ With OpenShift, we attempt to discover the OpenShift route. If that route is not
 `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 
 ### Config file
+#### Config File v2
+The v2 config file will be executed in the order the tests are presented in the config file.
+```yml
+tests :
+  - TCPStream:              # Place-holder of a test name
+    parallelism: 1          # Number of concurrent netperf processes to run.
+    profile: "TCP_STREAM"   # Netperf profile to execute. This can be [TCP,UDP]_STREAM, [TCP,UDP]_RR, TCP_CRR
+    duration: 3             # How long to run the test
+    samples: 1              # Iterations to run specified test
+    messagesize: 1024       # Size of the data-gram
+    service: false          # If we should test with the server pod behind a service
+```
+#### Config File v1
+The v1 config file will be executed in random order. If you need the list of tests to be ran in a specific order, use the v2 config file format.
 `netperf.yml` contains a default set of tests.
 
 Description of each field in the YAML.

@@ -68,8 +68,12 @@ var rootCmd = &cobra.Command{
 
 		cfg, err := config.ParseConf(cfgfile)
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			cf, err := config.ParseV2Conf(cfgfile)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			cfg = cf
 		}
 
 		// Read in k8s config
