@@ -29,6 +29,7 @@ type Config struct {
 // PerfScenarios describes the different scenarios
 type PerfScenarios struct {
 	NodeLocal      bool
+	AcrossAZ       bool
 	HostNetwork    bool
 	Configs        []Config
 	ServerNodeInfo metrics.NodeInfo
