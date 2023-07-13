@@ -64,21 +64,35 @@ const hostNetClientRole = "host-client"
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
-	z, numNodes, err := GetZone(client)
+	z, zones, err := GetZone(client)
 	if err != nil {
 		log.Warn(err)
 	}
+	numNodes := zones[z]
 	if numNodes > 1 {
 		log.Infof("Deploying in %s zone", z)
 	} else {
 		log.Warn("⚠️  Single node per zone")
 	}
+	if len(zones) < 2 && s.AcrossAZ {
+		return fmt.Errorf(" unable to run AcrossAZ since there is < 2 zones")
+	}
+	acrossZone := ""
+	if s.AcrossAZ {
+		for az := range zones {
+			if z != az {
+				acrossZone = az
+				log.Infof("Running AcrossAZ tests -- The other Zone is %s", acrossZone)
+				break
+			}
+		}
+	}
+
 	// Get node count
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
 		return err
 	}
-
 	ncount := 0
 	for _, node := range nodes.Items {
 		if _, ok := node.Labels["node-role.kubernetes.io/infra"]; !ok {
@@ -98,17 +112,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 					{Key: "node-role.kubernetes.io/worker", Operator: apiv1.NodeSelectorOpIn, Values: []string{""}},
 					{Key: "node-role.kubernetes.io/infra", Operator: apiv1.NodeSelectorOpNotIn, Values: []string{""}},
 					{Key: "node-role.kubernetes.io/workload", Operator: apiv1.NodeSelectorOpNotIn, Values: []string{""}},
-				},
-			},
-		},
-	}
-
-	zoneNodeSelectorExpression := []apiv1.PreferredSchedulingTerm{
-		{
-			Weight: 100,
-			Preference: apiv1.NodeSelectorTerm{
-				MatchExpressions: []apiv1.NodeSelectorRequirement{
-					{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{z}},
 				},
 			},
 		},
@@ -138,7 +141,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z),
 			}
 			cdp.PodAffinity = apiv1.PodAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
@@ -215,7 +218,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if z != "" {
 		if numNodes > 1 {
 			cdpAcross.NodeAffinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z),
 				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
@@ -228,7 +231,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if ncount > 1 {
 		if s.HostNetwork {
 			cdpHostAcross.NodeAffinity = apiv1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z),
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 			cdpHostAcross.PodAntiAffinity = apiv1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
@@ -271,8 +275,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if z != "" {
 		var affinity apiv1.NodeAffinity
 		if numNodes > 1 {
+			nodeZone := zoneNodeSelectorExpression(z)
+			if s.AcrossAZ {
+				nodeZone = zoneNodeSelectorExpression(acrossZone)
+			}
 			affinity = apiv1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression,
+				PreferredDuringSchedulingIgnoredDuringExecution: nodeZone,
 				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
@@ -327,6 +335,19 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		return err
 	}
 	return nil
+}
+
+func zoneNodeSelectorExpression(zone string) []apiv1.PreferredSchedulingTerm {
+	return []apiv1.PreferredSchedulingTerm{
+		{
+			Weight: 100,
+			Preference: apiv1.NodeSelectorTerm{
+				MatchExpressions: []apiv1.NodeSelectorRequirement{
+					{Key: "topology.kubernetes.io/zone", Operator: apiv1.NodeSelectorOpIn, Values: []string{zone}},
+				},
+			},
+		},
+	}
 }
 
 // deployDeployment Manages the creation and waits for the pods to become ready.
@@ -391,24 +412,22 @@ func WaitForDelete(c *kubernetes.Clientset, dp appsv1.Deployment) (bool, error) 
 }
 
 // GetZone will determine if we have a multiAZ/Zone cloud.
-func GetZone(c *kubernetes.Clientset) (string, int, error) {
+// returns string of the zone, int of the node count in that zone, error if encountered a problem.
+func GetZone(c *kubernetes.Clientset) (string, map[string]int, error) {
 	zones := map[string]int{}
 	zone := ""
 	lz := ""
-	numNodes := 0
 	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", numNodes, fmt.Errorf("unable to query nodes")
+		return "", zones, fmt.Errorf("unable to query nodes")
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
-			return "", numNodes, fmt.Errorf("⚠️  No zone label")
+			return "", zones, fmt.Errorf("⚠️  No zone label")
 		}
 		if _, ok := zones[l.GetLabels()["topology.kubernetes.io/zone"]]; ok {
 			zone = l.GetLabels()["topology.kubernetes.io/zone"]
-			numNodes = 2
-			// Simple check, no need to determine all the zones with > 1 node.
-			break
+			zones[zone]++
 		} else {
 			zones[l.GetLabels()["topology.kubernetes.io/zone"]] = 1
 			lz = l.GetLabels()["topology.kubernetes.io/zone"]
@@ -416,10 +435,9 @@ func GetZone(c *kubernetes.Clientset) (string, int, error) {
 	}
 	// No zone had > 1, use the last zone.
 	if zone == "" {
-		numNodes = 1
 		zone = lz
 	}
-	return zone, numNodes, nil
+	return zone, zones, nil
 }
 
 // CreateDeployment will create the different deployments we need to do network performance tests

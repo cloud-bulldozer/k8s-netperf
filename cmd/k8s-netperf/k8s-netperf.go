@@ -35,6 +35,7 @@ var (
 	nl          bool
 	clean       bool
 	iperf3      bool
+	acrossAZ    bool
 	full        bool
 	debug       bool
 	promURL     string
@@ -96,6 +97,7 @@ var rootCmd = &cobra.Command{
 		s := config.PerfScenarios{
 			HostNetwork: full,
 			NodeLocal:   nl,
+			AcrossAZ:    acrossAZ,
 			RestConfig:  *rconfig,
 			Configs:     cfg,
 			ClientSet:   client,
@@ -133,7 +135,12 @@ var rootCmd = &cobra.Command{
 
 		var sr result.ScenarioResults
 		// If the client and server needs to be across zones
-		_, nodesInZone, _ := k8s.GetZone(client)
+		lz, zones, err := k8s.GetZone(client)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		nodesInZone := zones[lz]
 		var acrossAZ bool
 		if nodesInZone > 1 {
 			acrossAZ = false
@@ -351,7 +358,11 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 	npr.Service = service
 	npr.SameNode = sameNode
 	npr.HostNetwork = hostNet
-	npr.AcrossAZ = nc.AcrossAZ
+	if s.AcrossAZ {
+		npr.AcrossAZ = true
+	} else {
+		npr.AcrossAZ = nc.AcrossAZ
+	}
 	npr.StartTime = time.Now()
 	log.Debugf("Executing workloads. Server on %s client on %s, hostNetwork is %t, service is %t", s.ServerNodeInfo.Hostname, s.ClientNodeInfo.Hostname, hostNet, service)
 	for i := 0; i < nc.Samples; i++ {
@@ -401,6 +412,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
+	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
