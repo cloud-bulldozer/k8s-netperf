@@ -23,7 +23,7 @@ $ make build
 
 ```shell
 $ git clone http://github.com/cloud-bulldozer/k8s-netperf
-$ cd k8s-netperf 
+$ cd k8s-netperf
 $ make docker-build
 ```
 
@@ -55,8 +55,9 @@ Usage:
   k8s-netperf [flags]
 
 Flags:
+      --across                Place the client and server across availability zones
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
-      --clean                 Clean-up resources created by k8s-netperf
+      --clean                 Clean-up resources created by k8s-netperf (default true)
       --config string         K8s netperf Configuration File (default "netperf.yml")
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
@@ -70,19 +71,15 @@ Flags:
       --uuid string           User provided UUID
 ```
 
-Running with `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
+- `--across` will force the client to be across availability zones from the server
+- `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
+- `--clean=true` will delete all the resources the project creates (deployments and services)
+- `--prom` accepts a string (URL). Example  http://localhost:9090
+  - When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
+- `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
+- `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 
-`--clean=true` will delete all the resources the project creates (deployments and services)
-
-`--prom` accepts a string (URL). Example  http://localhost:9090
-
-When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
-
-With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.
-
-`--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
-
-`--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
+> *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
 
 ### Config file
 #### Config File v2
