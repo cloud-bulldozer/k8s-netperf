@@ -72,7 +72,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if numNodes > 1 {
 		log.Infof("Deploying in %s zone", z)
 	} else {
-		log.Warn("⚠️  Single node per zone")
+		log.Warn("⚠️  Single node per zone and/or no zone labels")
 	}
 	if len(zones) < 2 && s.AcrossAZ {
 		return fmt.Errorf(" unable to run AcrossAZ since there is < 2 zones")
