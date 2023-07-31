@@ -135,11 +135,7 @@ var rootCmd = &cobra.Command{
 
 		var sr result.ScenarioResults
 		// If the client and server needs to be across zones
-		lz, zones, err := k8s.GetZone(client)
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
-		}
+		lz, zones, _ := k8s.GetZone(client)
 		nodesInZone := zones[lz]
 		var acrossAZ bool
 		if nodesInZone > 1 {
