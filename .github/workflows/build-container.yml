@@ -14,7 +14,7 @@ jobs:
 
   build-and-push-container-images:
     name: Build and Push Container Images
-    runs-on: <IMAGE_NAME>
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
