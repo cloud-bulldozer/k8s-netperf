@@ -1,9 +1,9 @@
 name: Release k8s-netperf container image
 
 on:
-  push:
-    tags:
-      - "*" # triggers only if new tag version is pushed
+  pull_request:
+    paths:
+      - 'containers/Dockerfile' # Trigger only when Dockerfile changes in a pull request
 
 env:
   CONTAINER_REGISTRY: ${{ github.repository_owner == 'cloud-bulldozer' && 'quay.io' }}
