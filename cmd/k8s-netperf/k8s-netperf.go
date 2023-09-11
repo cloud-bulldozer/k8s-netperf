@@ -385,7 +385,17 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 			nr, err = netperf.ParseResults(&r)
 			if err != nil {
 				log.Error(err)
-				os.Exit(1)
+				log.Warn("Rerunning test.")
+				r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+				if err != nil {
+					log.Error(err)
+					os.Exit(1)
+				}
+				nr, err = netperf.ParseResults(&r)
+				if err != nil {
+					log.Error(err)
+					os.Exit(1)
+				}
 			}
 		}
 		npr.LossSummary = append(npr.LossSummary, float64(nr.LossPercent))

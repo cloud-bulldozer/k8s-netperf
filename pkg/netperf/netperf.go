@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -113,6 +114,9 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 		} else if strings.Contains(l[0], "LOCAL_TRANSPORT_RETRANS") {
 			sample.Retransmits, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		}
+	}
+	if math.IsNaN(sample.Throughput) {
+		return sample, fmt.Errorf("Throughput value is NaN")
 	}
 	sample.LossPercent = 100 - (recv / send * 100)
 	return sample, nil
