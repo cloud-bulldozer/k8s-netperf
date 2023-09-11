@@ -6,7 +6,7 @@ COPY appstream.repo /etc/yum.repos.d/centos8-appstream.repo
 COPY netperf.diff /tmp/netperf.diff
 
 RUN dnf install -y --nodocs make automake --enablerepo=centos9 --allowerasing  && \
-    dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo iperf3 --enablerepo=*
+    dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo --enablerepo=*
 
 RUN git clone https://github.com/HewlettPackard/netperf
 WORKDIR netperf
@@ -18,7 +18,17 @@ RUN git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4 && \
     make && make install
 
 WORKDIR ../
+
+RUN curl -L https://github.com/esnet/iperf/archive/refs/tags/3.13-mt-beta3.tar.gz > iperf3-mt.tar.gz && \
+    tar -xzf iperf3-mt.tar.gz
+
+WORKDIR iperf-3.13-mt-beta3/
+RUN ./configure; make; make install
+
+WORKDIR ../
+
 RUN rm -rf netperf && \
+    rm -rf iperf-3.13-mt-beta3 && \
     dnf clean all && \
     curl -O https://raw.githubusercontent.com/jtaleric/tinker/main/networking/super-netperf && \
     chmod +x super-netperf
