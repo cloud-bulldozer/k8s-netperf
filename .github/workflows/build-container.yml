@@ -39,8 +39,8 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
-          username: ${{ env.CONTAINER_REGISTRY == 'quay.io' && secrets.QUAY_IO_USERNAME || github.actor }}
-          password: ${{ env.CONTAINER_REGISTRY == 'quay.io' && secrets.QUAY_IO_TOKEN    || secrets.GITHUB_TOKEN }
+          username: ${{ env.CONTAINER_REGISTRY == 'quay.io' && secrets.QUAY_USER || github.actor }}
+          password: ${{ env.CONTAINER_REGISTRY == 'quay.io' && secrets.QUAY_TOKEN    || secrets.GITHUB_TOKEN }
 
       - name: Docker meta
         id: meta
