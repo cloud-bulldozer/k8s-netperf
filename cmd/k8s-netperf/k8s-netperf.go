@@ -332,7 +332,11 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else {
-		serverIP = s.Server.Items[0].Status.PodIP
+		if hostNet {
+			serverIP = s.ServerHost.Items[0].Status.PodIP
+		} else {
+			serverIP = s.Server.Items[0].Status.PodIP
+		}
 	}
 	if !s.NodeLocal {
 		Client = s.ClientAcross
@@ -360,7 +364,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. Server on %s client on %s, hostNetwork is %t, service is %t", s.ServerNodeInfo.Hostname, s.ClientNodeInfo.Hostname, hostNet, service)
+	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, service)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
 		if iperf3 {
