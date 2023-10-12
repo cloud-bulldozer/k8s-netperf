@@ -94,6 +94,9 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample.Driver = workload
 	send := 0.0
 	recv := 0.0
+	if len(strings.Split(stdout.String(), "\n")) < 5 {
+		return sample, fmt.Errorf("Length of output from netperf was too short.")
+	}
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
 		if len(l) < 2 {
