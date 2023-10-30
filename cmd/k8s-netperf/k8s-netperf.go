@@ -29,6 +29,7 @@ import (
 
 const namespace = "netperf"
 const index = "k8s-netperf"
+const retry = 3
 
 var (
 	cfgfile     string
@@ -389,15 +390,27 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 			nr, err = netperf.ParseResults(&r)
 			if err != nil {
 				log.Error(err)
-				log.Warn("Rerunning test.")
-				r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
-				if err != nil {
-					log.Error(err)
-					os.Exit(1)
+				try := 0
+				success := false
+				// Retry the current test.
+				for try < retry {
+					log.Warn("Rerunning test.")
+					r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+					nr, err = netperf.ParseResults(&r)
+					if err != nil {
+						log.Error(err)
+						try++
+					} else {
+						success = true
+						break
+					}
 				}
-				nr, err = netperf.ParseResults(&r)
-				if err != nil {
-					log.Error(err)
+				if !success {
+					log.Error("test was unsuccessful after retry.")
 					os.Exit(1)
 				}
 			}
