@@ -102,10 +102,34 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			ClientNodeLabels: r.ClientNodeLabels,
 			AcrossAZ:         r.AcrossAZ,
 		}
-		d.UDPLossPercent, _ = result.Average(r.LossSummary)
-		d.TCPRetransmit, _ = result.Average(r.RetransmitSummary)
-		d.Throughput, _ = result.Average(r.ThroughputSummary)
-		d.Latency, _ = result.Average(r.LatencySummary)
+		UDPLossPercent, e := result.Average(r.LossSummary)
+		if e != nil {
+			logging.Warn("Unable to process udp loss, setting value to zero")
+			d.UDPLossPercent = 0
+		} else {
+			d.UDPLossPercent = UDPLossPercent
+		}
+		TCPRetransmit, e := result.Average(r.RetransmitSummary)
+		if e != nil {
+			logging.Warn("Unable to process tcp retransmits, setting value to zero")
+			d.TCPRetransmit = 0
+		} else {
+			d.TCPRetransmit = TCPRetransmit
+		}
+		Throughput, e := result.Average(r.ThroughputSummary)
+		if e != nil {
+			logging.Warn("Unable to process throughput, setting value to zero")
+			d.Throughput = 0
+		} else {
+			d.Throughput = Throughput
+		}
+		Latency, e := result.Average(r.LatencySummary)
+		if e != nil {
+			logging.Warn("Unable to process latency, setting value to zero")
+			d.Latency = 0
+		} else {
+			d.Latency = Latency
+		}
 		docs = append(docs, d)
 	}
 	return docs, nil

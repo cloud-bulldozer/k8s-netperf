@@ -105,8 +105,14 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 		if strings.Contains(l[0], "THROUGHPUT_UNITS") {
 			sample.Metric = l[1]
 		} else if strings.Contains(l[0], "THROUGHPUT") {
+			if len(strings.TrimSpace(l[1])) < 1 {
+				return sample, fmt.Errorf("Throughput was empty.")
+			}
 			sample.Throughput, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "P99_LATENCY") {
+			if len(strings.TrimSpace(l[1])) < 1 {
+				return sample, fmt.Errorf("P99_Latency was empty.")
+			}
 			sample.Latency99ptile, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "RT_LATENCY") {
 			sample.Latency, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
@@ -120,6 +126,9 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	}
 	if math.IsNaN(sample.Throughput) {
 		return sample, fmt.Errorf("Throughput value is NaN")
+	}
+	if math.IsNaN(sample.Latency99ptile) {
+		return sample, fmt.Errorf("Latency value is NaN")
 	}
 	sample.LossPercent = 100 - (recv / send * 100)
 	return sample, nil
