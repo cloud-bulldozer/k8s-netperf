@@ -28,23 +28,22 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Clone Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Golang
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VER }}
 
       - name: Login to the ${{ env.CONTAINER_REGISTRY }} Container Registry
         run: podman login quay.io -u ${QUAY_USER} -p ${QUAY_TOKEN}
-        with:
+        env:
           QUAY_USER: ${{ secrets.QUAY_USER }}
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
 
       - name: Build and Push multi-arch Image
         id: push
         run: |
-          make gha-build
           make gha-push
         env:
           GO_VER: ${{ env.GO_VER }}

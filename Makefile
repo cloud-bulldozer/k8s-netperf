@@ -27,13 +27,13 @@ container-build: build
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) \
 		-t $(CONTAINER_NS)/$(BIN) ./containers
 
-gha-build: build
+gha-build:
 	@echo "Building the container image for GHA"
 	$(CONTAINER_BUILD) -f containers/Containerfile \
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) --platform=linux/amd64,linux/arm64,linux/ppc64le,linux/s390x \
 		-t $(CONTAINER_NS) ./containers --manifest=$(CONTAINER_NS):latest
 
-gha-push: gha-build
+gha-push: build gha-build
 	@echo "Pushing Container Images & manifest"
 	$(CONTAINER_BUILD) manifest push
 
