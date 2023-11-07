@@ -74,7 +74,7 @@ func Percentile(vals []float64, ptile float64) (float64, error) {
 }
 
 // Confidence accepts array of floats to calculate average
-func confidenceInterval(vals []float64, ci float64) (float64, float64, float64) {
+func ConfidenceInterval(vals []float64, ci float64) (float64, float64, float64) {
 	return math.MeanCI(vals, ci)
 }
 
@@ -250,7 +250,7 @@ func renderResults(s ScenarioResults, testType string) {
 				avg, _ := Average(r.ThroughputSummary)
 				var lo, hi float64
 				if r.Samples > 1 {
-					_, lo, hi = confidenceInterval(r.ThroughputSummary, 0.95)
+					_, lo, hi = ConfidenceInterval(r.ThroughputSummary, 0.95)
 				}
 				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
 			}
