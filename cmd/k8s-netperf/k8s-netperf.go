@@ -156,12 +156,15 @@ var rootCmd = &cobra.Command{
 			nc.AcrossAZ = acrossAZ
 
 			if s.HostNetwork {
-				npr := executeWorkload(nc, s, true, false)
-				sr.Results = append(sr.Results, npr)
-				if iperf3 {
-					ipr := executeWorkload(nc, s, true, true)
-					if len(ipr.Profile) > 1 {
-						sr.Results = append(sr.Results, ipr)
+				// No need to run hostNetwork through Service.
+				if !nc.Service {
+					npr := executeWorkload(nc, s, true, false)
+					sr.Results = append(sr.Results, npr)
+					if iperf3 {
+						ipr := executeWorkload(nc, s, true, true)
+						if len(ipr.Profile) > 1 {
+							sr.Results = append(sr.Results, ipr)
+						}
 					}
 				}
 			}
