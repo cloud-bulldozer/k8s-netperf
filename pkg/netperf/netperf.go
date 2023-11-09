@@ -43,7 +43,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 			"--",
 			"-k", fmt.Sprint(omniOptions),
 			"-m", fmt.Sprint(nc.MessageSize),
-			"-P", fmt.Sprint(ServerDataPort),
+			"-p", fmt.Sprint(ServerDataPort),
 			"-R", "1"}
 	} else {
 		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
