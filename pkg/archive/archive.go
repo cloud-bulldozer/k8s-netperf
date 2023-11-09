@@ -44,6 +44,7 @@ type Doc struct {
 	ClientPodCPU     []metrics.PodCPU  `json:"clientPods"`
 	ClientNodeLabels map[string]string `json:"clientNodeLabels"`
 	ServerNodeLabels map[string]string `json:"serverNodeLabels"`
+	Confidence       []float64         `json:"confidence"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -80,6 +81,11 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		if len(r.Driver) < 1 {
 			continue
 		}
+		var lo, hi float64
+		if r.Samples > 1 {
+			_, lo, hi = result.ConfidenceInterval(r.ThroughputSummary, 0.95)
+		}
+		c := []float64{lo, hi}
 		d := Doc{
 			UUID:             uuid,
 			Timestamp:        time,
@@ -101,6 +107,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			ServerNodeLabels: r.ServerNodeLabels,
 			ClientNodeLabels: r.ClientNodeLabels,
 			AcrossAZ:         r.AcrossAZ,
+			Confidence:       c,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
@@ -147,11 +154,17 @@ func commonCsvHeaderFields() []string {
 		"Parallelism",
 		"# of Samples",
 		"Message Size",
+		"Confidence metric - low",
+		"Confidence metric - high",
 	}
 }
 
 // Common csv data fields.
-func commonCsvDataFeilds(row result.Data) []string {
+func commonCsvDataFields(row result.Data) []string {
+	var lo, hi float64
+	if row.Samples > 1 {
+		_, lo, hi = result.ConfidenceInterval(row.ThroughputSummary, 0.95)
+	}
 	return []string{
 		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
@@ -162,15 +175,17 @@ func commonCsvDataFeilds(row result.Data) []string {
 		strconv.Itoa(row.Parallelism),
 		strconv.Itoa(row.Samples),
 		strconv.Itoa(row.MessageSize),
+		strconv.FormatFloat(lo, 'f', -1, 64),
+		strconv.FormatFloat(hi, 'f', -1, 64),
 	}
 }
 
-// Writes all the mertic feilds to the archive.
+// Writes all the mertics to the archive.
 func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU) error {
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
 		if err := podarchive.Write(append(append(roleFieldData,
-			commonCsvDataFeilds(row)...),
+			commonCsvDataFields(row)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -183,7 +198,7 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 		cpu = row.ServerMetrics
 	}
 	if err := cpuarchive.Write(append(append(roleFieldData,
-		commonCsvDataFeilds(row)...),
+		commonCsvDataFields(row)...),
 		fmt.Sprintf("%f", cpu.Idle),
 		fmt.Sprintf("%f", cpu.User),
 		fmt.Sprintf("%f", cpu.System),
@@ -265,7 +280,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "UDP_STREAM") {
 			loss, _ := result.Average(row.LossSummary)
 			header := []string{"UDP Percent Loss"}
-			data := append(header, commonCsvDataFeilds(row)...)
+			data := append(header, commonCsvDataFields(row)...)
 			iperfdata = append(data, fmt.Sprintf("%f", loss))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -274,7 +289,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "TCP_STREAM") {
 			rt, _ := result.Average(row.RetransmitSummary)
 			header := []string{"TCP Retransmissions"}
-			data := append(header, commonCsvDataFeilds(row)...)
+			data := append(header, commonCsvDataFields(row)...)
 			iperfdata = append(data, fmt.Sprintf("%f", rt))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -322,7 +337,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
-		data := append(commonCsvDataFeilds(row),
+		data := append(commonCsvDataFields(row),
 			fmt.Sprintf("%f", avg),
 			row.Metric,
 			fmt.Sprint(lavg),

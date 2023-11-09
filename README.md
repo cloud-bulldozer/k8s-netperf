@@ -225,12 +225,11 @@ k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drive
 
 Example output
 ```csv
-Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
-TCP_STREAM,false,false,false,10,1,3,1024,1131.150000,Mb/s,23,usec
-TCP_STREAM,false,false,false,10,2,3,1024,1710.150000,Mb/s,34,usec
-TCP_STREAM,false,false,false,10,1,3,8192,4437.520000,Mb/s,30,usec
-UDP_STREAM,false,false,false,10,1,3,1024,1159.790000,Mb/s,14,usec
-TCP_CRR,false,false,false,10,1,3,1024,5954.940000,OP/s,456,usec
-TCP_CRR,false,false,true,10,1,3,1024,1455.470000,OP/s,248,usec
-TCP_RR,false,false,false,10,1,3,1024,41330.000000,OP/s,85,usec
+Driver,Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
+netperf,TCP_STREAM,false,false,false,10,1,3,1024,861.9391413991156,885.2741919342178,873.606667,Mb/s,3.3333333333333335,usec
+netperf,TCP_STREAM,false,false,false,10,1,3,8192,178.12442996547009,1310.3422367011967,744.233333,Mb/s,2394.6666666666665,usec
+netperf,UDP_STREAM,false,false,false,10,1,3,1024,584.3478157889886,993.4588508776783,788.903333,Mb/s,23,usec
+netperf,TCP_CRR,false,false,false,10,1,3,1024,1889.3183973002176,2558.074936033115,2223.696667,OP/s,4682.666666666667,usec
+netperf,TCP_CRR,false,false,true,10,1,3,1024,1169.206855676418,2954.3464776569153,2061.776667,OP/s,4679.333333333333,usec
+netperf,TCP_RR,false,false,false,10,1,3,1024,6582.5359452538705,12085.437388079461,9333.986667,OP/s,451.3333333333333,usec
 ```
