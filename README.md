@@ -62,6 +62,7 @@ Flags:
       --debug                 Enable debug log
   -h, --help                  help for k8s-netperf
       --iperf                 Use iperf3 as load driver (along with netperf)
+      --uperf                 Use uperf as load driver (along with netperf)
       --json                  Instead of human-readable output, return JSON to stdout
       --local                 Run network performance tests with Server-Pods/Client-Pods on the same Node
       --metrics               Show all system metrics retrieved from prom
@@ -124,16 +125,22 @@ $ ./k8s-netperf --tcp-tolerance 1
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
 | 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2661.006667 (Mb/s) |
 | 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2483.078229 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 2581.705097 (Mb/s) |
 | 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2702.230000 (Mb/s) |
 | 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2523.434069 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 2567.665412 (Mb/s) |
 | 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2697.276667 (Mb/s) |
 | 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2542.793728 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | 8192         | false     | 10       | 3       | 2571.881579 (Mb/s) |
 | 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2707.076667 (Mb/s) |
 | 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2604.067072 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | 8192         | false     | 10       | 3       | 2687.276667 (Mb/s) |
 | 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1143.926667 (Mb/s) |
 | 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1202.428288 (Mb/s) |
+| 📊 Stream Results | uperf   | UDP_STREAM | 1           | true         | false   | 1024         | false     | 10       | 3       | 1242.059988 (Mb/s) |
 | 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1145.066667 (Mb/s) |
 | 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1239.580672 (Mb/s) |
+| 📊 Stream Results | uperf   | UDP_STREAM | 1           | false        | false   | 1024         | false     | 10       | 3       | 1261.840000 (Mb/s) |
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-----------+----------+---------+--------------------+
 +---------------+---------+----------+-------------+--------------+---------+--------------+-----------+----------+---------+---------------------+
 |  RESULT TYPE  | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | SAME NODE | DURATION | SAMPLES |      AVG VALUE      |
