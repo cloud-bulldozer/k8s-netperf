@@ -177,7 +177,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	s.IperfService, err = CreateService(iperfSVC, client)
 	if err != nil {
-		return fmt.Errorf("😥 Unable to create iperf service")
+		return fmt.Errorf("😥 Unable to create iperf service: %v", err)
 	}
 
 	// Create netperf service
@@ -463,6 +463,9 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: dp.Labels,
+					Annotations: map[string]string{
+						"sidecar.istio.io/inject": "true",
+					},
 				},
 				Spec: apiv1.PodSpec{
 					ServiceAccountName: sa,
