@@ -55,9 +55,7 @@ func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 		Type:               "opensearch",
 		Servers:            []string{url},
 		Index:              index,
-		Port:               0,
 		InsecureSkipVerify: true,
-		Enabled:            true,
 	}
 	logging.Infof("📁 Creating indexer: %s", indexerConfig.Type)
 	indexer, err = indexers.NewIndexer(indexerConfig)
