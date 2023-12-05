@@ -41,6 +41,7 @@ type PerfScenarios struct {
 	ServerHost     apiv1.PodList
 	NetperfService *apiv1.Service
 	IperfService   *apiv1.Service
+	UperfService   *apiv1.Service
 	RestConfig     rest.Config
 	ClientSet      *kubernetes.Clientset
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/netperf"
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
+	uperf_driver "github.com/cloud-bulldozer/k8s-netperf/pkg/uperf"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,7 @@ var (
 	nl          bool
 	clean       bool
 	iperf3      bool
+	uperf       bool
 	acrossAZ    bool
 	full        bool
 	debug       bool
@@ -158,22 +160,34 @@ var rootCmd = &cobra.Command{
 			if s.HostNetwork {
 				// No need to run hostNetwork through Service.
 				if !nc.Service {
-					npr := executeWorkload(nc, s, true, false)
+					npr := executeWorkload(nc, s, true, false, false)
 					sr.Results = append(sr.Results, npr)
 					if iperf3 {
-						ipr := executeWorkload(nc, s, true, true)
+						ipr := executeWorkload(nc, s, true, true, false)
 						if len(ipr.Profile) > 1 {
 							sr.Results = append(sr.Results, ipr)
 						}
 					}
+					if uperf {
+						upr := executeWorkload(nc, s, true, false, true)
+						if len(upr.Profile) > 1 {
+							sr.Results = append(sr.Results, upr)
+						}
+					}
 				}
 			}
-			npr := executeWorkload(nc, s, false, false)
+			npr := executeWorkload(nc, s, false, false, false)
 			sr.Results = append(sr.Results, npr)
 			if iperf3 {
-				ipr := executeWorkload(nc, s, false, true)
+				ipr := executeWorkload(nc, s, false, true, false)
 				if len(ipr.Profile) > 1 {
 					sr.Results = append(sr.Results, ipr)
+				}
+			}
+			if uperf {
+				upr := executeWorkload(nc, s, false, false, true)
+				if len(upr.Profile) > 1 {
+					sr.Results = append(sr.Results, upr)
 				}
 			}
 		}
@@ -323,7 +337,7 @@ func cleanup(client *kubernetes.Clientset) {
 
 }
 
-func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool) result.Data {
+func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool, uperf bool) result.Data {
 	serverIP := ""
 	service := false
 	sameNode := true
@@ -332,6 +346,8 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 		service = true
 		if iperf3 {
 			serverIP = s.IperfService.Spec.ClusterIP
+		} else if uperf {
+			serverIP = s.UperfService.Spec.ClusterIP
 		} else {
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
@@ -353,6 +369,12 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 	if iperf3 {
 		// iperf doesn't support all tests cases
 		if !iperf.TestSupported(nc.Profile) {
+			return npr
+		}
+	}
+	if uperf {
+		// uperf doesn't support all tests cases
+		if !uperf_driver.TestSupported(nc.Profile) {
 			return npr
 		}
 	}
@@ -379,6 +401,18 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 				os.Exit(1)
 			}
 			nr, err = iperf.ParseResults(&r)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+		} else if uperf {
+			npr.Driver = "uperf"
+			r, err := uperf_driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+			nr, err = uperf_driver.ParseResults(&r)
 			if err != nil {
 				log.Error(err)
 				os.Exit(1)
@@ -435,6 +469,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
+	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (along with netperf)")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")

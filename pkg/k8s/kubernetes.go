@@ -16,6 +16,7 @@ import (
 )
 
 // DeploymentParams describes the deployment
+// Server pod can run multiple containers, each command in Commands will represent a container command
 type DeploymentParams struct {
 	HostNetwork     bool
 	Name            string
@@ -23,7 +24,7 @@ type DeploymentParams struct {
 	Replicas        int32
 	Image           string
 	Labels          map[string]string
-	Command         []string
+	Commands        [][]string
 	PodAffinity     apiv1.PodAffinity
 	PodAntiAffinity apiv1.PodAntiAffinity
 	NodeAffinity    apiv1.NodeAffinity
@@ -47,11 +48,17 @@ const NetperfServerCtlPort = 12865
 // IperfServerCtlPort control port for the service
 const IperfServerCtlPort = 22865
 
+// UperferverCtlPort control port for the service
+const UperfServerCtlPort = 30000
+
 // NetperfServerDataPort data port for the service
 const NetperfServerDataPort = 42424
 
 // IperfServerDataPort data port for the service
 const IperfServerDataPort = 43433
+
+// UperfServerDataPort data port for the service
+const UperfServerDataPort = 30001
 
 // Labels we will apply to k8s assets.
 const serverRole = "server"
@@ -136,7 +143,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Replicas:  1,
 			Image:     "quay.io/cloud-bulldozer/netperf:latest",
 			Labels:    map[string]string{"role": clientRole},
-			Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
+			Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:      NetperfServerCtlPort,
 		}
 		if z != "" && numNodes > 1 {
@@ -180,6 +187,19 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		return fmt.Errorf("😥 Unable to create iperf service: %v", err)
 	}
 
+	// Create uperf service
+	uperfSVC := ServiceParams{
+		Name:      "uperf-service",
+		Namespace: "netperf",
+		Labels:    map[string]string{"role": serverRole},
+		CtlPort:   UperfServerCtlPort,
+		DataPort:  UperfServerDataPort,
+	}
+	s.UperfService, err = CreateService(uperfSVC, client)
+	if err != nil {
+		return fmt.Errorf("😥 Unable to create uperf service")
+	}
+
 	// Create netperf service
 	netperfSVC := ServiceParams{
 		Name:      "netperf-service",
@@ -198,7 +218,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Replicas:  1,
 		Image:     "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:    map[string]string{"role": clientAcrossRole},
-		Command:   []string{"/bin/bash", "-c", "sleep 10000000"},
+		Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:      NetperfServerCtlPort,
 	}
 	cdpAcross.PodAntiAffinity = apiv1.PodAntiAffinity{
@@ -212,7 +232,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		HostNetwork: true,
 		Image:       "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:      map[string]string{"role": hostNetClientRole},
-		Command:     []string{"/bin/bash", "-c", "sleep 10000000"},
+		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
 	}
 	if z != "" {
@@ -247,6 +267,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			return err
 		}
 	}
+
+	// Use separate containers for servers
+	dpCommands := [][]string{{"/bin/bash", "-c", "netserver && sleep 10000000"},
+		{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)}}
+
 	sdpHost := DeploymentParams{
 		Name:        "server-host",
 		Namespace:   "netperf",
@@ -254,7 +280,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		HostNetwork: true,
 		Image:       "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:      map[string]string{"role": hostNetServerRole},
-		Command:     []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
 	}
 	// Start netperf server
@@ -264,7 +290,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Replicas:  1,
 		Image:     "quay.io/cloud-bulldozer/netperf:latest",
 		Labels:    map[string]string{"role": serverRole},
-		Command:   []string{"/bin/bash", "-c", fmt.Sprintf("netserver && iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		Commands:  dpCommands,
 		Port:      NetperfServerCtlPort,
 	}
 	if s.NodeLocal {
@@ -451,6 +477,21 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	}
 	log.Infof("🚀 Starting Deployment for: %s in namespace: %s", dp.Name, dp.Namespace)
 	dc := client.AppsV1().Deployments(dp.Namespace)
+
+	// Add containers to deployment
+	var cmdContainers []apiv1.Container
+	for i := 0; i < len(dp.Commands); i++ {
+		// each container should have a unique name
+		containerName := fmt.Sprintf("%s-%d", dp.Name, i)
+		cmdContainers = append(cmdContainers,
+			apiv1.Container{
+				Name:            containerName,
+				Image:           dp.Image,
+				Command:         dp.Commands[i],
+				ImagePullPolicy: apiv1.PullAlways,
+			})
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: dp.Name,
@@ -470,14 +511,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 				Spec: apiv1.PodSpec{
 					ServiceAccountName: sa,
 					HostNetwork:        dp.HostNetwork,
-					Containers: []apiv1.Container{
-						{
-							Name:            dp.Name,
-							Image:           dp.Image,
-							Command:         dp.Command,
-							ImagePullPolicy: apiv1.PullAlways,
-						},
-					},
+					Containers:         cmdContainers,
 					Affinity: &apiv1.Affinity{
 						NodeAffinity:    &dp.NodeAffinity,
 						PodAffinity:     &dp.PodAffinity,
