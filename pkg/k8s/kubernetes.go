@@ -423,7 +423,7 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 func WaitForDelete(c *kubernetes.Clientset, dp appsv1.Deployment) (bool, error) {
 	log.Infof("⏰ Waiting for %s Deployment to deleted...", dp.Name)
 	// Timeout in seconds
-	timeout := int64(180)
+	timeout := int64(300)
 	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{TimeoutSeconds: &timeout})
 	if err != nil {
 		return false, err
@@ -666,7 +666,9 @@ func DestroyService(client *kubernetes.Clientset, serv apiv1.Service) error {
 // DestroyDeployment cleans up a specific deployment from a namespace
 func DestroyDeployment(client *kubernetes.Clientset, dp appsv1.Deployment) error {
 	deletePolicy := metav1.DeletePropagationForeground
+	gracePeriod := int64(0)
 	return client.AppsV1().Deployments(dp.Namespace).Delete(context.TODO(), dp.Name, metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
+		PropagationPolicy:  &deletePolicy,
+		GracePeriodSeconds: &gracePeriod,
 	})
 }
