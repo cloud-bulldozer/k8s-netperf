@@ -130,6 +130,11 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	if math.IsNaN(sample.Latency99ptile) {
 		return sample, fmt.Errorf("Latency value is NaN")
 	}
-	sample.LossPercent = 100 - (recv / send * 100)
+	// Negative values will mean UDP_STREAM
+	if sample.Retransmits < 0.0 {
+		sample.LossPercent = 100 - (recv / send * 100)
+	} else {
+		sample.LossPercent = 0
+	}
 	return sample, nil
 }

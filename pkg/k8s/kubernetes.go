@@ -107,7 +107,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 	log.Debugf("Number of nodes with role worker: %d", ncount)
-	if !s.NodeLocal && ncount < 2 {
+	if (s.HostNetwork || !s.NodeLocal) && ncount < 2 {
 		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
 	}
 
@@ -149,18 +149,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = apiv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z),
-			}
-			cdp.PodAffinity = apiv1.PodAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: []apiv1.PodAffinityTerm{
-					{
-						LabelSelector: &metav1.LabelSelector{
-							MatchExpressions: []metav1.LabelSelectorRequirement{
-								{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{serverRole}},
-							},
-						},
-						TopologyKey: "kubernetes.io/hostname",
-					},
-				},
 			}
 		}
 
@@ -345,10 +333,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		sdpHost.PodAntiAffinity = antiAffinity
 	}
-	if s.HostNetwork {
-		s.ServerHost, err = deployDeployment(client, sdpHost)
-		if err != nil {
-			return err
+
+	if ncount > 1 {
+		if s.HostNetwork {
+			s.ServerHost, err = deployDeployment(client, sdpHost)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	s.Server, err = deployDeployment(client, sdp)
