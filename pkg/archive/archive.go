@@ -37,6 +37,8 @@ type Doc struct {
 	LtcyMetric       string            `json:"ltcyMetric"`
 	TCPRetransmit    float64           `json:"tcpRetransmits"`
 	UDPLossPercent   float64           `json:"udpLossPercent"`
+	ToolVersion      string            `json:"toolVersion"`
+	ToolGitCommit    string            `json:"toolGitCommit"`
 	Metadata         result.Metadata   `json:"metadata"`
 	ServerNodeCPU    metrics.NodeCPU   `json:"serverCPU"`
 	ServerPodCPU     []metrics.PodCPU  `json:"serverPods"`
@@ -87,6 +89,8 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		d := Doc{
 			UUID:             uuid,
 			Timestamp:        time,
+			ToolVersion:      sr.Version,
+			ToolGitCommit:    sr.GitCommit,
 			Driver:           r.Driver,
 			HostNetwork:      r.HostNetwork,
 			Parallelism:      r.Parallelism,

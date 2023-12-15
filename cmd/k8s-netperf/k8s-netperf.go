@@ -11,6 +11,7 @@ import (
 	"github.com/cloud-bulldozer/go-commons/indexers"
 	ocpmetadata "github.com/cloud-bulldozer/go-commons/ocp-metadata"
 	"github.com/cloud-bulldozer/go-commons/prometheus"
+	cmdVersion "github.com/cloud-bulldozer/go-commons/version"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/iperf"
@@ -47,12 +48,21 @@ var (
 	showMetrics bool
 	tcpt        float64
 	json        bool
+	version     bool
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
 	Short: "A tool to run network performance tests in Kubernetes cluster",
 	Run: func(cmd *cobra.Command, args []string) {
+		if version {
+			fmt.Println("Version:", cmdVersion.Version)
+			fmt.Println("Git Commit:", cmdVersion.GitCommit)
+			fmt.Println("Build Date:", cmdVersion.BuildDate)
+			fmt.Println("Go Version:", cmdVersion.GoVersion)
+			fmt.Println("OS/Arch:", cmdVersion.OsArch)
+			os.Exit(0)
+		}
 
 		uid := ""
 		if len(id) > 0 {
@@ -79,7 +89,6 @@ var rootCmd = &cobra.Command{
 			}
 			cfg = cf
 		}
-
 		// Read in k8s config
 		kconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			clientcmd.NewDefaultClientConfigLoadingRules(),
@@ -137,6 +146,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		var sr result.ScenarioResults
+		sr.Version = cmdVersion.Version
+		sr.GitCommit = cmdVersion.GitCommit
 		// If the client and server needs to be across zones
 		lz, zones, _ := k8s.GetZone(client)
 		nodesInZone := zones[lz]
@@ -481,6 +492,7 @@ func main() {
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
 	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom")
 	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
+	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

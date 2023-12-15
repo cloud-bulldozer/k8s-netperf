@@ -50,7 +50,9 @@ type Data struct {
 
 // ScenarioResults each scenario could have multiple results
 type ScenarioResults struct {
-	Results []Data
+	Results   []Data
+	Version   string
+	GitCommit string
 	Metadata
 }
 
