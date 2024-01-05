@@ -136,6 +136,13 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			pavail = false
 			log.Warn("😥 Prometheus is not available")
+		} else {
+			// Checking for microshift. In the event there is more nuance we will create a special microshift flag
+			_, err := client.CoreV1().ConfigMaps("kube-public").Get(context.TODO(), "microshift-version", metav1.GetOptions{})
+			if err == nil {
+				pcon.OpenShift = true
+			}
+
 		}
 
 		// Build the SUT (Deployments)
