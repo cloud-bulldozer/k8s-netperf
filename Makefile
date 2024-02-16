@@ -17,6 +17,7 @@ RHEL_VERSION = ubi9
 CONTAINER ?= podman
 CONTAINER_BUILD ?= podman build --force-rm
 CONTAINER_NS ?= quay.io/cloud-bulldozer/netperf
+SOURCES := $(shell find . -type f -name "*.go")
 
 # k8s-netperf version
 GIT_COMMIT = $(shell git rev-parse HEAD)

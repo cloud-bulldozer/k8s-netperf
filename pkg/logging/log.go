@@ -79,3 +79,13 @@ func Warn(args ...interface{}) {
 func Warnf(format string, args ...interface{}) {
 	defaultLog.Warnf(format, args...)
 }
+
+// Fatal - Fatal Message
+func Fatal(args ...interface{}) {
+	defaultLog.Fatal(args...)
+}
+
+// Fatalf - Fatal Message
+func Fatalf(format string, args ...interface{}) {
+	defaultLog.Fatalf(format, args...)
+}

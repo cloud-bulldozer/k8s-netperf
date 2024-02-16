@@ -1,4 +1,4 @@
-package netperf
+package drivers
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"k8s.io/client-go/kubernetes"
@@ -19,21 +20,24 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-const workload = "netperf"
+var Netperf netperf
 
-// ServerDataPort data port for the service
-const ServerDataPort = 42424
+func init() {
+	Netperf = netperf{
+		driverName: "netperf",
+	}
+}
 
 // omniOptions are netperf specific options that we will pass to the netperf client.
 const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_recv_calls,local_send_calls,local_transport_retrans"
 
 // Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
-func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
+func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s", pod.Name, pod.Status.PodIP, serverIP)
-	config.Show(nc, workload)
+	config.Show(nc, n.driverName)
 	var cmd []string
 	if nc.Service {
 		cmd = []string{"bash", "super-netperf", "1", "-H",
@@ -43,7 +47,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 			"--",
 			"-k", fmt.Sprint(omniOptions),
 			"-m", fmt.Sprint(nc.MessageSize),
-			"-P", fmt.Sprint(ServerDataPort),
+			"-P", fmt.Sprint(k8s.NetperfServerDataPort),
 			"-R", "1"}
 	} else {
 		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
@@ -89,9 +93,9 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 
 // ParseResults accepts the stdout from the execution of the benchmark. It also needs
 // It will return a Sample struct or error
-func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (n *netperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample := sample.Sample{}
-	sample.Driver = workload
+	sample.Driver = n.driverName
 	send := 0.0
 	recv := 0.0
 	if len(strings.Split(stdout.String(), "\n")) < 5 {
@@ -137,4 +141,9 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 		sample.LossPercent = 0
 	}
 	return sample, nil
+}
+
+// IsTestSupported Determine if the test is supported for driver
+func (n *netperf) IsTestSupported(test string) bool {
+	return true
 }
