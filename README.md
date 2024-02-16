@@ -13,6 +13,7 @@ Running Networking Performance Tests against K8s
 | netperf | TCP_CRR | Working | No|
 
 ## Setup
+
 ```shell
 $ git clone http://github.com/cloud-bulldozer/k8s-netperf
 $ cd k8s-netperf
@@ -37,7 +38,7 @@ $ kubectl create ns netperf
 $ kubectl create sa -n netperf netperf
 ```
 
-If you run with `-all`, you will need to allow `hostNetwork` for the netperf sa.
+If you run with `--all`, you will need to allow `hostNetwork` for the netperf sa.
 
 Example
 ```shell
@@ -55,21 +56,25 @@ Usage:
   k8s-netperf [flags]
 
 Flags:
-      --across                Place the client and server across availability zones
-      --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
-      --clean                 Clean-up resources created by k8s-netperf (default true)
       --config string         K8s netperf Configuration File (default "netperf.yml")
-      --debug                 Enable debug log
-  -h, --help                  help for k8s-netperf
-      --iperf                 Use iperf3 as load driver (along with netperf)
-      --uperf                 Use uperf as load driver (along with netperf)
+      --netperf               Use netperf as load driver (default true)
+      --iperf                 Use iperf3 as load driver
+      --uperf                 Use uperf as load driver
+      --clean                 Clean-up resources created by k8s-netperf (default true)
       --json                  Instead of human-readable output, return JSON to stdout
       --local                 Run network performance tests with Server-Pods/Client-Pods on the same Node
-      --metrics               Show all system metrics retrieved from prom
+      --across                Place the client and server across availability zones
+      --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
+      --debug                 Enable debug log
       --prom string           Prometheus URL
-      --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
-      --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
       --uuid string           User provided UUID
+      --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
+      --metrics               Show all system metrics retrieved from prom
+      --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
+      --version               k8s-netperf version
+  -h, --help                  help for k8s-netperf
+
+
 ```
 
 - `--across` will force the client to be across availability zones from the server
@@ -79,6 +84,7 @@ Flags:
   - When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
+- `--uperf ` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
 
