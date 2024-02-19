@@ -166,7 +166,7 @@ var rootCmd = &cobra.Command{
 				// No need to run hostNetwork through Service.
 				if !nc.Service {
 					if netperf {
-						npr := executeWorkload(nc, s, false, true, false, false)
+						npr := executeWorkload(nc, s, true, true, false, false)
 						sr.Results = append(sr.Results, npr)
 					}
 					if iperf3 {
@@ -176,7 +176,7 @@ var rootCmd = &cobra.Command{
 						}
 					}
 					if uperf {
-						upr := executeWorkload(nc, s, true, false, true, true)
+						upr := executeWorkload(nc, s, true, true, true, true)
 						if len(upr.Profile) > 1 {
 							sr.Results = append(sr.Results, upr)
 						}
