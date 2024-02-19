@@ -184,7 +184,7 @@ var rootCmd = &cobra.Command{
 				}
 			}
 			if netperf {
-				npr := executeWorkload(nc, s, true, false, false, false)
+				npr := executeWorkload(nc, s, false, true, false, false)
 				sr.Results = append(sr.Results, npr)
 			}
 			if iperf3 {
