@@ -54,6 +54,8 @@ var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
 	Short: "A tool to run network performance tests in Kubernetes cluster",
 	Run: func(cmd *cobra.Command, args []string) {
+		var acrossAZ, hostNetwork bool
+		var sr result.ScenarioResults
 		if version {
 			fmt.Println("Version:", cmdVersion.Version)
 			fmt.Println("Git Commit:", cmdVersion.GitCommit)
@@ -139,13 +141,11 @@ var rootCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		var sr result.ScenarioResults
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
 		// If the client and server needs to be across zones
 		lz, zones, _ := k8s.GetZone(client)
 		nodesInZone := zones[lz]
-		var acrossAZ bool
 		if nodesInZone > 1 {
 			acrossAZ = false
 		} else {
@@ -161,40 +161,24 @@ var rootCmd = &cobra.Command{
 			}
 			nc.Metric = metric
 			nc.AcrossAZ = acrossAZ
-
-			if s.HostNetwork {
-				// No need to run hostNetwork through Service.
-				if !nc.Service {
-					if netperf {
-						npr := executeWorkload(nc, s, true, true, false, false)
-						sr.Results = append(sr.Results, npr)
-					}
-					if iperf3 {
-						ipr := executeWorkload(nc, s, true, true, true, false)
-						if len(ipr.Profile) > 1 {
-							sr.Results = append(sr.Results, ipr)
-						}
-					}
-					if uperf {
-						upr := executeWorkload(nc, s, true, true, true, true)
-						if len(upr.Profile) > 1 {
-							sr.Results = append(sr.Results, upr)
-						}
-					}
-				}
+			// No need to run hostNetwork through Service.
+			if s.HostNetwork && !nc.Service {
+				hostNetwork = true
+			} else {
+				hostNetwork = false
 			}
 			if netperf {
-				npr := executeWorkload(nc, s, false, true, false, false)
+				npr := executeWorkload(nc, s, hostNetwork, true, false, false)
 				sr.Results = append(sr.Results, npr)
 			}
 			if iperf3 {
-				ipr := executeWorkload(nc, s, false, false, true, false)
+				ipr := executeWorkload(nc, s, hostNetwork, false, true, false)
 				if len(ipr.Profile) > 1 {
 					sr.Results = append(sr.Results, ipr)
 				}
 			}
 			if uperf {
-				upr := executeWorkload(nc, s, false, false, false, true)
+				upr := executeWorkload(nc, s, hostNetwork, false, false, true)
 				if len(upr.Profile) > 1 {
 					sr.Results = append(sr.Results, upr)
 				}
@@ -338,14 +322,12 @@ func cleanup(client *kubernetes.Clientset) {
 
 }
 
-func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, netperfDriver, iperf3, uperf bool) result.Data {
+// executeWorkload executes the workload and returns the result data.
+func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, netperf, iperf3, uperf bool) result.Data {
 	serverIP := ""
-	service := false
-	sameNode := true
 	Client := s.Client
 	var driver drivers.Driver
 	if nc.Service {
-		service = true
 		if iperf3 {
 			serverIP = s.IperfService.Spec.ClusterIP
 		} else if uperf {
@@ -362,7 +344,6 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, net
 	}
 	if !s.NodeLocal {
 		Client = s.ClientAcross
-		sameNode = false
 	}
 	if hostNet {
 		Client = s.ClientHost
@@ -370,8 +351,8 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, net
 	npr := result.Data{}
 	npr.Config = nc
 	npr.Metric = nc.Metric
-	npr.Service = service
-	npr.SameNode = sameNode
+	npr.Service = nc.Service
+	npr.SameNode = s.NodeLocal
 	npr.HostNetwork = hostNet
 	if s.AcrossAZ {
 		npr.AcrossAZ = true
@@ -379,10 +360,10 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, net
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, service)
+	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, nc.Service)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
-		if netperfDriver {
+		if netperf {
 			driver = drivers.NewDriver("netperf")
 			npr.Driver = "netperf"
 		}

@@ -177,10 +177,9 @@ func (i *iperf3) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample.Driver = i.driverName
 	result := IperfResult{}
 	sample.Metric = "Mb/s"
-	error := json.NewDecoder(stdout).Decode(&result)
-	if error != nil {
-		log.Error("Issue while decoding")
-		log.Error(error)
+	err := json.NewDecoder(stdout).Decode(&result)
+	if err != nil {
+		log.Errorf("Issue while decoding: %v", err)
 	}
 	if result.Data.TCPStream.Rate > 0 {
 		sample.Throughput = float64(result.Data.TCPStream.Rate) / 1000000
@@ -191,7 +190,7 @@ func (i *iperf3) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 		sample.LossPercent = result.Data.UDPStream.LossPercent
 	}
 
-	log.Debugf("Storing %s sample throughput:  %f", sample.Driver, sample.Throughput)
+	log.Debugf("Storing %s sample throughput: %f", sample.Driver, sample.Throughput)
 
 	return sample, nil
 }
