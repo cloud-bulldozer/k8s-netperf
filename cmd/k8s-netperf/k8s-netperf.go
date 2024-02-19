@@ -138,6 +138,13 @@ var rootCmd = &cobra.Command{
 			log.Warn("😥 Prometheus is not available")
 		}
 
+		// Build the namespace and create the sa account
+		err = k8s.BuildInfra(client)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+
 		// Build the SUT (Deployments)
 		err = k8s.BuildSUT(client, &s)
 		if err != nil {
@@ -345,7 +352,11 @@ func cleanup(client *kubernetes.Clientset) {
 			os.Exit(1)
 		}
 	}
-
+	err = k8s.DestroyNamespace(client)
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
 }
 
 func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool, uperf bool) result.Data {
