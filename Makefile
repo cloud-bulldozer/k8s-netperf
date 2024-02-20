@@ -50,7 +50,7 @@ gha-push:
 	@echo "Pushing Container Images & manifest"
 	$(CONTAINER) manifest push $(CONTAINER_NS)-manifest:latest $(CONTAINER_NS)
 
-clean: $(BIN_PATH) 
+clean:
 	rm -rf bin/$(ARCH)
 
 $(BIN_PATH): $(SOURCES)
