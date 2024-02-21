@@ -53,6 +53,9 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
 	Short: "A tool to run network performance tests in Kubernetes cluster",
+	PreRun: func(cmd *cobra.Command, args []string) {
+		log.Infof("Starting k8s-netperf (%s@%s)", cmdVersion.Version, cmdVersion.GitCommit)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		var acrossAZ, hostNetwork bool
 		var sr result.ScenarioResults
