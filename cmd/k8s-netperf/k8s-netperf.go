@@ -64,7 +64,9 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-
+		if !(uperf || netperf || iperf3) {
+			log.Fatalf("😭 At least one driver needs to be enabled")
+		}
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -205,7 +207,7 @@ var rootCmd = &cobra.Command{
 			if err == nil {
 				sr.Metadata.ClusterMetadata = metadata
 			} else {
-				log.Error(" issue getting common metadata using go-commons")
+				log.Error("Issue getting common metadata using go-commons")
 			}
 		}
 
