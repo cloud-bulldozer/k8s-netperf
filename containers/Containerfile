@@ -30,6 +30,5 @@ RUN curl -L https://github.com/esnet/iperf/releases/download/3.16/iperf-3.16.tar
 
 
 RUN rm -rf netperf && \
-    dnf clean all && \
-    curl -O https://raw.githubusercontent.com/jtaleric/tinker/main/networking/super-netperf && \
-    chmod +x super-netperf
+    dnf clean all
+COPY super-netperf /usr/bin/super-netperf

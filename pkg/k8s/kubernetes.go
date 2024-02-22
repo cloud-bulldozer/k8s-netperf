@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/pointer"
 )
 
 // DeploymentParams describes the deployment
@@ -38,7 +39,7 @@ type ServiceParams struct {
 	Namespace string
 	Labels    map[string]string
 	CtlPort   int32
-	DataPort  int32
+	DataPorts []int32
 }
 
 const sa string = "netperf"
@@ -68,6 +69,7 @@ const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
+const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 
 func BuildInfra(client *kubernetes.Clientset) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
@@ -121,6 +123,7 @@ func BuildInfra(client *kubernetes.Clientset) error {
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
+	var netperfDataPorts []int32
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
 	z, zones, err := GetZone(client)
@@ -193,7 +196,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Name:      "client",
 			Namespace: "netperf",
 			Replicas:  1,
-			Image:     "quay.io/cloud-bulldozer/netperf:latest",
+			Image:     k8sNetperfImage,
 			Labels:    map[string]string{"role": clientRole},
 			Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:      NetperfServerCtlPort,
@@ -220,7 +223,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace: "netperf",
 		Labels:    map[string]string{"role": serverRole},
 		CtlPort:   IperfServerCtlPort,
-		DataPort:  IperfServerDataPort,
+		DataPorts: []int32{IperfServerDataPort},
 	}
 	s.IperfService, err = CreateService(iperfSVC, client)
 	if err != nil {
@@ -233,7 +236,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace: "netperf",
 		Labels:    map[string]string{"role": serverRole},
 		CtlPort:   UperfServerCtlPort,
-		DataPort:  UperfServerDataPort,
+		DataPorts: []int32{UperfServerDataPort},
 	}
 	s.UperfService, err = CreateService(uperfSVC, client)
 	if err != nil {
@@ -241,12 +244,15 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	// Create netperf service
+	for i := 0; i < 16; i++ {
+		netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+	}
 	netperfSVC := ServiceParams{
 		Name:      "netperf-service",
 		Namespace: "netperf",
 		Labels:    map[string]string{"role": serverRole},
 		CtlPort:   NetperfServerCtlPort,
-		DataPort:  NetperfServerDataPort,
+		DataPorts: netperfDataPorts,
 	}
 	s.NetperfService, err = CreateService(netperfSVC, client)
 	if err != nil {
@@ -256,7 +262,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:      "client-across",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/cloud-bulldozer/netperf:latest",
+		Image:     k8sNetperfImage,
 		Labels:    map[string]string{"role": clientAcrossRole},
 		Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:      NetperfServerCtlPort,
@@ -270,7 +276,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/cloud-bulldozer/netperf:latest",
+		Image:       k8sNetperfImage,
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
@@ -318,7 +324,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:   "netperf",
 		Replicas:    1,
 		HostNetwork: true,
-		Image:       "quay.io/cloud-bulldozer/netperf:latest",
+		Image:       k8sNetperfImage,
 		Labels:      map[string]string{"role": hostNetServerRole},
 		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
@@ -328,7 +334,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:      "server",
 		Namespace: "netperf",
 		Replicas:  1,
-		Image:     "quay.io/cloud-bulldozer/netperf:latest",
+		Image:     k8sNetperfImage,
 		Labels:    map[string]string{"role": serverRole},
 		Commands:  dpCommands,
 		Port:      NetperfServerCtlPort,
@@ -552,9 +558,10 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					},
 				},
 				Spec: apiv1.PodSpec{
-					ServiceAccountName: sa,
-					HostNetwork:        dp.HostNetwork,
-					Containers:         cmdContainers,
+					TerminationGracePeriodSeconds: pointer.Int64(1),
+					ServiceAccountName:            sa,
+					HostNetwork:                   dp.HostNetwork,
+					Containers:                    cmdContainers,
 					Affinity: &apiv1.Affinity{
 						NodeAffinity:    &dp.NodeAffinity,
 						PodAffinity:     &dp.PodAffinity,
@@ -660,22 +667,26 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*apiv1.Servi
 					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.CtlPort)),
 					Port:       sp.CtlPort,
 				},
-				{
-					Name:       fmt.Sprintf("%s-data-tcp", sp.Name),
-					Protocol:   apiv1.ProtocolTCP,
-					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.DataPort)),
-					Port:       sp.DataPort,
-				},
-				{
-					Name:       fmt.Sprintf("%s-data-udp", sp.Name),
-					Protocol:   apiv1.ProtocolUDP,
-					TargetPort: intstr.Parse(fmt.Sprintf("%d", sp.DataPort)),
-					Port:       sp.DataPort,
-				},
 			},
 			Type:     apiv1.ServiceType("ClusterIP"),
 			Selector: sp.Labels,
 		},
+	}
+	for _, port := range sp.DataPorts {
+		service.Spec.Ports = append(service.Spec.Ports,
+			apiv1.ServicePort{
+				Name:       fmt.Sprintf("%s-tcp-%d", sp.Name, port),
+				Protocol:   apiv1.ProtocolTCP,
+				TargetPort: intstr.Parse(fmt.Sprintf("%d", port)),
+				Port:       port,
+			},
+			apiv1.ServicePort{
+				Name:       fmt.Sprintf("%s-udp-%d", sp.Name, port),
+				Protocol:   apiv1.ProtocolUDP,
+				TargetPort: intstr.Parse(fmt.Sprintf("%d", port)),
+				Port:       port,
+			},
+		)
 	}
 	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
 }

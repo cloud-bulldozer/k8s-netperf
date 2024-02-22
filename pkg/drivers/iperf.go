@@ -66,43 +66,22 @@ func (i *iperf3) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, 
 		tcp = false
 	}
 	var cmd []string
-	if nc.Service {
-		if tcp {
-			cmd = []string{"iperf3", "-P", "1", "-c",
-				serverIP, "-J", "-t",
-				fmt.Sprint(nc.Duration),
-				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
-				fmt.Sprintf("--logfile=%s", file),
-			}
-		} else {
-			cmd = []string{"iperf3", "-P", "1", "-c",
-				serverIP, "-t",
-				fmt.Sprint(nc.Duration), "-u", "-J",
-				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
-				"-b", "0",
-				fmt.Sprintf("--logfile=%s", file),
-			}
+	if tcp {
+		cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
+			serverIP, "-t",
+			fmt.Sprint(nc.Duration),
+			"-l", fmt.Sprint(nc.MessageSize),
+			"-p", fmt.Sprint(k8s.IperfServerCtlPort),
+			fmt.Sprintf("--logfile=%s", file),
 		}
 	} else {
-		if tcp {
-			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
-				serverIP, "-t",
-				fmt.Sprint(nc.Duration),
-				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
-				fmt.Sprintf("--logfile=%s", file),
-			}
-		} else {
-			cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
-				serverIP, "-t",
-				fmt.Sprint(nc.Duration), "-u",
-				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
-				"-b", "0",
-				fmt.Sprintf("--logfile=%s", file),
-			}
+		cmd = []string{"iperf3", "-J", "-P", strconv.Itoa(nc.Parallelism), "-c",
+			serverIP, "-t",
+			fmt.Sprint(nc.Duration), "-u",
+			"-l", fmt.Sprint(nc.MessageSize),
+			"-p", fmt.Sprint(k8s.IperfServerCtlPort),
+			"-b", "0",
+			fmt.Sprintf("--logfile=%s", file),
 		}
 	}
 	log.Debug(cmd)
