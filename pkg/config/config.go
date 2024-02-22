@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -67,11 +67,6 @@ func validConfig(cfg Config) (bool, error) {
 	if cfg.Parallelism < 1 {
 		return false, fmt.Errorf("parallelism must be > 0")
 	}
-	if cfg.Service {
-		if cfg.Parallelism > 1 {
-			return false, fmt.Errorf("parallelism must be 1 when using a service")
-		}
-	}
 	return true, nil
 }
 
@@ -80,7 +75,7 @@ func validConfig(cfg Config) (bool, error) {
 // Returns Config struct
 func ParseConf(fn string) ([]Config, error) {
 	log.Infof("📒 Reading %s file. ", fn)
-	buf, err := ioutil.ReadFile(fn)
+	buf, err := os.ReadFile(fn)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +102,7 @@ func ParseConf(fn string) ([]Config, error) {
 // Returns Config struct
 func ParseV2Conf(fn string) ([]Config, error) {
 	log.Infof("📒 Reading %s file - using ConfigV2 Method. ", fn)
-	buf, err := ioutil.ReadFile(fn)
+	buf, err := os.ReadFile(fn)
 	if err != nil {
 		return nil, err
 	}

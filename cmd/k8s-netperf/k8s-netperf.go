@@ -163,7 +163,7 @@ var rootCmd = &cobra.Command{
 		} else {
 			acrossAZ = true
 		}
-
+		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
 		// Run through each test
 		for _, nc := range s.Configs {
 			// Determine the metric for the test
