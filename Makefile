@@ -17,6 +17,7 @@ RHEL_VERSION = ubi9
 CONTAINER ?= podman
 CONTAINER_BUILD ?= podman build --force-rm
 CONTAINER_NS ?= quay.io/cloud-bulldozer/netperf
+SOURCES := $(shell find . -type f -name "*.go")
 
 # k8s-netperf version
 GIT_COMMIT = $(shell git rev-parse HEAD)
@@ -49,7 +50,7 @@ gha-push:
 	@echo "Pushing Container Images & manifest"
 	$(CONTAINER) manifest push $(CONTAINER_NS)-manifest:latest $(CONTAINER_NS)
 
-clean: $(BIN_PATH) 
+clean:
 	rm -rf bin/$(ARCH)
 
 $(BIN_PATH): $(SOURCES)

@@ -1,4 +1,4 @@
-package uperf
+package drivers
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"github.com/montanaflynn/stats"
@@ -35,16 +36,16 @@ type Result struct {
 	} `json:"end"`
 }
 
-const workload = "uperf"
+var Uperf uperf
 
-// ServerDataPort data port for the service
-const ServerDataPort = 30001
+func init() {
+	Uperf = uperf{
+		driverName: "uperf",
+	}
+}
 
-// ServerCtlPort control port for the service
-const ServerCtlPort = 30000
-
-// TestSupported Determine if the test is supproted for driver
-func TestSupported(test string) bool {
+// TestSupported Determine if the test is supported for driver
+func (u *uperf) IsTestSupported(test string) bool {
 	return !strings.Contains(test, "TCP_CRR")
 }
 
@@ -74,7 +75,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, ServerCtlPort+1, nc.Duration, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-stream-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	} else {
 		fileContent = fmt.Sprintf(`<?xml version=1.0?>		
@@ -91,7 +92,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, ServerCtlPort+1, nc.Duration, nc.MessageSize, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
@@ -135,13 +136,14 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 }
 
 // Run will invoke uperf in a client container
-func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
+
+func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	var exec remotecommand.Executor
 
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting uperf against server : %s", pod.Name, pod.Status.PodIP, serverIP)
-	config.Show(nc, workload)
+	config.Show(nc, u.driverName)
 
 	filePath, err := createUperfProfile(c, rc, nc, pod, serverIP)
 	if err != nil {
@@ -152,7 +154,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 	stdout = bytes.Buffer{}
 	stderr = bytes.Buffer{}
 
-	cmd := []string{"uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(ServerCtlPort)}
+	cmd := []string{"uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(k8s.UperfServerCtlPort)}
 	log.Debug(cmd)
 
 	req := c.CoreV1().RESTClient().
@@ -188,9 +190,9 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (u *uperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample := sample.Sample{}
-	sample.Driver = workload
+	sample.Driver = u.driverName
 	sample.Metric = "Mb/s"
 
 	transactions := regexp.MustCompile(`timestamp_ms:(.*) name:Txn2 nr_bytes:(.*) nr_ops:(.*)\r`).FindAllStringSubmatch(stdout.String(), -1)

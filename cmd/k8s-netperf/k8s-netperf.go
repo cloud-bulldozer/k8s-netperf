@@ -14,14 +14,12 @@ import (
 	cmdVersion "github.com/cloud-bulldozer/go-commons/version"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
-	"github.com/cloud-bulldozer/k8s-netperf/pkg/iperf"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/drivers"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
-	"github.com/cloud-bulldozer/k8s-netperf/pkg/netperf"
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
-	uperf_driver "github.com/cloud-bulldozer/k8s-netperf/pkg/uperf"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +35,7 @@ var (
 	cfgfile     string
 	nl          bool
 	clean       bool
+	netperf     bool
 	iperf3      bool
 	uperf       bool
 	acrossAZ    bool
@@ -54,7 +53,12 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "k8s-netperf",
 	Short: "A tool to run network performance tests in Kubernetes cluster",
+	PreRun: func(cmd *cobra.Command, args []string) {
+		log.Infof("Starting k8s-netperf (%s@%s)", cmdVersion.Version, cmdVersion.GitCommit)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
+		var acrossAZ, hostNetwork bool
+		var sr result.ScenarioResults
 		if version {
 			fmt.Println("Version:", cmdVersion.Version)
 			fmt.Println("Git Commit:", cmdVersion.GitCommit)
@@ -63,7 +67,9 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-
+		if !(uperf || netperf || iperf3) {
+			log.Fatalf("😭 At least one driver needs to be enabled")
+		}
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -84,8 +90,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			cf, err := config.ParseV2Conf(cfgfile)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				log.Fatal(err)
 			}
 			cfg = cf
 		}
@@ -95,13 +100,11 @@ var rootCmd = &cobra.Command{
 			&clientcmd.ConfigOverrides{})
 		rconfig, err := kconfig.ClientConfig()
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 		client, err := kubernetes.NewForConfig(rconfig)
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 		if clean {
 			cleanup(client)
@@ -117,8 +120,7 @@ var rootCmd = &cobra.Command{
 		// Get node count
 		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 		if !s.NodeLocal && len(nodes.Items) < 2 {
 			log.Error("Node count too low to run pod to pod across nodes.")
@@ -141,17 +143,14 @@ var rootCmd = &cobra.Command{
 		// Build the SUT (Deployments)
 		err = k8s.BuildSUT(client, &s)
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
-		var sr result.ScenarioResults
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
 		// If the client and server needs to be across zones
 		lz, zones, _ := k8s.GetZone(client)
 		nodesInZone := zones[lz]
-		var acrossAZ bool
 		if nodesInZone > 1 {
 			acrossAZ = false
 		} else {
@@ -167,36 +166,24 @@ var rootCmd = &cobra.Command{
 			}
 			nc.Metric = metric
 			nc.AcrossAZ = acrossAZ
-
-			if s.HostNetwork {
-				// No need to run hostNetwork through Service.
-				if !nc.Service {
-					npr := executeWorkload(nc, s, true, false, false)
-					sr.Results = append(sr.Results, npr)
-					if iperf3 {
-						ipr := executeWorkload(nc, s, true, true, false)
-						if len(ipr.Profile) > 1 {
-							sr.Results = append(sr.Results, ipr)
-						}
-					}
-					if uperf {
-						upr := executeWorkload(nc, s, true, false, true)
-						if len(upr.Profile) > 1 {
-							sr.Results = append(sr.Results, upr)
-						}
-					}
-				}
+			// No need to run hostNetwork through Service.
+			if s.HostNetwork && !nc.Service {
+				hostNetwork = true
+			} else {
+				hostNetwork = false
 			}
-			npr := executeWorkload(nc, s, false, false, false)
-			sr.Results = append(sr.Results, npr)
+			if netperf {
+				npr := executeWorkload(nc, s, hostNetwork, true, false, false)
+				sr.Results = append(sr.Results, npr)
+			}
 			if iperf3 {
-				ipr := executeWorkload(nc, s, false, true, false)
+				ipr := executeWorkload(nc, s, hostNetwork, false, true, false)
 				if len(ipr.Profile) > 1 {
 					sr.Results = append(sr.Results, ipr)
 				}
 			}
 			if uperf {
-				upr := executeWorkload(nc, s, false, false, true)
+				upr := executeWorkload(nc, s, hostNetwork, false, false, true)
 				if len(upr.Profile) > 1 {
 					sr.Results = append(sr.Results, upr)
 				}
@@ -223,7 +210,7 @@ var rootCmd = &cobra.Command{
 			if err == nil {
 				sr.Metadata.ClusterMetadata = metadata
 			} else {
-				log.Error(" issue getting common metadata using go-commons")
+				log.Error("Issue getting common metadata using go-commons")
 			}
 		}
 
@@ -244,13 +231,11 @@ var rootCmd = &cobra.Command{
 		if len(searchURL) > 1 {
 			jdocs, err := archive.BuildDocs(sr, uid)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				log.Fatal(err)
 			}
 			esClient, err := archive.Connect(searchURL, index, true)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				log.Fatal(err)
 			}
 			log.Infof("Indexing [%d] documents in %s with UUID %s", len(jdocs), index, uid)
 			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
@@ -278,20 +263,17 @@ var rootCmd = &cobra.Command{
 		}
 		err = archive.WriteCSVResult(sr)
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 		if pavail {
 			err = archive.WritePromCSVResult(sr)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				log.Fatal(err)
 			}
 		}
 		err = archive.WriteSpecificCSV(sr)
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
@@ -320,8 +302,7 @@ func cleanup(client *kubernetes.Clientset) {
 	log.Info("Cleaning resources created by k8s-netperf")
 	svcList, err := k8s.GetServices(client, namespace)
 	if err != nil {
-		log.Error(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	for svc := range svcList.Items {
 		err = k8s.DestroyService(client, svcList.Items[svc])
@@ -331,8 +312,7 @@ func cleanup(client *kubernetes.Clientset) {
 	}
 	dpList, err := k8s.GetDeployments(client, namespace)
 	if err != nil {
-		log.Error(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	for dp := range dpList.Items {
 		err = k8s.DestroyDeployment(client, dpList.Items[dp])
@@ -341,20 +321,18 @@ func cleanup(client *kubernetes.Clientset) {
 		}
 		_, err := k8s.WaitForDelete(client, dpList.Items[dp])
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 	}
 
 }
 
-func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, iperf3 bool, uperf bool) result.Data {
+// executeWorkload executes the workload and returns the result data.
+func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, netperf, iperf3, uperf bool) result.Data {
 	serverIP := ""
-	service := false
-	sameNode := true
 	Client := s.Client
+	var driver drivers.Driver
 	if nc.Service {
-		service = true
 		if iperf3 {
 			serverIP = s.IperfService.Spec.ClusterIP
 		} else if uperf {
@@ -371,29 +349,15 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 	}
 	if !s.NodeLocal {
 		Client = s.ClientAcross
-		sameNode = false
 	}
 	if hostNet {
 		Client = s.ClientHost
 	}
 	npr := result.Data{}
-	if iperf3 {
-		// iperf doesn't support all tests cases
-		if !iperf.TestSupported(nc.Profile) {
-			return npr
-		}
-	}
-	if uperf {
-		// uperf doesn't support all tests cases
-		if !uperf_driver.TestSupported(nc.Profile) {
-			return npr
-		}
-	}
-
 	npr.Config = nc
 	npr.Metric = nc.Metric
-	npr.Service = service
-	npr.SameNode = sameNode
+	npr.Service = nc.Service
+	npr.SameNode = s.NodeLocal
 	npr.HostNetwork = hostNet
 	if s.AcrossAZ {
 		npr.AcrossAZ = true
@@ -401,66 +365,54 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, service)
+	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, nc.Service)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
-		if iperf3 {
-			npr.Driver = "iperf3"
-			r, err := iperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-			nr, err = iperf.ParseResults(&r)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-		} else if uperf {
-			npr.Driver = "uperf"
-			r, err := uperf_driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-			nr, err = uperf_driver.ParseResults(&r)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-		} else {
+		if netperf {
+			driver = drivers.NewDriver("netperf")
 			npr.Driver = "netperf"
-			r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+		}
+		if iperf3 {
+			driver = drivers.NewDriver("iperf3")
+			npr.Driver = "iperf3"
+		}
+		if uperf {
+			driver = drivers.NewDriver("uperf")
+			npr.Driver = "uperf"
+		}
+		// Check if test is supported
+		if !driver.IsTestSupported(nc.Profile) {
+			log.Warnf("Test %s is not supported with driver %s. Skipping.", nc.Profile, npr.Driver)
+			return npr
+		}
+		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+		if err != nil {
+			log.Fatal(err)
+		}
+		nr, err = driver.ParseResults(&r)
+		if err != nil {
+			log.Error(err)
+			try := 0
+			success := false
+			// Retry the current test.
+			for try < retry {
+				log.Warn("Rerunning test.")
+				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+				if err != nil {
+					log.Error(err)
+					continue
+				}
+				nr, err = driver.ParseResults(&r)
+				if err != nil {
+					log.Error(err)
+					try++
+				} else {
+					success = true
+					break
+				}
 			}
-			nr, err = netperf.ParseResults(&r)
-			if err != nil {
-				log.Error(err)
-				try := 0
-				success := false
-				// Retry the current test.
-				for try < retry {
-					log.Warn("Rerunning test.")
-					r, err := netperf.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
-					if err != nil {
-						log.Error(err)
-						continue
-					}
-					nr, err = netperf.ParseResults(&r)
-					if err != nil {
-						log.Error(err)
-						try++
-					} else {
-						success = true
-						break
-					}
-				}
-				if !success {
-					log.Error("test was unsuccessful after retry.")
-					os.Exit(1)
-				}
+			if !success {
+				log.Fatal("test was unsuccessful after retry.")
 			}
 		}
 		npr.LossSummary = append(npr.LossSummary, float64(nr.LossPercent))
@@ -479,8 +431,9 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, ipe
 
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
-	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (along with netperf)")
-	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (along with netperf)")
+	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver")
+	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver")
+	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
@@ -493,10 +446,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom")
 	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
-
+	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
-
 }

@@ -1,4 +1,4 @@
-package iperf
+package drivers
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"github.com/google/uuid"
@@ -21,7 +22,15 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-type Result struct {
+var Iperf iperf3
+
+func init() {
+	Iperf = iperf3{
+		driverName: "iperf",
+	}
+}
+
+type IperfResult struct {
 	Data struct {
 		TCPRetransmit struct {
 			Count float64 `json:"retransmits"`
@@ -36,27 +45,19 @@ type Result struct {
 	} `json:"end"`
 }
 
-const workload = "iperf3"
-
-// ServerDataPort data port for the service
-const ServerDataPort = 43433
-
-// ServerCtlPort control port for the service
-const ServerCtlPort = 22865
-
-// TestSupported Determine if the test is supproted for driver
-func TestSupported(test string) bool {
+// IsTestSupported Determine if the test is supported for driver
+func (i *iperf3) IsTestSupported(test string) bool {
 	return strings.Contains(test, "STREAM")
 }
 
 // Run will invoke iperf3 in a client container
-func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
+func (i *iperf3) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	id := uuid.New()
 	file := fmt.Sprintf("/tmp/iperf-%s", id.String())
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting iperf3 against server : %s", pod.Name, pod.Status.PodIP, serverIP)
-	config.Show(nc, workload)
+	config.Show(nc, i.driverName)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {
 		return bytes.Buffer{}, fmt.Errorf("unable to run iperf3 with non-stream tests")
@@ -71,7 +72,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 				serverIP, "-J", "-t",
 				fmt.Sprint(nc.Duration),
 				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(ServerCtlPort),
+				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
 				fmt.Sprintf("--logfile=%s", file),
 			}
 		} else {
@@ -79,7 +80,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 				serverIP, "-t",
 				fmt.Sprint(nc.Duration), "-u", "-J",
 				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(ServerCtlPort),
+				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
 				"-b", "0",
 				fmt.Sprintf("--logfile=%s", file),
 			}
@@ -90,7 +91,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 				serverIP, "-t",
 				fmt.Sprint(nc.Duration),
 				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(ServerCtlPort),
+				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
 				fmt.Sprintf("--logfile=%s", file),
 			}
 		} else {
@@ -98,7 +99,7 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 				serverIP, "-t",
 				fmt.Sprint(nc.Duration), "-u",
 				"-l", fmt.Sprint(nc.MessageSize),
-				"-p", fmt.Sprint(ServerCtlPort),
+				"-p", fmt.Sprint(k8s.IperfServerCtlPort),
 				"-b", "0",
 				fmt.Sprintf("--logfile=%s", file),
 			}
@@ -171,15 +172,14 @@ func Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (i *iperf3) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample := sample.Sample{}
-	sample.Driver = workload
-	result := Result{}
+	sample.Driver = i.driverName
+	result := IperfResult{}
 	sample.Metric = "Mb/s"
-	error := json.NewDecoder(stdout).Decode(&result)
-	if error != nil {
-		log.Error("Issue while decoding")
-		log.Error(error)
+	err := json.NewDecoder(stdout).Decode(&result)
+	if err != nil {
+		log.Errorf("Issue while decoding: %v", err)
 	}
 	if result.Data.TCPStream.Rate > 0 {
 		sample.Throughput = float64(result.Data.TCPStream.Rate) / 1000000
@@ -190,7 +190,7 @@ func ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 		sample.LossPercent = result.Data.UDPStream.LossPercent
 	}
 
-	log.Debugf("Storing %s sample throughput:  %f", sample.Driver, sample.Throughput)
+	log.Debugf("Storing %s sample throughput: %f", sample.Driver, sample.Throughput)
 
 	return sample, nil
 }
