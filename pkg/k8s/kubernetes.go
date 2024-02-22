@@ -69,7 +69,7 @@ const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
-const k8sNetperfImage = "quay.io/rsevilla/k8s-netperf:latest"
+const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 
 func BuildInfra(client *kubernetes.Clientset) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
@@ -123,6 +123,7 @@ func BuildInfra(client *kubernetes.Clientset) error {
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
+	var netperfDataPorts []int32
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
 	z, zones, err := GetZone(client)
@@ -243,7 +244,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	// Create netperf service
-	var netperfDataPorts []int32
 	for i := 0; i < 16; i++ {
 		netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
 	}
