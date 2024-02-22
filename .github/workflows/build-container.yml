@@ -1,6 +1,9 @@
 name: Release k8s-netperf container image
 
 on:
+  pull_request:
+    paths:
+      - "containers/**"
   push:
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
