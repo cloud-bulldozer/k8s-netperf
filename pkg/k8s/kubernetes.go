@@ -9,6 +9,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
@@ -41,6 +42,7 @@ type ServiceParams struct {
 }
 
 const sa string = "netperf"
+const namespace string = "netperf"
 
 // NetperfServerCtlPort control port for the service
 const NetperfServerCtlPort = 12865
@@ -66,6 +68,56 @@ const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
+
+func BuildInfra(client *kubernetes.Clientset) error {
+	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
+	if err == nil {
+		log.Infof("♻️ Namespace already exists, reusing it")
+	} else {
+		log.Infof("🔨 Creating namespace : %s", namespace)
+		_, err := client.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create namespace - %s", err)
+		}
+	}
+	_, err = client.CoreV1().ServiceAccounts(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
+	if err == nil {
+		log.Infof("♻️ Service account already exists, reusing it")
+	} else {
+		log.Infof("🔨 Creating service account : %s", sa)
+		_, err = client.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), &apiv1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: sa}}, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create service account")
+		}
+	}
+	rBinding := &v1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sa,
+			Namespace: namespace,
+		},
+		RoleRef: v1.RoleRef{
+			Kind: "ClusterRole",
+			Name: "system:openshift:scc:hostnetwork",
+		},
+		Subjects: []v1.Subject{
+			{
+				Namespace: namespace,
+				Name:      sa,
+				Kind:      "ServiceAccount",
+			},
+		},
+	}
+	_, err = client.RbacV1().RoleBindings(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
+	if err == nil {
+		log.Infof("♻️ Role binding already exists, reusing it")
+	} else {
+		_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create role-binding")
+		}
+	}
+	return nil
+}
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
@@ -652,6 +704,18 @@ func DestroyService(client *kubernetes.Clientset, serv apiv1.Service) error {
 	return client.CoreV1().Services(serv.Namespace).Delete(context.TODO(), serv.Name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
+}
+
+// DestroyNamespace cleans up the namespace k8s-netperf created
+func DestroyNamespace(client *kubernetes.Clientset) error {
+	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
+	if err == nil {
+		deletePolicy := metav1.DeletePropagationForeground
+		return client.CoreV1().Namespaces().Delete(context.TODO(), namespace, metav1.DeleteOptions{
+			PropagationPolicy: &deletePolicy,
+		})
+	}
+	return nil
 }
 
 // DestroyDeployment cleans up a specific deployment from a namespace
