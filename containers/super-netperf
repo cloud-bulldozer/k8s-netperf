@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#
+# This work came from inspiration from : https://github.com/borkmann/stuff/blob/master/super_netperf
+#
+# We wanted to take advantage of NetPerf's OMNI output for our work. To do this, we had to make some modifications.
+#
+# run_netperf(number_of_netperfs)
+#
+run_netperf() {
+    loops=$1
+    shift
+    port=$1
+    shift
+    for ((i=0; i<loops; i++)); do
+        netperf -s 2 $@ -P $port 2>&1 > /tmp/result-${i} &
+        ((port++))
+    done
+    wait
+    return 0
+}
+
+#
+# Assumption here is the user passed the -- -k rt_latency,p99_latency,throughput,throughput_units
+# Which is taking advantage of the OMNI output
+#
+process_netperf() {
+    # Flush buffers
+    sync
+    tp=0 # Throughput
+    l=0	 # Latency
+    rtl=0 # RT latency
+    send=0
+    recv=0
+    retrans=0
+    u=""
+    top=""
+    for file in `ls /tmp/result-*`; do
+      top=$(head -n 1 $file)
+      t=$(cat $file | grep "THROUGHPUT=" | awk -F= '{print $2}')
+      s=$(cat $file | grep "LOCAL_SEND_CALLS=" | awk -F= '{print $2}')
+      r=$(cat $file | grep "REMOTE_RECV_CALLS=" | awk -F= '{print $2}')
+      rt=$(cat $file | grep "LOCAL_TRANSPORT_RETRANS=" | awk -F= '{print $2}')
+      rrtl=$(cat $file | grep "RT_LATENCY=" | awk -F= '{print $2}')
+      if [[ $rrtl == "-1.000" ]]; then
+        rtl="-1.000"
+      else
+        rtl=$(echo $rtl+$rrtl | bc)
+      fi
+      rl=$(cat $file | grep "P99_LATENCY=" | awk -F= '{print $2}')
+      l=$(echo $l+rl | bc)
+      tp=$(echo $tp+$t | bc)
+      send=$(echo $send+$s | bc)
+      recv=$(echo $recv+$r | bc)
+      retrans=$(echo $retrans+$rt | bc)
+      u=$(cat $file | grep "UNITS")
+      filename=$(basename $file)
+      mv $file /tmp/old-$filename
+    done
+    echo "$top"
+    echo "RT_LATENCY=$rtl"
+    echo "P99_LATENCY=$rl"
+    echo "THROUGHPUT=$tp"
+    echo "LOCAL_TRANSPORT_RETRANS=$retrans"
+    echo "REMOTE_RECV_CALLS=$recv"
+    echo "LOCAL_SEND_CALLS=$send"
+    echo "$u"
+}
+run_netperf $@
+process_netperf

@@ -28,6 +28,8 @@ func init() {
 	}
 }
 
+const superNetperf = "super-netperf"
+
 // omniOptions are netperf specific options that we will pass to the netperf client.
 const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_recv_calls,local_send_calls,local_transport_retrans"
 
@@ -38,27 +40,14 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	pod := client.Items[0]
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server : %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, n.driverName)
-	var cmd []string
-	if nc.Service {
-		cmd = []string{"bash", "super-netperf", "1", "-H",
-			serverIP, "-l",
-			fmt.Sprint(nc.Duration),
-			"-t", nc.Profile,
-			"--",
-			"-k", fmt.Sprint(omniOptions),
-			"-m", fmt.Sprint(nc.MessageSize),
-			"-P", fmt.Sprint(k8s.NetperfServerDataPort),
-			"-R", "1"}
-	} else {
-		cmd = []string{"bash", "super-netperf", strconv.Itoa(nc.Parallelism), "-H",
-			serverIP, "-l",
-			fmt.Sprint(nc.Duration),
-			"-t", nc.Profile,
-			"--",
-			"-k", fmt.Sprint(omniOptions),
-			"-m", fmt.Sprint(nc.MessageSize),
-			"-R", "1"}
-	}
+	cmd := []string{superNetperf, strconv.Itoa(nc.Parallelism), strconv.Itoa(k8s.NetperfServerDataPort), "-H",
+		serverIP, "-l",
+		fmt.Sprint(nc.Duration),
+		"-t", nc.Profile,
+		"--",
+		"-k", fmt.Sprint(omniOptions),
+		"-m", fmt.Sprint(nc.MessageSize),
+		"-R", "1"}
 	log.Debug(cmd)
 	req := c.CoreV1().RESTClient().
 		Post().
