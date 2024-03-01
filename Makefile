@@ -16,7 +16,7 @@ CGO = 0
 RHEL_VERSION = ubi9
 CONTAINER ?= podman
 CONTAINER_BUILD ?= podman build --force-rm
-CONTAINER_NS ?= quay.io/cloud-bulldozer/netperf
+CONTAINER_NS ?= quay.io/cloud-bulldozer
 SOURCES := $(shell find . -type f -name "*.go")
 
 # k8s-netperf version
@@ -38,17 +38,17 @@ container-build: build
 	@echo "Building the container image"
 	$(CONTAINER_BUILD) -f containers/Containerfile \
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) \
-		-t $(CONTAINER_NS)/$(BIN) ./containers
+		-t $(CONTAINER_NS)/$(BIN):latest ./containers
 
-gha-build: build
+gha-build:
 	@echo "Building the container image for GHA"
 	$(CONTAINER_BUILD) -f containers/Containerfile \
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) --platform=linux/amd64,linux/arm64,linux/ppc64le,linux/s390x \
-		-t $(CONTAINER_NS) ./containers --manifest=$(CONTAINER_NS)-manifest:latest
+		./containers --manifest=$(CONTAINER_NS)/${BIN}:latest
 
-gha-push:
+gha-push: gha-build
 	@echo "Pushing Container Images & manifest"
-	$(CONTAINER) manifest push $(CONTAINER_NS)-manifest:latest $(CONTAINER_NS)
+	$(CONTAINER) manifest push $(CONTAINER_NS)/${BIN}:latest $(CONTAINER_NS)/${BIN}:latest
 
 clean:
 	rm -rf bin/$(ARCH)
