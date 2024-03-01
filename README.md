@@ -10,7 +10,14 @@ Running Networking Performance Tests against K8s
 | netperf | TCP_STREAM | Working | Yes |
 | netperf | UDP_STREAM | Working | No |
 | netperf | TCP_RR | Working | No |
+| netperf | UDP_RR | Working | No |
 | netperf | TCP_CRR | Working | No|
+| uperf   | TCP_STREAM | Working | Yes |
+| uperf   | UDP_STREAM | Working | No |
+| uperf   | TCP_RR | Working | No |
+| uperf | UDP_RR | Working | No |
+| iperf3  | TCP_STREAM | Working | Yes |
+| iperf3  | UDP_STREAM | Working | No |
 
 ## Setup
 
@@ -81,7 +88,7 @@ Flags:
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
 - `--prom` accepts a string (URL). Example  http://localhost:9090
-  - When using `--prom` with a non-openshift clsuter, it will be necessary to pass the prometheus URL.
+  - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
@@ -117,8 +124,8 @@ TCPStream:                 # Place-holder of a test name
    service: false          # If we should test with the server pod behind a service
 ```
 
-#### parallelism
-In most cases setting parallelism greater than 1 is OK, however through a `service` we only support a single process of netperf, since we bind to a specific port.
+#### Parallelism
+In most cases setting parallelism greater than 1 is OK, when using `service: true`, multiple threads (or processes in netperf) connect to the same service.
 
 ## Pass / Fail
 `k8s-netperf` has a cli option for `--tcp-tolerance` which defaults to 10%.
