@@ -76,20 +76,20 @@ func BuildInfra(client *kubernetes.Clientset) error {
 	if err == nil {
 		log.Infof("♻️ Namespace already exists, reusing it")
 	} else {
-		log.Infof("🔨 Creating namespace : %s", namespace)
+		log.Infof("🔨 Creating namespace: %s", namespace)
 		_, err := client.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
 		if err != nil {
-			return fmt.Errorf("😥 Unable to create namespace - %s", err)
+			return fmt.Errorf("😥 Unable to create namespace: %v", err)
 		}
 	}
 	_, err = client.CoreV1().ServiceAccounts(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
 	if err == nil {
 		log.Infof("♻️ Service account already exists, reusing it")
 	} else {
-		log.Infof("🔨 Creating service account : %s", sa)
+		log.Infof("🔨 Creating service account: %s", sa)
 		_, err = client.CoreV1().ServiceAccounts(namespace).Create(context.TODO(), &apiv1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: sa}}, metav1.CreateOptions{})
 		if err != nil {
-			return fmt.Errorf("😥 Unable to create service account")
+			return fmt.Errorf("😥 Unable to create service account: %v", err)
 		}
 	}
 	rBinding := &v1.RoleBinding{
@@ -115,7 +115,7 @@ func BuildInfra(client *kubernetes.Clientset) error {
 	} else {
 		_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
 		if err != nil {
-			return fmt.Errorf("😥 Unable to create role-binding")
+			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
 		}
 	}
 	return nil
@@ -137,7 +137,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		log.Warn("⚠️  Single node per zone and/or no zone labels")
 	}
 	if len(zones) < 2 && s.AcrossAZ {
-		return fmt.Errorf(" unable to run AcrossAZ since there is < 2 zones")
+		return fmt.Errorf("Unable to run AcrossAZ since there is < 2 zones")
 	}
 	acrossZone := ""
 	if s.AcrossAZ {
@@ -240,7 +240,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	s.UperfService, err = CreateService(uperfSVC, client)
 	if err != nil {
-		return fmt.Errorf("😥 Unable to create uperf service")
+		return fmt.Errorf("😥 Unable to create uperf service: %v", err)
 	}
 
 	// Create netperf service
@@ -256,7 +256,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	s.NetperfService, err = CreateService(netperfSVC, client)
 	if err != nil {
-		return fmt.Errorf("😥 Unable to create netperf service")
+		return fmt.Errorf("😥 Unable to create netperf service: %v", err)
 	}
 	cdpAcross := DeploymentParams{
 		Name:      "client-across",
@@ -431,7 +431,7 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (apiv1.
 	pods := apiv1.PodList{}
 	_, err := CreateDeployment(dp, client)
 	if err != nil {
-		return pods, fmt.Errorf("😥 Unable to create deployment")
+		return pods, fmt.Errorf("😥 Unable to create deployment: %v", err)
 	}
 	_, err = WaitForReady(client, dp)
 	if err != nil {
@@ -494,7 +494,7 @@ func GetZone(c *kubernetes.Clientset) (string, map[string]int, error) {
 	lz := ""
 	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 	if err != nil {
-		return "", zones, fmt.Errorf("unable to query nodes")
+		return "", zones, fmt.Errorf("unable to query nodes: %v", err)
 	}
 	for _, l := range n.Items {
 		if len(l.GetLabels()["topology.kubernetes.io/zone"]) < 1 {
@@ -588,15 +588,15 @@ func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeI
 	var info metrics.NodeInfo
 	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture deployment")
+		return info, fmt.Errorf("❌ Failure to capture deployment: %v", err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
 	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture deployment label")
+		return info, fmt.Errorf("❌ Failure to capture deployment label: %v", err)
 	}
 	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
 	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture pods")
+		return info, fmt.Errorf("❌ Failure to capture pods: %v", err)
 	}
 	for pod := range pods.Items {
 		p := pods.Items[pod]
@@ -618,15 +618,15 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (apiv1.PodList, error
 	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	npl := apiv1.PodList{}
 	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture deployment")
+		return npl, fmt.Errorf("❌ Failure to capture deployment: %v", err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
 	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture deployment label")
+		return npl, fmt.Errorf("❌ Failure to capture deployment label: %v", err)
 	}
 	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
 	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture pods")
+		return npl, fmt.Errorf("❌ Failure to capture pods: %v", err)
 	}
 	for pod := range pods.Items {
 		if pods.Items[pod].DeletionTimestamp != nil {
