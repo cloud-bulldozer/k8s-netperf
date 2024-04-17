@@ -48,6 +48,7 @@ var (
 	tcpt        float64
 	json        bool
 	version     bool
+	csvArchive  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -268,19 +269,16 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 		}
-		err = archive.WriteCSVResult(sr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if pavail {
-			err = archive.WritePromCSVResult(sr)
-			if err != nil {
+		if csvArchive {
+			if archive.WriteCSVResult(sr) != nil {
 				log.Fatal(err)
 			}
-		}
-		err = archive.WriteSpecificCSV(sr)
-		if err != nil {
-			log.Fatal(err)
+			if pavail && archive.WritePromCSVResult(sr) != nil {
+				log.Fatal(err)
+			}
+			if archive.WriteSpecificCSV(sr) != nil {
+				log.Fatal(err)
+			}
 		}
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
@@ -457,6 +455,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom")
 	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
+	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
