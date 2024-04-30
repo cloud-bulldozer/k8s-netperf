@@ -58,7 +58,7 @@ var rootCmd = &cobra.Command{
 		log.Infof("Starting k8s-netperf (%s@%s)", cmdVersion.Version, cmdVersion.GitCommit)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		var acrossAZ, hostNetwork bool
+		var acrossAZ bool
 		var sr result.ScenarioResults
 		if version {
 			fmt.Println("Version:", cmdVersion.Version)
@@ -165,6 +165,16 @@ var rootCmd = &cobra.Command{
 			acrossAZ = true
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
+		var requestedDrivers []string
+		if netperf {
+			requestedDrivers = append(requestedDrivers, "netperf")
+		}
+		if uperf {
+			requestedDrivers = append(requestedDrivers, "uperf")
+		}
+		if iperf3 {
+			requestedDrivers = append(requestedDrivers, "iperf3")
+		}
 		// Run through each test
 		for _, nc := range s.Configs {
 			// Determine the metric for the test
@@ -175,25 +185,17 @@ var rootCmd = &cobra.Command{
 			nc.Metric = metric
 			nc.AcrossAZ = acrossAZ
 			// No need to run hostNetwork through Service.
-			if s.HostNetwork && !nc.Service {
-				hostNetwork = true
-			} else {
-				hostNetwork = false
-			}
-			if netperf {
-				npr := executeWorkload(nc, s, hostNetwork, true, false, false)
-				sr.Results = append(sr.Results, npr)
-			}
-			if iperf3 {
-				ipr := executeWorkload(nc, s, hostNetwork, false, true, false)
-				if len(ipr.Profile) > 1 {
-					sr.Results = append(sr.Results, ipr)
+			var pr result.Data
+			for _, driver := range requestedDrivers {
+				if s.HostNetwork && !nc.Service {
+					pr = executeWorkload(nc, s, true, driver)
+					if len(pr.Profile) > 1 {
+						sr.Results = append(sr.Results, pr)
+					}
 				}
-			}
-			if uperf {
-				upr := executeWorkload(nc, s, hostNetwork, false, false, true)
-				if len(upr.Profile) > 1 {
-					sr.Results = append(sr.Results, upr)
+				pr = executeWorkload(nc, s, false, driver)
+				if len(pr.Profile) > 1 {
+					sr.Results = append(sr.Results, pr)
 				}
 			}
 		}
@@ -337,7 +339,7 @@ func cleanup(client *kubernetes.Clientset) {
 }
 
 // executeWorkload executes the workload and returns the result data.
-func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, netperf, iperf3, uperf bool) result.Data {
+func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, driverName string) result.Data {
 	serverIP := ""
 	Client := s.Client
 	var driver drivers.Driver
@@ -377,17 +379,15 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, net
 	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, nc.Service)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
-		if netperf {
-			driver = drivers.NewDriver("netperf")
-			npr.Driver = "netperf"
-		}
-		if iperf3 {
+		if driverName == "iperf3" {
 			driver = drivers.NewDriver("iperf3")
 			npr.Driver = "iperf3"
-		}
-		if uperf {
+		} else if driverName == "uperf" {
 			driver = drivers.NewDriver("uperf")
 			npr.Driver = "uperf"
+		} else {
+			driver = drivers.NewDriver("netperf")
+			npr.Driver = "netperf"
 		}
 		// Check if test is supported
 		if !driver.IsTestSupported(nc.Profile) {
