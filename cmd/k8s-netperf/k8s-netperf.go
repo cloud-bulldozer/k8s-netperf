@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const namespace = "netperf"
 const index = "k8s-netperf"
 const retry = 3
 
@@ -306,32 +305,7 @@ var rootCmd = &cobra.Command{
 }
 
 func cleanup(client *kubernetes.Clientset) {
-	log.Info("Cleaning resources created by k8s-netperf")
-	svcList, err := k8s.GetServices(client, namespace)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for svc := range svcList.Items {
-		err = k8s.DestroyService(client, svcList.Items[svc])
-		if err != nil {
-			log.Error(err)
-		}
-	}
-	dpList, err := k8s.GetDeployments(client, namespace)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for dp := range dpList.Items {
-		err = k8s.DestroyDeployment(client, dpList.Items[dp])
-		if err != nil {
-			log.Error(err)
-		}
-		_, err := k8s.WaitForDelete(client, dpList.Items[dp])
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	err = k8s.DestroyNamespace(client)
+	err := k8s.DestroyNamespace(client)
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)

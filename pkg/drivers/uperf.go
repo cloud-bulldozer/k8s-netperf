@@ -142,7 +142,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	var exec remotecommand.Executor
 
 	pod := client.Items[0]
-	log.Debugf("🔥 Client (%s,%s) starting uperf against server : %s", pod.Name, pod.Status.PodIP, serverIP)
+	log.Debugf("🔥 Client (%s,%s) starting uperf against server: %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, u.driverName)
 
 	filePath, err := createUperfProfile(c, rc, nc, pod, serverIP)
