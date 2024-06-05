@@ -199,16 +199,12 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		var fTime time.Time
-		var lTime time.Time
 		if pavail {
 			for i, npr := range sr.Results {
 				sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 				sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 				sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 				sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
-				fTime = npr.StartTime
-				lTime = npr.EndTime
 			}
 		}
 
@@ -228,10 +224,6 @@ var rootCmd = &cobra.Command{
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.Metadata.OCPVersion)
 		sr.Metadata.OCPShortVersion = short
-		sec, err := metrics.IPSecEnabled(pcon, fTime, lTime)
-		if err == nil {
-			sr.Metadata.IPsec = sec
-		}
 		mtu, err := metrics.NodeMTU(pcon)
 		if err == nil {
 			sr.Metadata.MTU = mtu
