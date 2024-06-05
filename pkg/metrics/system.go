@@ -121,28 +121,6 @@ func NodeMTU(conn PromConnect) (int, error) {
 	return mtu, nil
 }
 
-// IPSecEnabled checks if IPsec
-func IPSecEnabled(conn PromConnect, start time.Time, end time.Time) (bool, error) {
-	if !conn.OpenShift {
-		return false, fmt.Errorf(" Not able to collect OpenShift specific ovn ipsec info ")
-	}
-	query := `ovnkube_master_ipsec_enabled`
-	value, err := conn.Client.QueryRange(query, start, end, time.Minute)
-	if err != nil {
-		return false, fmt.Errorf("Issue querying openshift ovn ipsec info from prometheus")
-	}
-	ipsec := 0
-	if len(value.(model.Matrix)) > 1 {
-		ipsec = int(value.(model.Matrix)[0].Values[0].Value)
-	} else {
-		return false, fmt.Errorf(" Issue capturing ipsec information")
-	}
-	if ipsec == 0 {
-		return false, nil
-	}
-	return true, nil
-}
-
 // QueryNodeCPU will return all the CPU usage information for a given node
 func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (NodeCPU, bool) {
 	cpu := NodeCPU{}

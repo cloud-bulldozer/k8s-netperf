@@ -61,7 +61,6 @@ type Metadata struct {
 	ocpmeta.ClusterMetadata
 	Kernel          string `json:"kernel"`
 	OCPShortVersion string `json:"ocpShortVersion"`
-	IPsec           bool   `json:"ipsec"`
 	MTU             int    `json:"mtu"`
 }
 
