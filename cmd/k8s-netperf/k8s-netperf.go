@@ -364,7 +364,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, dri
 		if err != nil {
 			log.Fatal(err)
 		}
-		nr, err = driver.ParseResults(&r)
+		nr, err = driver.ParseResults(&r, nc)
 		if err != nil {
 			log.Error(err)
 			try := 0
@@ -377,7 +377,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, dri
 					log.Error(err)
 					continue
 				}
-				nr, err = driver.ParseResults(&r)
+				nr, err = driver.ParseResults(&r, nc)
 				if err != nil {
 					log.Error(err)
 					try++
