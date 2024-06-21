@@ -34,7 +34,9 @@ process_netperf() {
     retrans=0
     u=""
     top=""
+    counter=0
     for file in `ls /tmp/result-*`; do
+      counter=$((counter + 1))
       top=$(head -n 1 $file)
       t=$(cat $file | grep "THROUGHPUT=" | awk -F= '{print $2}')
       s=$(cat $file | grep "LOCAL_SEND_CALLS=" | awk -F= '{print $2}')
@@ -47,7 +49,7 @@ process_netperf() {
         rtl=$(echo $rtl+$rrtl | bc)
       fi
       rl=$(cat $file | grep "P99_LATENCY=" | awk -F= '{print $2}')
-      l=$(echo $l+rl | bc)
+      l=$(echo $l+$rl | bc)
       tp=$(echo $tp+$t | bc)
       send=$(echo $send+$s | bc)
       recv=$(echo $recv+$r | bc)
@@ -56,9 +58,13 @@ process_netperf() {
       filename=$(basename $file)
       mv $file /tmp/old-$filename
     done
+    # Calculate average of average latency from all netperf processes.
+    rtl=$(echo $rtl/$counter | bc)
+    # Calculate average P99 latency from all netperf processes.
+    l=$(echo $l/$counter | bc)
     echo "$top"
     echo "RT_LATENCY=$rtl"
-    echo "P99_LATENCY=$rl"
+    echo "P99_LATENCY=$l"
     echo "THROUGHPUT=$tp"
     echo "LOCAL_TRANSPORT_RETRANS=$retrans"
     echo "REMOTE_RECV_CALLS=$recv"
