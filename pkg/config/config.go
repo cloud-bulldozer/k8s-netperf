@@ -21,6 +21,7 @@ type Config struct {
 	Profile     string `yaml:"profile,omitempty"`
 	Samples     int    `yaml:"samples,omitempty"`
 	MessageSize int    `yaml:"messagesize,omitempty"`
+	Burst       int    `yaml:"burst,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
 	Metric      string
 	AcrossAZ    bool

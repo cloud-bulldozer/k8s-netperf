@@ -190,13 +190,13 @@ func calDiff(a float64, b float64) float64 {
 
 // ShowPodCPU accepts ScenarioResults and presents to the user via stdout the PodCPU info
 func ShowPodCPU(s ScenarioResults) {
-	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Pod", "Utilization"})
+	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Burst", "Same node", "Pod", "Utilization"})
 	for _, r := range s.Results {
 		for _, pod := range r.ClientPodCPU.Results {
-			table.Append([]string{"Pod CPU Utilization", r.Driver, "Client", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%t", r.SameNode), fmt.Sprintf("%.20s", pod.Name), fmt.Sprintf("%f", pod.Value)})
+			table.Append([]string{"Pod CPU Utilization", r.Driver, "Client", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%d", r.Burst), fmt.Sprintf("%t", r.SameNode), fmt.Sprintf("%.20s", pod.Name), fmt.Sprintf("%f", pod.Value)})
 		}
 		for _, pod := range r.ServerPodCPU.Results {
-			table.Append([]string{"Pod CPU Utilization", r.Driver, "Server", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%t", r.SameNode), fmt.Sprintf("%.20s", pod.Name), fmt.Sprintf("%f", pod.Value)})
+			table.Append([]string{"Pod CPU Utilization", r.Driver, "Server", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%d", r.Burst), fmt.Sprintf("%t", r.SameNode), fmt.Sprintf("%.20s", pod.Name), fmt.Sprintf("%f", pod.Value)})
 		}
 	}
 	table.Render()
@@ -204,7 +204,7 @@ func ShowPodCPU(s ScenarioResults) {
 
 // ShowNodeCPU accepts ScenarioResults and presents to the user via stdout the NodeCPU info
 func ShowNodeCPU(s ScenarioResults) {
-	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Idle CPU", "User CPU", "System CPU", "Steal CPU", "IOWait CPU", "Nice CPU", "SoftIRQ CPU", "IRQ CPU"})
+	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Burst", "Same node", "Idle CPU", "User CPU", "System CPU", "Steal CPU", "IOWait CPU", "Nice CPU", "SoftIRQ CPU", "IRQ CPU"})
 	for _, r := range s.Results {
 		// Skip RR/CRR iperf3 Results
 		if strings.Contains(r.Profile, "RR") {
@@ -215,11 +215,11 @@ func ShowNodeCPU(s ScenarioResults) {
 		ccpu := r.ClientMetrics
 		scpu := r.ServerMetrics
 		table.Append([]string{
-			"Node CPU Utilization", r.Driver, "Client", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%t", r.SameNode),
+			"Node CPU Utilization", r.Driver, "Client", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%d", r.Burst), fmt.Sprintf("%t", r.SameNode),
 			fmt.Sprintf("%f", ccpu.Idle), fmt.Sprintf("%f", ccpu.User), fmt.Sprintf("%f", ccpu.System), fmt.Sprintf("%f", ccpu.Steal), fmt.Sprintf("%f", ccpu.Iowait), fmt.Sprintf("%f", ccpu.Nice), fmt.Sprintf("%f", ccpu.Softirq), fmt.Sprintf("%f", ccpu.Irq),
 		})
 		table.Append([]string{
-			"Node CPU Utilization", r.Driver, "Server", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%t", r.SameNode),
+			"Node CPU Utilization", r.Driver, "Server", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%d", r.Burst), fmt.Sprintf("%t", r.SameNode),
 			fmt.Sprintf("%f", scpu.Idle), fmt.Sprintf("%f", scpu.User), fmt.Sprintf("%f", scpu.System), fmt.Sprintf("%f", scpu.Steal), fmt.Sprintf("%f", scpu.Iowait), fmt.Sprintf("%f", scpu.Nice), fmt.Sprintf("%f", scpu.Softirq), fmt.Sprintf("%f", scpu.Irq),
 		})
 	}
@@ -228,15 +228,15 @@ func ShowNodeCPU(s ScenarioResults) {
 
 // ShowSpecificResults
 func ShowSpecificResults(s ScenarioResults) {
-	table := initTable([]string{"Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value"})
+	table := initTable([]string{"Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg value"})
 	for _, r := range s.Results {
 		if strings.Contains(r.Profile, "TCP_STREAM") {
 			rt, _ := Average(r.RetransmitSummary)
-			table.Append([]string{"TCP Retransmissions", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (rt))})
+			table.Append([]string{"TCP Retransmissions", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (rt))})
 		}
 		if strings.Contains(r.Profile, "UDP_STREAM") {
 			loss, _ := Average(r.LossSummary)
-			table.Append([]string{"UDP Loss Percent", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (loss))})
+			table.Append([]string{"UDP Loss Percent", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (loss))})
 		}
 	}
 	table.Render()
@@ -244,7 +244,7 @@ func ShowSpecificResults(s ScenarioResults) {
 
 // Abstracts out the common code for results
 func renderResults(s ScenarioResults, testType string) {
-	table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg value", "95% Confidence Interval"})
+	table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg value", "95% Confidence Interval"})
 	for _, r := range s.Results {
 		if strings.Contains(r.Profile, testType) {
 			if len(r.Driver) > 0 {
@@ -253,7 +253,7 @@ func renderResults(s ScenarioResults, testType string) {
 				if r.Samples > 1 {
 					_, lo, hi = ConfidenceInterval(r.ThroughputSummary, 0.95)
 				}
-				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
+				table.Append([]string{fmt.Sprintf("📊 %s Results", caser.String(strings.ToLower(testType))), r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, r.Metric), fmt.Sprintf("%f-%f (%s)", lo, hi, r.Metric)})
 			}
 		}
 	}
@@ -282,11 +282,11 @@ func ShowRRResult(s ScenarioResults) {
 func ShowLatencyResult(s ScenarioResults) {
 	if checkResults(s, "RR") {
 		logging.Debug("Rendering RR P99 Latency results")
-		table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Same node", "Duration", "Samples", "Avg 99%tile value"})
+		table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Service", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg 99%tile value"})
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
 				p99, _ := Average(r.LatencySummary)
-				table.Append([]string{"RR Latency Results", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
+				table.Append([]string{"RR Latency Results", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
 			}
 		}
 		table.Render()
