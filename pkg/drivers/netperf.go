@@ -82,7 +82,7 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 
 // ParseResults accepts the stdout from the execution of the benchmark. It also needs
 // It will return a Sample struct or error
-func (n *netperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = n.driverName
 	send := 0.0

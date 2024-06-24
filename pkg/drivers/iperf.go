@@ -151,7 +151,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, 
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func (i *iperf3) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (i *iperf3) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = i.driverName
 	result := IperfResult{}
