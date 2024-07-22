@@ -45,9 +45,20 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		fmt.Sprint(nc.Duration),
 		"-t", nc.Profile,
 		"--",
-		"-k", fmt.Sprint(omniOptions),
-		"-m", fmt.Sprint(nc.MessageSize),
-		"-R", "1"}
+		"-k", fmt.Sprint(omniOptions)}
+	var additionalOptions []string
+	if strings.Contains(nc.Profile, "STREAM") {
+		additionalOptions = []string {
+			"-m", fmt.Sprint(nc.MessageSize)}
+	} else {
+		additionalOptions = []string {
+			"-r", fmt.Sprint(nc.MessageSize, ",", nc.MessageSize)}
+		if strings.Contains(nc.Profile, "TCP_RR") && (nc.Burst > 0) {
+			burst := []string {"-b", fmt.Sprint(nc.Burst)}
+			additionalOptions = append(additionalOptions, burst...)
+		}
+	}
+	cmd = append(cmd, additionalOptions...)
 	log.Debug(cmd)
 	req := c.CoreV1().RESTClient().
 		Post().
