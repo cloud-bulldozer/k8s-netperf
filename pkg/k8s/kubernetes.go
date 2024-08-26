@@ -11,8 +11,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
 )
@@ -409,6 +412,86 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func CreateVM(dynamicClient dynamic.Interface, namespace, vmName string) error {
+	gvr := schema.GroupVersionResource{
+		Group:    "kubevirt.io",
+		Version:  "v1",
+		Resource: "virtualmachines",
+	}
+
+	vm := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "kubevirt.io/v1",
+			"kind":       "VirtualMachine",
+			"metadata": map[string]interface{}{
+				"name":      vmName,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				"running": true,
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"kubevirt.io/domain": vmName,
+						},
+					},
+					"spec": map[string]interface{}{
+						"domain": map[string]interface{}{
+							"cpu": map[string]interface{}{
+								"sockets": 2,
+								"cores":   2,
+								"threads": 1,
+							},
+							"devices": map[string]interface{}{
+								"disks": []interface{}{
+									map[string]interface{}{
+										"name": "disk0",
+										"disk": map[string]interface{}{
+											"bus": "virtio",
+										},
+									},
+								},
+							},
+							"resources": map[string]interface{}{
+								"requests": map[string]interface{}{
+									"memory": "4096Mi",
+									"cpu":    "500m",
+								},
+							},
+						},
+						"volumes": []interface{}{
+							map[string]interface{}{
+								"name": "disk0",
+								"containerDisk": map[string]interface{}{
+									"image": "kubevirt/fedora-cloud-container-disk-demo:latest",
+								},
+							},
+							map[string]interface{}{
+								"name": "cloudinit",
+								"cloudInitNoCloud": map[string]interface{}{
+									"userData": `#cloud-config
+  password: fedora
+  chpasswd: { expire: False }
+  runcmd:
+    - dnf install -y uperf iperf3 git ethtool`,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(context.TODO(), vm, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create VirtualMachine: %v", err)
+	}
+
+	fmt.Printf("VirtualMachine %s created successfully in namespace %s\n", vmName, namespace)
 	return nil
 }
 

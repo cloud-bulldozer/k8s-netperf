@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -39,6 +40,7 @@ var (
 	uperf       bool
 	acrossAZ    bool
 	full        bool
+	vm          bool
 	debug       bool
 	promURL     string
 	id          string
@@ -102,6 +104,10 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
+		dynClient, err := dynamic.NewForConfig(rconfig)
+		if err != nil {
+			log.Fatal(err)
+		}
 		client, err := kubernetes.NewForConfig(rconfig)
 		if err != nil {
 			log.Fatal(err)
@@ -144,6 +150,14 @@ var rootCmd = &cobra.Command{
 		err = k8s.BuildInfra(client)
 		if err != nil {
 			log.Error(err)
+			os.Exit(1)
+		}
+
+		if vm {
+			err := k8s.CreateVM(dynClient, "netperf", "client-vm")
+			if err != nil {
+				log.Error(err)
+			}
 			os.Exit(1)
 		}
 
@@ -412,6 +426,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
+	rootCmd.Flags().BoolVar(&vm, "vm", false, "Launch Virtual Machines instead of pods for client/servers")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
