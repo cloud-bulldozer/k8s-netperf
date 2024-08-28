@@ -16,6 +16,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/drivers"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
+	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
@@ -23,9 +24,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	v1 "kubevirt.io/api/core/v1"
 )
 
 const index = "k8s-netperf"
@@ -104,10 +105,6 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		dynClient, err := dynamic.NewForConfig(rconfig)
-		if err != nil {
-			log.Fatal(err)
-		}
 		client, err := kubernetes.NewForConfig(rconfig)
 		if err != nil {
 			log.Fatal(err)
@@ -154,10 +151,55 @@ var rootCmd = &cobra.Command{
 		}
 
 		if vm {
-			err := k8s.CreateVM(dynClient, "netperf", "client-vm")
+			kclient, err := kubevirtv1.NewForConfig(rconfig)
 			if err != nil {
 				log.Error(err)
 			}
+			kclient.VirtualMachineInstances("netperf").Create(context.TODO(), &v1.VirtualMachineInstance{
+				Spec: v1.VirtualMachineInstanceSpec{
+					Domain: v1.DomainSpec{
+						CPU: &v1.CPU{
+							Sockets: 2,
+							Cores:   2,
+							Threads: 1,
+						},
+						Devices: v1.Devices{
+							Disks: []v1.Disk{
+								v1.Disk{
+									Name: "disk0",
+									DiskDevice: v1.DiskDevice{
+										Disk: &v1.DiskTarget{
+											Bus: "virtio",
+										},
+									},
+								},
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						v1.Volume{
+							Name: "disk0",
+							VolumeSource: v1.VolumeSource{
+								ContainerDisk: &v1.ContainerDiskSource{
+									Image: "kubevirt/fedora-cloud-container-disk-demo:latest",
+								},
+							},
+						},
+						v1.Volume{
+							Name: "cloudinit",
+							VolumeSource: v1.VolumeSource{
+								CloudInitNoCloud: &v1.CloudInitNoCloudSource{
+									UserData: `#cloud-config
+									password: fedora
+									chpasswd: { expire: False }
+  									runcmd:
+    									- dnf install -y uperf iperf3 git ethtool`,
+								},
+							},
+						},
+					},
+				},
+			}, metav1.CreateOptions{})
 			os.Exit(1)
 		}
 
