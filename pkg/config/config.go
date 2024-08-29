@@ -22,6 +22,8 @@ type Config struct {
 	Samples     int    `yaml:"samples,omitempty"`
 	MessageSize int    `yaml:"messagesize,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
+	VM          bool
+	VMHost      string
 	Metric      string
 	AcrossAZ    bool
 }

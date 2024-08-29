@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -150,6 +151,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		if vm {
+			// Create a dynamic client
+			dynClient, err := dynamic.NewForConfig(rconfig)
+			if err != nil {
+				log.Error(err)
+			}
 			kclient, err := kubevirtv1.NewForConfig(rconfig)
 			if err != nil {
 				log.Error(err)
@@ -159,6 +165,20 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 			k8s.WaitForVMI(kclient, "server")
+			host, err := k8s.CreateVMClient(kclient, client, dynClient, "client")
+			if err != nil {
+				log.Error(err)
+			}
+			update := k8s.UpdateConfig(&s.Configs, host)
+			for _, cfg := range update {
+				log.Info(cfg.Profile)
+				log.Info(cfg.VM)
+				log.Info(cfg.VMHost)
+			}
+			log.Info(host)
+			k8s.WaitForVMI(kclient, "client")
+			os.Exit(0)
+
 		}
 
 		// Build the SUT (Deployments)
