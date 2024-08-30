@@ -5,11 +5,13 @@ import (
 	"os"
 	"regexp"
 
+	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	apiv1 "k8s.io/api/core/v1"
 
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	"gopkg.in/yaml.v3"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -22,8 +24,6 @@ type Config struct {
 	Samples     int    `yaml:"samples,omitempty"`
 	MessageSize int    `yaml:"messagesize,omitempty"`
 	Service     bool   `default:"false" yaml:"service,omitempty"`
-	VM          bool
-	VMHost      string
 	Metric      string
 	AcrossAZ    bool
 }
@@ -34,6 +34,8 @@ type PerfScenarios struct {
 	AcrossAZ       bool
 	HostNetwork    bool
 	Configs        []Config
+	VM             bool
+	VMHost         string
 	ServerNodeInfo metrics.NodeInfo
 	ClientNodeInfo metrics.NodeInfo
 	Client         apiv1.PodList
@@ -46,6 +48,8 @@ type PerfScenarios struct {
 	UperfService   *apiv1.Service
 	RestConfig     rest.Config
 	ClientSet      *kubernetes.Clientset
+	KClient        *kubevirtv1.KubevirtV1Client
+	DClient        *dynamic.DynamicClient
 }
 
 // Tests we will support in k8s-netperf

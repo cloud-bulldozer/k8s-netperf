@@ -7,7 +7,6 @@ import (
 
 	b64 "encoding/base64"
 
-	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	corev1 "k8s.io/api/core/v1"
@@ -21,16 +20,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	v1 "kubevirt.io/api/core/v1"
 )
-
-func UpdateConfig(nc *[]config.Config, host string) []config.Config {
-	update := make([]config.Config, len(*nc))
-	for _, cfg := range *nc {
-		cfg.VM = true
-		cfg.VMHost = host
-		update = append(update, cfg)
-	}
-	return update
-}
 
 func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
 	log.Infof("🚀 Creating service for %s in namespace %s", name, namespace)
@@ -105,9 +94,13 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 	return host, nil
 }
 
-func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset, dyn *dynamic.DynamicClient, name string) (string, error) {
+func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
+	dyn *dynamic.DynamicClient, role string, name string,
+	podAff *corev1.PodAntiAffinity,
+	nodeAff *corev1.NodeAffinity) (string, error) {
 	label := map[string]string{
-		"app": fmt.Sprintf("%s", name),
+		"app":  name,
+		"role": role,
 	}
 	dirname, err := os.UserHomeDir()
 	if err != nil {
@@ -130,7 +123,7 @@ chpasswd: { expire: False }
 runcmd:
   - dnf install -y uperf iperf3 git ethtool
 `, string(ssh))
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)))
+	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff)
 	if err != nil {
 		return "", err
 	}
@@ -145,9 +138,12 @@ runcmd:
 	return host, nil
 }
 
-func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string) (*v1.VirtualMachineInstance, error) {
+func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string,
+	podAff corev1.PodAntiAffinity,
+	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
-		"app": fmt.Sprintf("%s", name),
+		"app":  name,
+		"role": role,
 	}
 	dirname, err := os.UserHomeDir()
 	if err != nil {
@@ -172,10 +168,12 @@ runcmd:
   - uperf -s -v &
   - iperf3 -s &
 `, string(ssh))
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)))
+	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
 }
 
-func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string) (*v1.VirtualMachineInstance, error) {
+func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string,
+	podAff corev1.PodAntiAffinity,
+	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
 	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
@@ -189,6 +187,10 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			Labels:    label,
 		},
 		Spec: v1.VirtualMachineInstanceSpec{
+			Affinity: &k8sv1.Affinity{
+				PodAntiAffinity: &podAff,
+				NodeAffinity:    &nodeAff,
+			},
 			TerminationGracePeriodSeconds: &delSeconds,
 			Domain: v1.DomainSpec{
 				Resources: v1.ResourceRequirements{

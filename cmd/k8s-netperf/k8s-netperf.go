@@ -151,6 +151,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		if vm {
+			s.VM = true
 			// Create a dynamic client
 			dynClient, err := dynamic.NewForConfig(rconfig)
 			if err != nil {
@@ -160,25 +161,8 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Error(err)
 			}
-			_, err = k8s.CreateVMServer(kclient, "server")
-			if err != nil {
-				log.Error(err)
-			}
-			k8s.WaitForVMI(kclient, "server")
-			host, err := k8s.CreateVMClient(kclient, client, dynClient, "client")
-			if err != nil {
-				log.Error(err)
-			}
-			update := k8s.UpdateConfig(&s.Configs, host)
-			for _, cfg := range update {
-				log.Info(cfg.Profile)
-				log.Info(cfg.VM)
-				log.Info(cfg.VMHost)
-			}
-			log.Info(host)
-			k8s.WaitForVMI(kclient, "client")
-			os.Exit(0)
-
+			s.KClient = kclient
+			s.DClient = dynClient
 		}
 
 		// Build the SUT (Deployments)
@@ -208,27 +192,30 @@ var rootCmd = &cobra.Command{
 		if iperf3 {
 			requestedDrivers = append(requestedDrivers, "iperf3")
 		}
+
 		// Run through each test
-		for _, nc := range s.Configs {
-			// Determine the metric for the test
-			metric := string("OP/s")
-			if strings.Contains(nc.Profile, "STREAM") {
-				metric = "Mb/s"
-			}
-			nc.Metric = metric
-			nc.AcrossAZ = acrossAZ
-			// No need to run hostNetwork through Service.
-			var pr result.Data
-			for _, driver := range requestedDrivers {
-				if s.HostNetwork && !nc.Service {
-					pr = executeWorkload(nc, s, true, driver)
+		if !s.VM {
+			for _, nc := range s.Configs {
+				// Determine the metric for the test
+				metric := string("OP/s")
+				if strings.Contains(nc.Profile, "STREAM") {
+					metric = "Mb/s"
+				}
+				nc.Metric = metric
+				nc.AcrossAZ = acrossAZ
+				// No need to run hostNetwork through Service.
+				var pr result.Data
+				for _, driver := range requestedDrivers {
+					if s.HostNetwork && !nc.Service {
+						pr = executeWorkload(nc, s, true, driver)
+						if len(pr.Profile) > 1 {
+							sr.Results = append(sr.Results, pr)
+						}
+					}
+					pr = executeWorkload(nc, s, false, driver)
 					if len(pr.Profile) > 1 {
 						sr.Results = append(sr.Results, pr)
 					}
-				}
-				pr = executeWorkload(nc, s, false, driver)
-				if len(pr.Profile) > 1 {
-					sr.Results = append(sr.Results, pr)
 				}
 			}
 		}
