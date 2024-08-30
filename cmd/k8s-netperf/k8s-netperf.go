@@ -218,6 +218,8 @@ var rootCmd = &cobra.Command{
 					}
 				}
 			}
+		} else {
+			k8s.SSHConnect(&s)
 		}
 
 		if pavail {

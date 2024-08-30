@@ -6,11 +6,14 @@ require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/cloud-bulldozer/go-commons v1.0.16
 	github.com/google/uuid v1.3.0
+	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.6.6
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/pkg/sftp v1.13.5
 	github.com/prometheus/common v0.44.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
+	golang.org/x/crypto v0.14.0
 	golang.org/x/text v0.13.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.28.4
@@ -38,6 +41,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/moby/spdystream v0.2.0 // indirect

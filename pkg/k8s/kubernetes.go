@@ -212,9 +212,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if !s.VM {
 			s.Client, err = deployDeployment(client, cdp)
-		}
-		if err != nil {
-			return err
+			if err != nil {
+				return err
+			}
 		}
 		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdp)
 	}
@@ -315,6 +315,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				if err != nil {
 					return err
 				}
+				WaitForVMI(s.KClient, clientAcrossRole)
 			}
 		}
 		if !s.VM {
@@ -327,6 +328,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			if err != nil {
 				return err
 			}
+			WaitForVMI(s.KClient, clientAcrossRole)
 		}
 
 	}
@@ -421,6 +423,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				if err != nil {
 					return err
 				}
+				WaitForVMI(s.KClient, serverRole)
 			}
 		}
 	}
@@ -441,6 +444,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if err != nil {
 			return err
 		}
+		WaitForVMI(s.KClient, serverRole)
 	}
 
 	return nil

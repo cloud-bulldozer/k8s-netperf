@@ -7,8 +7,11 @@ import (
 
 	b64 "encoding/base64"
 
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
+	"github.com/melbahja/goph"
+	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -20,6 +23,42 @@ import (
 	"k8s.io/client-go/kubernetes"
 	v1 "kubevirt.io/api/core/v1"
 )
+
+var (
+	sshPort = uint(32022)
+)
+
+func SSHConnect(conf *config.PerfScenarios) error {
+	dirname, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	auth, err := goph.Key(fmt.Sprintf("%s/.ssh/id_rsa.pub", dirname), "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	user := "fedora"
+	addr := conf.VMHost
+
+	client, err := goph.NewConn(&goph.Config{
+		User:     user,
+		Addr:     addr,
+		Port:     sshPort,
+		Auth:     auth,
+		Callback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	out, err := client.Run("ls /etc")
+	if err != nil {
+		return err
+	}
+	log.Info(string(out))
+
+	return nil
+}
 
 func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
 	log.Infof("🚀 Creating service for %s in namespace %s", name, namespace)
@@ -34,7 +73,7 @@ func createCommService(client *kubernetes.Clientset, label map[string]string, na
 				{
 					Name:       fmt.Sprintf("%s", name),
 					Protocol:   corev1.ProtocolTCP,
-					NodePort:   32022,
+					NodePort:   int32(sshPort),
 					TargetPort: intstr.Parse(fmt.Sprintf("%d", 22)),
 					Port:       22,
 				},
@@ -245,6 +284,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 }
 
 func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
+	log.Infof("Wating for VMI (%s) to be in state running", name)
 	vmw, err := client.VirtualMachineInstances(namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -256,6 +296,7 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 			return fmt.Errorf("Unable to watch VMI %s", name)
 		}
 		if d.Name == name {
+			log.Infof("Found in state (%s)", d.Status.Phase)
 			if d.Status.Phase == "Running" {
 				return nil
 			}
