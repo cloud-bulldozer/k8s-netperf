@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	b64 "encoding/base64"
 
@@ -26,29 +27,50 @@ import (
 
 var (
 	sshPort = uint(32022)
+	retry   = 30
 )
 
-func SSHConnect(conf *config.PerfScenarios) error {
-	dirname, err := os.UserHomeDir()
-	if err != nil {
-		return err
+func connect(config *goph.Config) (*goph.Client, error) {
+	for i := 0; i < retry; i++ {
+		client, err := goph.NewConn(config)
+		if err != nil {
+			log.Debug("Waiting for ssh access to be available")
+			log.Debug(err)
+			time.Sleep(10 * time.Second)
+			continue
+		} else {
+			return client, nil
+		}
 	}
-	auth, err := goph.Key(fmt.Sprintf("%s/.ssh/id_rsa.pub", dirname), "")
+	return nil, fmt.Errorf("Unable to connect via ssh after %d attempts", retry)
+}
+
+func SSHConnect(conf *config.PerfScenarios) error {
+	dir, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Unable to retrieve users homedir. %s", err)
+	}
+	key := fmt.Sprintf("%s/.ssh/id_rsa", dir)
+	keyd, err := os.ReadFile(key)
+	auth, err := goph.RawKey(string(keyd), "")
+	if err != nil {
+		return fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
 	}
 	user := "fedora"
 	addr := conf.VMHost
+	log.Infof("Attempting to connect with : %s@%s", user, addr)
 
-	client, err := goph.NewConn(&goph.Config{
+	config := goph.Config{
 		User:     user,
 		Addr:     addr,
 		Port:     sshPort,
 		Auth:     auth,
 		Callback: ssh.InsecureIgnoreHostKey(),
-	})
+	}
+
+	client, err := connect(&config)
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to connect via ssh. Error: %s", err)
 	}
 	defer client.Close()
 	out, err := client.Run("ls /etc")

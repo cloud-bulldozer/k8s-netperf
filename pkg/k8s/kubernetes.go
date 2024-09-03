@@ -311,10 +311,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 					return err
 				}
 			} else {
-				_, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpHostAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				host, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpHostAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
 				}
+				s.VMHost = host
 				WaitForVMI(s.KClient, clientAcrossRole)
 			}
 		}
@@ -324,10 +325,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		} else {
-			_, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+			host, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 			if err != nil {
 				return err
 			}
+			s.VMHost = host
 			WaitForVMI(s.KClient, clientAcrossRole)
 		}
 

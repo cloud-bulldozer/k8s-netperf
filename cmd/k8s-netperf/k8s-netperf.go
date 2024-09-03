@@ -219,7 +219,11 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		} else {
-			k8s.SSHConnect(&s)
+			log.Info("Connecting via ssh to the VMI")
+			err = k8s.SSHConnect(&s)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		if pavail {
