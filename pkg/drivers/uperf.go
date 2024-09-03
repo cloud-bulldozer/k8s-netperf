@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	apiv1 "k8s.io/api/core/v1"
 
@@ -51,7 +52,7 @@ func (u *uperf) IsTestSupported(test string) bool {
 
 // uperf needs "rr" or "stream" profiles which are config files passed to uperf command through -m option
 // We need to create these profiles based on the test using provided configuration
-func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Config, pod apiv1.Pod, serverIP string) (string, error) {
+func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Config, pod apiv1.Pod, serverIP string, perf *config.PerfScenarios) (string, error) {
 	var stdout, stderr bytes.Buffer
 
 	var fileContent string
@@ -96,48 +97,65 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
-	var cmd []string
-	uperfCmd := "echo '" + fileContent + "' > " + filePath
-	cmd = []string{"bash", "-c", uperfCmd}
-
 	//Empty buffer
 	stdout = bytes.Buffer{}
 
-	req := c.CoreV1().RESTClient().
-		Post().
-		Namespace(pod.Namespace).
-		Resource("pods").
-		Name(pod.Name).
-		SubResource("exec").
-		VersionedParams(&apiv1.PodExecOptions{
-			Container: pod.Spec.Containers[0].Name,
-			Command:   cmd,
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
-	exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-	if err != nil {
-		return filePath, err
-	}
-	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if err != nil {
-		return filePath, err
-	}
+	if !perf.VM {
+		var cmd []string
+		uperfCmd := "echo '" + fileContent + "' > " + filePath
+		cmd = []string{"bash", "-c", uperfCmd}
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return filePath, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return filePath, err
+		}
 
-	log.Debug(strings.TrimSpace(stdout.String()))
+		log.Debug(strings.TrimSpace(stdout.String()))
+		return filePath, nil
+	} else {
+
+		var cmd []string
+		uperfCmd := "echo '" + fileContent + "' > " + filePath
+		cmd = []string{uperfCmd}
+		sshclient, err := k8s.SSHConnect(perf)
+		if err != nil {
+			return filePath, err
+		}
+		log.Debug(strings.Join(cmd[:], " "))
+		_, err = sshclient.Run(strings.Join(cmd[:], " "))
+		if err != nil {
+			return filePath, err
+		}
+		sshclient.Close()
+	}
 	return filePath, nil
 }
 
 // Run will invoke uperf in a client container
 
-func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
+func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	var exec remotecommand.Executor
 
@@ -145,7 +163,8 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	log.Debugf("🔥 Client (%s,%s) starting uperf against server: %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, u.driverName)
 
-	filePath, err := createUperfProfile(c, rc, nc, pod, serverIP)
+	log.Debug("Creating uperf configuration file")
+	filePath, err := createUperfProfile(c, rc, nc, pod, serverIP, perf)
 	if err != nil {
 		return stdout, err
 	}
@@ -157,35 +176,78 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	cmd := []string{"uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(k8s.UperfServerCtlPort)}
 	log.Debug(cmd)
 
-	req := c.CoreV1().RESTClient().
-		Post().
-		Namespace(pod.Namespace).
-		Resource("pods").
-		Name(pod.Name).
-		SubResource("exec").
-		VersionedParams(&apiv1.PodExecOptions{
-			Container: pod.Spec.Containers[0].Name,
-			Command:   cmd,
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
-	exec, err = remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-	if err != nil {
-		return stdout, err
+	if !perf.VM {
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err = remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+		return stdout, nil
+	} else {
+		retry := 3
+		present := false
+		sshclient, err := k8s.SSHConnect(perf)
+		if err != nil {
+			return stdout, err
+		}
+		for i := 0; i <= retry; i++ {
+			log.Debug("⏰ Waiting for uperf to be present on VM")
+			_, err = sshclient.Run("until uperf -h; do sleep 30; done")
+			if err != nil {
+				time.Sleep(10 * time.Second)
+				continue
+			} else {
+				present = true
+				break
+			}
+		}
+		if !present {
+			sshclient.Close()
+			return stdout, fmt.Errorf("uperf binary is not present on the VM")
+		}
+		var stdout []byte
+		ran := false
+		for i := 0; i <= retry; i++ {
+			stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+			if err != nil {
+				log.Debugf("Failed running command %s", err)
+				log.Debugf("⏰ Retrying uperf command -- cloud-init still finishing up")
+				time.Sleep(60 * time.Second)
+				continue
+			} else {
+				ran = true
+				break
+			}
+		}
+		sshclient.Close()
+		if !ran {
+			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run uperf")
+		} else {
+			return *bytes.NewBuffer(stdout), nil
+		}
 	}
-	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if err != nil {
-		return stdout, err
-	}
-
-	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark.
@@ -196,6 +258,11 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 	sample.Metric = "Mb/s"
 
 	transactions := regexp.MustCompile(`timestamp_ms:(.*) name:Txn2 nr_bytes:(.*) nr_ops:(.*)\r`).FindAllStringSubmatch(stdout.String(), -1)
+
+	// VM output does not have the \r.
+	if len(transactions) < 1 {
+		transactions = regexp.MustCompile(`timestamp_ms:(.*) name:Txn2 nr_bytes:(.*) nr_ops:(.*)`).FindAllStringSubmatch(stdout.String(), -1)
+	}
 
 	var prevTimestamp, normLtcy float64
 	var prevBytes, prevOps, normOps float64

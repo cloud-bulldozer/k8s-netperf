@@ -6,6 +6,7 @@ import (
 	"regexp"
 
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
+	"github.com/melbahja/goph"
 	apiv1 "k8s.io/api/core/v1"
 
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
@@ -50,6 +51,7 @@ type PerfScenarios struct {
 	ClientSet      *kubernetes.Clientset
 	KClient        *kubevirtv1.KubevirtV1Client
 	DClient        *dynamic.DynamicClient
+	SSHClient      *goph.Client
 }
 
 // Tests we will support in k8s-netperf

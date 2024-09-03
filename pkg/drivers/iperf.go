@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"encoding/json"
 
@@ -51,7 +52,11 @@ func (i *iperf3) IsTestSupported(test string) bool {
 }
 
 // Run will invoke iperf3 in a client container
-func (i *iperf3) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string) (bytes.Buffer, error) {
+func (i *iperf3) Run(c *kubernetes.Clientset,
+	rc rest.Config,
+	nc config.Config,
+	client apiv1.PodList,
+	serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	id := uuid.New()
 	file := fmt.Sprintf("/tmp/iperf-%s", id.String())
@@ -85,68 +90,124 @@ func (i *iperf3) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, 
 		}
 	}
 	log.Debug(cmd)
-	req := c.CoreV1().RESTClient().
-		Post().
-		Namespace(pod.Namespace).
-		Resource("pods").
-		Name(pod.Name).
-		SubResource("exec").
-		VersionedParams(&apiv1.PodExecOptions{
-			Container: pod.Spec.Containers[0].Name,
-			Command:   cmd,
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
-	exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-	if err != nil {
-		return stdout, err
-	}
-	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if err != nil {
-		return stdout, err
+	if !perf.VM {
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+	} else {
+		retry := 3
+		present := false
+		sshclient, err := k8s.SSHConnect(perf)
+		if err != nil {
+			return stdout, err
+		}
+		for i := 0; i <= retry; i++ {
+			log.Debug("⏰ Waiting for iperf3 to be present on VM")
+			_, err = sshclient.Run("until iperf3 -h; do sleep 30; done")
+			if err != nil {
+				time.Sleep(10 * time.Second)
+				continue
+			} else {
+				present = true
+				break
+			}
+		}
+		if !present {
+			sshclient.Close()
+			return stdout, fmt.Errorf("iperf3 binary is not present on the VM")
+		}
+		var stdout []byte
+		ran := false
+		for i := 0; i <= retry; i++ {
+			stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+			if err != nil {
+				log.Debugf("Failed running command %s", err)
+				log.Debugf("⏰ Retrying iperf3 command -- cloud-init still finishing up")
+				time.Sleep(60 * time.Second)
+				continue
+			} else {
+				ran = true
+				break
+			}
+		}
+		sshclient.Close()
+		if !ran {
+			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run iperf3")
+		}
 	}
 
 	//Empty buffer
 	stdout = bytes.Buffer{}
 	stderr = bytes.Buffer{}
 
-	req = c.CoreV1().RESTClient().
-		Post().
-		Namespace(pod.Namespace).
-		Resource("pods").
-		Name(pod.Name).
-		SubResource("exec").
-		VersionedParams(&apiv1.PodExecOptions{
-			Container: pod.Spec.Containers[0].Name,
-			Command:   []string{"cat", file},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
-	exec, err = remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-	if err != nil {
-		return stdout, err
+	if !perf.VM {
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   []string{"cat", file},
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+		log.Debug(strings.TrimSpace(stdout.String()))
+		return stdout, nil
+	} else {
+		sshclient, err := k8s.SSHConnect(perf)
+		if err != nil {
+			return stdout, err
+		}
+		stdout, err := sshclient.Run(fmt.Sprintf("cat %s", file))
+		if err != nil {
+			sshclient.Close()
+			return *bytes.NewBuffer(stdout), err
+		}
+		log.Debug(strings.TrimSpace(bytes.NewBuffer(stdout).String()))
+		sshclient.Close()
+		return *bytes.NewBuffer(stdout), nil
 	}
-	// Connect this process' std{in,out,err} to the remote shell process.
-	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-	if err != nil {
-		return stdout, err
-	}
-
-	log.Debug(strings.TrimSpace(stdout.String()))
-	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark.

@@ -45,20 +45,20 @@ func connect(config *goph.Config) (*goph.Client, error) {
 	return nil, fmt.Errorf("Unable to connect via ssh after %d attempts", retry)
 }
 
-func SSHConnect(conf *config.PerfScenarios) error {
+func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	dir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("Unable to retrieve users homedir. %s", err)
+		return nil, fmt.Errorf("Unable to retrieve users homedir. %s", err)
 	}
 	key := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	keyd, err := os.ReadFile(key)
 	auth, err := goph.RawKey(string(keyd), "")
 	if err != nil {
-		return fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
+		return nil, fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
 	}
 	user := "fedora"
 	addr := conf.VMHost
-	log.Infof("Attempting to connect with : %s@%s", user, addr)
+	log.Debugf("Attempting to connect with : %s@%s", user, addr)
 
 	config := goph.Config{
 		User:     user,
@@ -70,16 +70,10 @@ func SSHConnect(conf *config.PerfScenarios) error {
 
 	client, err := connect(&config)
 	if err != nil {
-		return fmt.Errorf("Unable to connect via ssh. Error: %s", err)
+		return nil, fmt.Errorf("Unable to connect via ssh. Error: %s", err)
 	}
-	defer client.Close()
-	out, err := client.Run("ls /etc")
-	if err != nil {
-		return err
-	}
-	log.Info(string(out))
 
-	return nil
+	return client, nil
 }
 
 func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
@@ -182,7 +176,19 @@ ssh_deletekeys: false
 password: fedora
 chpasswd: { expire: False }
 runcmd:
-  - dnf install -y uperf iperf3 git ethtool
+  - export HOME=/home/fedora
+  - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - git clone https://github.com/HewlettPackard/netperf
+  - cd netperf
+  - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
+  - curl -o netperf.diff https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/netperf.diff
+  - git apply netperf.diff 
+  - ./autogen.sh 
+  - ./configure --enable-sctp=yes --enable-demo=yes 
+  - make && make install
+  - cd
+  - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
+  - chmod 0777 /usr/bin/super-netperf
 `, string(ssh))
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff)
 	if err != nil {
@@ -225,10 +231,21 @@ ssh_deletekeys: false
 password: fedora
 chpasswd: { expire: False }
 runcmd:
-  - dnf install -y uperf iperf3 git ethtool
-  - uperf -s -v &
-  - iperf3 -s &
-`, string(ssh))
+  - dnf install -y --nodocs uperf iperf3 git ethtool
+  - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - git clone https://github.com/HewlettPackard/netperf
+  - cd netperf
+  - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
+  - curl -o netperf.diff https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/netperf.diff
+  - git apply netperf.diff 
+  - ./autogen.sh 
+  - ./configure --enable-sctp=yes --enable-demo=yes 
+  - make && make install
+  - cd
+  - uperf -s -v -P %d &
+  - iperf3 -s -p %d &
+  - netserver &
+`, string(ssh), UperfServerCtlPort, IperfServerCtlPort)
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
 }
 
@@ -306,7 +323,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 }
 
 func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
-	log.Infof("Wating for VMI (%s) to be in state running", name)
+	log.Infof("⏰ Wating for VMI (%s) to be in state running", name)
 	vmw, err := client.VirtualMachineInstances(namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -318,7 +335,7 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 			return fmt.Errorf("Unable to watch VMI %s", name)
 		}
 		if d.Name == name {
-			log.Infof("Found in state (%s)", d.Status.Phase)
+			log.Debugf("Found in state (%s)", d.Status.Phase)
 			if d.Status.Phase == "Running" {
 				return nil
 			}

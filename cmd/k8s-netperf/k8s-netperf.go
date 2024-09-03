@@ -207,12 +207,12 @@ var rootCmd = &cobra.Command{
 				var pr result.Data
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
-						pr = executeWorkload(nc, s, true, driver)
+						pr = executeWorkload(nc, s, true, driver, false)
 						if len(pr.Profile) > 1 {
 							sr.Results = append(sr.Results, pr)
 						}
 					}
-					pr = executeWorkload(nc, s, false, driver)
+					pr = executeWorkload(nc, s, false, driver, false)
 					if len(pr.Profile) > 1 {
 						sr.Results = append(sr.Results, pr)
 					}
@@ -220,18 +220,44 @@ var rootCmd = &cobra.Command{
 			}
 		} else {
 			log.Info("Connecting via ssh to the VMI")
-			err = k8s.SSHConnect(&s)
+			client, err := k8s.SSHConnect(&s)
 			if err != nil {
 				log.Fatal(err)
+			}
+			s.SSHClient = client
+			for _, nc := range s.Configs {
+				// Determine the metric for the test
+				metric := string("OP/s")
+				if strings.Contains(nc.Profile, "STREAM") {
+					metric = "Mb/s"
+				}
+				nc.Metric = metric
+				nc.AcrossAZ = acrossAZ
+				// No need to run hostNetwork through Service.
+				var pr result.Data
+				for _, driver := range requestedDrivers {
+					if s.HostNetwork && !nc.Service {
+						pr = executeWorkload(nc, s, true, driver, true)
+						if len(pr.Profile) > 1 {
+							sr.Results = append(sr.Results, pr)
+						}
+					}
+					pr = executeWorkload(nc, s, false, driver, true)
+					if len(pr.Profile) > 1 {
+						sr.Results = append(sr.Results, pr)
+					}
+				}
 			}
 		}
 
 		if pavail {
 			for i, npr := range sr.Results {
-				sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-				sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
-				sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-				sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+				if len(npr.ClientNodeInfo.Hostname) > 0 && len(npr.ServerNodeInfo.Hostname) > 0 {
+					sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+				}
 			}
 		}
 
@@ -332,14 +358,17 @@ func cleanup(client *kubernetes.Clientset) {
 }
 
 // executeWorkload executes the workload and returns the result data.
-func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, driverName string) result.Data {
+func executeWorkload(nc config.Config,
+	s config.PerfScenarios,
+	hostNet bool,
+	driverName string, virt bool) result.Data {
 	serverIP := ""
 	Client := s.Client
 	var driver drivers.Driver
 	if nc.Service {
-		if iperf3 {
+		if driverName == "iperf3" {
 			serverIP = s.IperfService.Spec.ClusterIP
-		} else if uperf {
+		} else if driverName == "uperf" {
 			serverIP = s.UperfService.Spec.ClusterIP
 		} else {
 			serverIP = s.NetperfService.Spec.ClusterIP
@@ -387,7 +416,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, dri
 			log.Warnf("Test %s is not supported with driver %s. Skipping.", nc.Profile, npr.Driver)
 			return npr
 		}
-		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -399,7 +428,7 @@ func executeWorkload(nc config.Config, s config.PerfScenarios, hostNet bool, dri
 			// Retry the current test.
 			for try < retry {
 				log.Warn("Rerunning test.")
-				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP)
+				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s)
 				if err != nil {
 					log.Error(err)
 					continue
