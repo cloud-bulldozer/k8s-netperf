@@ -1,6 +1,6 @@
 module github.com/cloud-bulldozer/k8s-netperf
 
-go 1.23
+go 1.19
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
@@ -9,7 +9,6 @@ require (
 	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.6.6
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/pkg/sftp v1.13.5
 	github.com/prometheus/common v0.44.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
@@ -52,6 +51,7 @@ require (
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183 // indirect
 	github.com/openshift/custom-resource-status v1.1.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/sftp v1.13.5 // indirect
 	github.com/prometheus/client_golang v1.15.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/net v0.17.0 // indirect
