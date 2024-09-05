@@ -420,7 +420,7 @@ func executeWorkload(nc config.Config,
 		if err != nil {
 			log.Fatal(err)
 		}
-		nr, err = driver.ParseResults(&r)
+		nr, err = driver.ParseResults(&r, nc)
 		if err != nil {
 			log.Error(err)
 			try := 0
@@ -433,7 +433,7 @@ func executeWorkload(nc config.Config,
 					log.Error(err)
 					continue
 				}
-				nr, err = driver.ParseResults(&r)
+				nr, err = driver.ParseResults(&r, nc)
 				if err != nil {
 					log.Error(err)
 					try++

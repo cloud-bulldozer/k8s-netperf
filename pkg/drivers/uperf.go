@@ -252,7 +252,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func (u *uperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
+func (u *uperf) ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = u.driverName
 	sample.Metric = "Mb/s"
@@ -285,10 +285,13 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer) (sample.Sample, error) {
 
 	}
 	averageByte, _ := stats.Mean(byteSummary)
-	averageOps, _ := stats.Mean(opSummary)
-	sample.Throughput = float64(averageByte*8) / 1000000
+	if strings.Contains(nc.Profile, "STREAM") {
+		sample.Throughput = float64(averageByte*8) / 1000000
+	} else {
+		sample.Throughput, _ = stats.Mean(opSummary)
+	}
 	sample.Latency99ptile, _ = stats.Percentile(latSummary, 99)
-	log.Debugf("Storing uperf sample throughput: %f Mbps, P99 Latency %f, Average ops: %f ", sample.Throughput, sample.Latency99ptile, averageOps)
+	log.Debugf("Storing uperf sample Average bytes: %f , P99 Latency %f, Throughput: %f ", averageByte, sample.Latency99ptile, sample.Throughput)
 
 	return sample, nil
 
