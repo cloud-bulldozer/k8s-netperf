@@ -52,6 +52,9 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	}
 	key := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	keyd, err := os.ReadFile(key)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to read key. Error : %s", err)
+	}
 	auth, err := goph.RawKey(string(keyd), "")
 	if err != nil {
 		return nil, fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
@@ -87,7 +90,7 @@ func createCommService(client *kubernetes.Clientset, label map[string]string, na
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       fmt.Sprintf("%s", name),
+					Name:       name,
 					Protocol:   corev1.ProtocolTCP,
 					NodePort:   int32(sshPort),
 					TargetPort: intstr.Parse(fmt.Sprintf("%d", 22)),

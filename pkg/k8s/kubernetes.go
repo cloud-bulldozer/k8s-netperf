@@ -316,7 +316,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 					return err
 				}
 				s.VMHost = host
-				WaitForVMI(s.KClient, clientAcrossRole)
+				err = WaitForVMI(s.KClient, clientAcrossRole)
+				if err != nil {
+					return err
+				}
 				s.ClientAcross, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRole))
 				if err != nil {
 					return err
@@ -335,7 +338,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 			s.VMHost = host
-			WaitForVMI(s.KClient, clientAcrossRole)
+			err = WaitForVMI(s.KClient, clientAcrossRole)
+			if err != nil {
+				return err
+			}
 			s.ClientAcross, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRole))
 			if err != nil {
 				return err
@@ -435,7 +441,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				if err != nil {
 					return err
 				}
-				WaitForVMI(s.KClient, serverRole)
+				err = WaitForVMI(s.KClient, serverRole)
+				if err != nil {
+					return err
+				}
 				s.ServerHost, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", serverRole))
 				if err != nil {
 					return err
@@ -461,7 +470,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if err != nil {
 			return err
 		}
-		WaitForVMI(s.KClient, serverRole)
+		err = WaitForVMI(s.KClient, serverRole)
+		if err != nil {
+			return err
+		}
 		s.Server, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
 			return err
