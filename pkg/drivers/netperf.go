@@ -49,13 +49,19 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		"-k", fmt.Sprint(omniOptions)}
 	var additionalOptions []string
 	if strings.Contains(nc.Profile, "STREAM") {
-		additionalOptions = []string {
-			"-m", fmt.Sprint(nc.MessageSize)}
+		if strings.Contains(nc.Profile, "UDP") {
+			additionalOptions = []string{
+				"-m", fmt.Sprint(nc.MessageSize),
+				"-R", "1"}
+		} else {
+			additionalOptions = []string{
+				"-m", fmt.Sprint(nc.MessageSize)}
+		}
 	} else {
-		additionalOptions = []string {
+		additionalOptions = []string{
 			"-r", fmt.Sprint(nc.MessageSize, ",", nc.MessageSize)}
 		if strings.Contains(nc.Profile, "TCP_RR") && (nc.Burst > 0) {
-			burst := []string {"-b", fmt.Sprint(nc.Burst)}
+			burst := []string{"-b", fmt.Sprint(nc.Burst)}
 			additionalOptions = append(additionalOptions, burst...)
 		}
 	}
