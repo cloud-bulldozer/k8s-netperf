@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
@@ -311,20 +312,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 					return err
 				}
 			} else {
-				host, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpHostAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
 				}
-				s.VMHost = host
-				err = WaitForVMI(s.KClient, clientAcrossRole)
-				if err != nil {
-					return err
-				}
-				s.ClientAcross, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRole))
-				if err != nil {
-					return err
-				}
-				s.ClientNodeInfo, _ = GetNakedPodNodeInfo(client, fmt.Sprintf("app=%s", clientAcrossRole))
 			}
 		}
 		if !s.VM {
@@ -333,20 +324,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		} else {
-			host, err := CreateVMClient(s.KClient, client, s.DClient, clientAcrossRole, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+			err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 			if err != nil {
 				return err
 			}
-			s.VMHost = host
-			err = WaitForVMI(s.KClient, clientAcrossRole)
-			if err != nil {
-				return err
-			}
-			s.ClientAcross, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRole))
-			if err != nil {
-				return err
-			}
-			s.ClientNodeInfo, _ = GetNakedPodNodeInfo(client, fmt.Sprintf("app=%s", clientAcrossRole))
 		}
 
 	}
@@ -437,19 +418,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 					return err
 				}
 			} else {
-				_, err = CreateVMServer(s.KClient, serverRole, serverRole, sdp.PodAntiAffinity, sdp.NodeAffinity)
+				err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 				if err != nil {
 					return err
 				}
-				err = WaitForVMI(s.KClient, serverRole)
-				if err != nil {
-					return err
-				}
-				s.ServerHost, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", serverRole))
-				if err != nil {
-					return err
-				}
-				s.ServerNodeInfo, _ = GetNakedPodNodeInfo(client, fmt.Sprintf("app=%s", serverRole))
 			}
 		}
 	}
@@ -466,21 +438,63 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			return err
 		}
 	} else {
-		_, err = CreateVMServer(s.KClient, serverRole, serverRole, sdp.PodAntiAffinity, sdp.NodeAffinity)
+		err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 		if err != nil {
 			return err
 		}
-		err = WaitForVMI(s.KClient, serverRole)
-		if err != nil {
-			return err
-		}
-		s.Server, err = GetNakedPods(s.ClientSet, fmt.Sprintf("app=%s", serverRole))
-		if err != nil {
-			return err
-		}
-		s.ServerNodeInfo, _ = GetNakedPodNodeInfo(client, fmt.Sprintf("app=%s", serverRole))
 	}
 
+	return nil
+}
+
+// launchServerVM will create the ServerVM with the specific node and pod affinity.
+func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff)
+	if err != nil {
+		return err
+	}
+	err = WaitForVMI(perf.KClient, serverRole)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(name, "host") {
+		perf.ServerHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		if err != nil {
+			return err
+		}
+	} else {
+		perf.Server, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		if err != nil {
+			return err
+		}
+	}
+	perf.ServerNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+	return nil
+}
+
+// launchClientVM will create the ClientVM with the specific node and pod affinity.
+func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff)
+	if err != nil {
+		return err
+	}
+	perf.VMHost = host
+	err = WaitForVMI(perf.KClient, name)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(name, "host") {
+		perf.ClientHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		if err != nil {
+			return err
+		}
+	} else {
+		perf.ClientAcross, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		if err != nil {
+			return err
+		}
+	}
+	perf.ClientNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
 
@@ -688,6 +702,7 @@ func GetNakedPodNodeInfo(c *kubernetes.Clientset, label string) (metrics.NodeInf
 	var info metrics.NodeInfo
 	listOpt := metav1.ListOptions{
 		LabelSelector: label,
+		FieldSelector: "status.phase=Running",
 	}
 	pods, err := c.CoreV1().Pods(namespace).List(context.TODO(), listOpt)
 	if err != nil {

@@ -153,12 +153,10 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 }
 
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, role string, name string,
-	podAff *corev1.PodAntiAffinity,
-	nodeAff *corev1.NodeAffinity) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) (string, error) {
 	label := map[string]string{
 		"app":  name,
-		"role": role,
+		"role": name,
 	}
 	dirname, err := os.UserHomeDir()
 	if err != nil {
@@ -192,7 +190,7 @@ runcmd:
   - cd
   - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
   - chmod 0777 /usr/bin/super-netperf
-`, string(ssh))
+`, ssh)
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff)
 	if err != nil {
 		return "", err
@@ -208,8 +206,7 @@ runcmd:
 	return host, nil
 }
 
-func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string,
-	podAff corev1.PodAntiAffinity,
+func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
@@ -252,8 +249,7 @@ runcmd:
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
 }
 
-func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string,
-	podAff corev1.PodAntiAffinity,
+func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
