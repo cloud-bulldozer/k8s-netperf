@@ -128,13 +128,11 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for iperf3 to be present on VM")
 			_, err = sshclient.Run("until iperf3 -h; do sleep 30; done")
-			if err != nil {
-				time.Sleep(10 * time.Second)
-				continue
-			} else {
+			if err == nil {
 				present = true
 				break
 			}
+			time.Sleep(10 * time.Second)
 		}
 		if !present {
 			sshclient.Close()
@@ -144,15 +142,13 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		ran := false
 		for i := 0; i <= retry; i++ {
 			stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
-			if err != nil {
-				log.Debugf("Failed running command %s", err)
-				log.Debugf("⏰ Retrying iperf3 command -- cloud-init still finishing up")
-				time.Sleep(60 * time.Second)
-				continue
-			} else {
+			if err == nil {
 				ran = true
 				break
 			}
+			log.Debugf("Failed running command %s", err)
+			log.Debugf("⏰ Retrying iperf3 command -- cloud-init still finishing up")
+			time.Sleep(60 * time.Second)
 		}
 		sshclient.Close()
 		if !ran {

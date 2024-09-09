@@ -107,13 +107,11 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for netperf to be present on VM")
 			_, err = sshclient.Run("until which netperf; do sleep 30; done")
-			if err != nil {
-				time.Sleep(10 * time.Second)
-				continue
-			} else {
+			if err == nil {
 				present = true
 				break
 			}
+			time.Sleep(10 * time.Second)
 		}
 		if !present {
 			sshclient.Close()
@@ -123,15 +121,13 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		ran := false
 		for i := 0; i <= retry; i++ {
 			_, err = sshclient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
-			if err != nil {
-				log.Debugf("Failed running command %s", err)
-				log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
-				time.Sleep(60 * time.Second)
-				continue
-			} else {
+			if err == nil {
 				ran = true
 				break
 			}
+			log.Debugf("Failed running command %s", err)
+			log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
+			time.Sleep(60 * time.Second)
 		}
 		stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
