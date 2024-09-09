@@ -35,7 +35,7 @@ $ cd k8s-netperf
 $ make docker-build
 ```
 
-## Running
+## Running with Pods
 Ensure your `kubeconfig` is properly set to the cluster you would like to run `k8s-netperf` against.
 
 also be sure to create a `netperf` namespace. (Not over-writable yet)
@@ -94,6 +94,17 @@ Flags:
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
+
+## Running with VMs
+Running k8s-netperf against Virtual Machines (OpenShift CNV) requires
+
+- OpenShift CNV must be deployed and users should be able to define VMIs
+- SSH keys to be present in the home directory `(~/.ssh/id_rsa.pub)`
+- OpenShift Routes - k8s-netperf uses this to reach the VMs (k8s-netperf will create the route for the user, but we need Routes)
+
+If the two above are in place, users can orhestrate k8s-netperf to launch VMs by running
+
+`k8s-netperf --vm`
 
 ### Config file
 #### Config File v2
