@@ -51,6 +51,7 @@ var (
 	json        bool
 	version     bool
 	csvArchive  bool
+	searchIndex string
 )
 
 var rootCmd = &cobra.Command{
@@ -284,13 +285,22 @@ var rootCmd = &cobra.Command{
 		}
 
 		if len(searchURL) > 1 {
+			var esClient *indexers.Indexer
 			jdocs, err := archive.BuildDocs(sr, uid)
 			if err != nil {
 				log.Fatal(err)
 			}
-			esClient, err := archive.Connect(searchURL, index, true)
-			if err != nil {
-				log.Fatal(err)
+			if len(searchIndex) > 1 {
+				esClient, err = archive.Connect(searchURL, searchIndex, true)
+				if err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				esClient, err = archive.Connect(searchURL, index, true)
+				if err != nil {
+					log.Fatal(err)
+				}
+
 			}
 			log.Infof("Indexing [%d] documents in %s with UUID %s", len(jdocs), index, uid)
 			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
@@ -476,6 +486,7 @@ func main() {
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
+	rootCmd.Flags().StringVar(&searchIndex, "index", "", "OpenSearch Index to save the results to, defaults to k8s-netperf")
 	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom")
 	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
