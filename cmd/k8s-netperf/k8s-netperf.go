@@ -219,6 +219,7 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		} else {
+			sr.Virt = true
 			log.Info("Connecting via ssh to the VMI")
 			client, err := k8s.SSHConnect(&s)
 			if err != nil {

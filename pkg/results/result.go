@@ -51,6 +51,7 @@ type Data struct {
 // ScenarioResults each scenario could have multiple results
 type ScenarioResults struct {
 	Results   []Data
+	Virt      bool
 	Version   string
 	GitCommit string
 	Metadata
