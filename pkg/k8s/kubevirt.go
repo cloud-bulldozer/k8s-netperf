@@ -30,6 +30,7 @@ var (
 	retry   = 30
 )
 
+// connect will attempt to connect via ssh to the guest. The VM can take a while for sshkeys to be injected
 func connect(config *goph.Config) (*goph.Client, error) {
 	for i := 0; i < retry; i++ {
 		client, err := goph.NewConn(config)
@@ -45,6 +46,7 @@ func connect(config *goph.Config) (*goph.Client, error) {
 	return nil, fmt.Errorf("Unable to connect via ssh after %d attempts", retry)
 }
 
+// SSHConnect sets up the ssh config, then attempts to connect to the VM.
 func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	dir, err := os.UserHomeDir()
 	if err != nil {
@@ -79,6 +81,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	return client, nil
 }
 
+// createCommService creates a SSH nodeport service using port 32022 -> 22
 func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
 	log.Infof("🚀 Creating service for %s in namespace %s", name, namespace)
 	sc := client.CoreV1().Services(namespace)
@@ -105,6 +108,7 @@ func createCommService(client *kubernetes.Clientset, label map[string]string, na
 	return err
 }
 
+// exposeService will create a route for the ssh nodeport service.
 func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicClient, svcName string) (string, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    "route.openshift.io",
@@ -152,6 +156,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 	return host, nil
 }
 
+// CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) (string, error) {
 	label := map[string]string{
@@ -206,6 +211,7 @@ runcmd:
 	return host, nil
 }
 
+// CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
@@ -249,6 +255,7 @@ runcmd:
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
 }
 
+// CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
@@ -321,6 +328,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 	return vmi, nil
 }
 
+// WaitForVMI will wait until the resource is in Running state.
 func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 	log.Infof("⏰ Wating for VMI (%s) to be in state running", name)
 	vmw, err := client.VirtualMachineInstances(namespace).Watch(context.TODO(), metav1.ListOptions{})

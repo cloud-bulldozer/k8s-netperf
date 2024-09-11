@@ -72,6 +72,7 @@ const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 
+// BuildInfra will create the infra for the SUT
 func BuildInfra(client *kubernetes.Clientset) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err == nil {
@@ -748,6 +749,7 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (corev1.PodList, erro
 	return npl, nil
 }
 
+// GetNakedPods when we deploy pods without a higher-level controller like deployment
 func GetNakedPods(c *kubernetes.Clientset, label string) (corev1.PodList, error) {
 	npl := corev1.PodList{}
 	listOpt := metav1.ListOptions{
