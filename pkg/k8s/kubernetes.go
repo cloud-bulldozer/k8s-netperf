@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
@@ -71,6 +72,7 @@ const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 
+// BuildInfra will create the infra for the SUT
 func BuildInfra(client *kubernetes.Clientset) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err == nil {
@@ -210,9 +212,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		cdp.NodeAffinity = corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 		}
-		s.Client, err = deployDeployment(client, cdp)
-		if err != nil {
-			return err
+		if !s.VM {
+			s.Client, err = deployDeployment(client, cdp)
+			if err != nil {
+				return err
+			}
 		}
 		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdp)
 	}
@@ -303,15 +307,30 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			cdpHostAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 			}
-			s.ClientHost, err = deployDeployment(client, cdpHostAcross)
+			if !s.VM {
+				s.ClientHost, err = deployDeployment(client, cdpHostAcross)
+				if err != nil {
+					return err
+				}
+			} else {
+				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				if err != nil {
+					return err
+				}
+			}
 		}
-		if err != nil {
-			return err
+		if !s.VM {
+			s.ClientAcross, err = deployDeployment(client, cdpAcross)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+			if err != nil {
+				return err
+			}
 		}
-		s.ClientAcross, err = deployDeployment(client, cdpAcross)
-		if err != nil {
-			return err
-		}
+
 	}
 
 	// Use separate containers for servers
@@ -394,21 +413,89 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	if ncount > 1 {
 		if s.HostNetwork {
-			s.ServerHost, err = deployDeployment(client, sdpHost)
-			if err != nil {
-				return err
+			if !s.VM {
+				s.ServerHost, err = deployDeployment(client, sdpHost)
+				if err != nil {
+					return err
+				}
+			} else {
+				err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
-	s.Server, err = deployDeployment(client, sdp)
-
-	s.ServerNodeInfo, _ = GetPodNodeInfo(client, sdp)
-	if !s.NodeLocal {
-		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdpAcross)
+	if !s.VM {
+		s.Server, err = deployDeployment(client, sdp)
+		if err != nil {
+			return err
+		}
+		s.ServerNodeInfo, _ = GetPodNodeInfo(client, sdp)
+		if !s.NodeLocal {
+			s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdpAcross)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
+}
+
+// launchServerVM will create the ServerVM with the specific node and pod affinity.
+func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff)
 	if err != nil {
 		return err
 	}
+	err = WaitForVMI(perf.KClient, serverRole)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(name, "host") {
+		perf.ServerHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		if err != nil {
+			return err
+		}
+	} else {
+		perf.Server, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		if err != nil {
+			return err
+		}
+	}
+	perf.ServerNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+	return nil
+}
+
+// launchClientVM will create the ClientVM with the specific node and pod affinity.
+func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff)
+	if err != nil {
+		return err
+	}
+	perf.VMHost = host
+	err = WaitForVMI(perf.KClient, name)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(name, "host") {
+		perf.ClientHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		if err != nil {
+			return err
+		}
+	} else {
+		perf.ClientAcross, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		if err != nil {
+			return err
+		}
+	}
+	perf.ClientNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
 
@@ -575,6 +662,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 
 // GetNodeLabels Return Labels for a specific node
 func GetNodeLabels(c *kubernetes.Clientset, node string) (map[string]string, error) {
+	log.Debugf("Looking for Node labels for node - %s", node)
 	nodeInfo, err := c.CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -610,6 +698,30 @@ func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeI
 	return info, nil
 }
 
+// GetNakedPodNodeInfo collects the node information for a specific pod
+func GetNakedPodNodeInfo(c *kubernetes.Clientset, label string) (metrics.NodeInfo, error) {
+	var info metrics.NodeInfo
+	listOpt := metav1.ListOptions{
+		LabelSelector: label,
+		FieldSelector: "status.phase=Running",
+	}
+	pods, err := c.CoreV1().Pods(namespace).List(context.TODO(), listOpt)
+	if err != nil {
+		return info, fmt.Errorf("❌ Failure to capture pods: %v", err)
+	}
+	for pod := range pods.Items {
+		p := pods.Items[pod]
+		if pods.Items[pod].DeletionTimestamp != nil {
+			continue
+		} else {
+			info.IP = p.Status.HostIP
+			info.Hostname = p.Spec.NodeName
+		}
+	}
+	log.Debugf("Machine with lablel %s is Running on %s with IP %s", label, info.Hostname, info.IP)
+	return info, nil
+}
+
 // GetPods searches for a specific set of pods from DeploymentParms
 // It returns a PodList if the deployment is found.
 // NOTE : Since we can update the replicas to be > 1, is why I return a PodList.
@@ -635,6 +747,28 @@ func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (corev1.PodList, erro
 		}
 	}
 	return npl, nil
+}
+
+// GetNakedPods when we deploy pods without a higher-level controller like deployment
+func GetNakedPods(c *kubernetes.Clientset, label string) (corev1.PodList, error) {
+	npl := corev1.PodList{}
+	listOpt := metav1.ListOptions{
+		LabelSelector: label,
+	}
+	log.Infof("Looking for pods with label %s", fmt.Sprint(label))
+	pods, err := c.CoreV1().Pods(namespace).List(context.TODO(), listOpt)
+	if err != nil {
+		return npl, fmt.Errorf("❌ Failure to capture pods: %v", err)
+	}
+	for pod := range pods.Items {
+		if pods.Items[pod].DeletionTimestamp != nil {
+			continue
+		} else {
+			npl.Items = append(npl.Items, pods.Items[pod])
+		}
+	}
+	return npl, nil
+
 }
 
 // CreateService will build a k8s service
