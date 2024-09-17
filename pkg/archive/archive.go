@@ -19,36 +19,36 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID             string            `json:"uuid"`
-	Timestamp        time.Time         `json:"timestamp"`
-	HostNetwork      bool              `json:"hostNetwork"`
-	Driver           string            `json:"driver"`
-	Parallelism      int               `json:"parallelism"`
-	Profile          string            `json:"profile"`
-	Duration         int               `json:"duration"`
-	Service          bool              `json:"service"`
-	Local            bool              `json:"local"`
-	Virt             bool              `json:"virt"`
-	AcrossAZ         bool              `json:"acrossAZ"`
-	Samples          int               `json:"samples"`
-	Messagesize      int               `json:"messageSize"`
-	Burst            int               `json:"burst"`
-	Throughput       float64           `json:"throughput"`
-	Latency          float64           `json:"latency"`
-	TputMetric       string            `json:"tputMetric"`
-	LtcyMetric       string            `json:"ltcyMetric"`
-	TCPRetransmit    float64           `json:"tcpRetransmits"`
-	UDPLossPercent   float64           `json:"udpLossPercent"`
-	ToolVersion      string            `json:"toolVersion"`
-	ToolGitCommit    string            `json:"toolGitCommit"`
-	Metadata         result.Metadata   `json:"metadata"`
-	ServerNodeCPU    metrics.NodeCPU   `json:"serverCPU"`
-	ServerPodCPU     []metrics.PodCPU  `json:"serverPods"`
-	ClientNodeCPU    metrics.NodeCPU   `json:"clientCPU"`
-	ClientPodCPU     []metrics.PodCPU  `json:"clientPods"`
-	ClientNodeLabels map[string]string `json:"clientNodeLabels"`
-	ServerNodeLabels map[string]string `json:"serverNodeLabels"`
-	Confidence       []float64         `json:"confidence"`
+	UUID           string           `json:"uuid"`
+	Timestamp      time.Time        `json:"timestamp"`
+	HostNetwork    bool             `json:"hostNetwork"`
+	Driver         string           `json:"driver"`
+	Parallelism    int              `json:"parallelism"`
+	Profile        string           `json:"profile"`
+	Duration       int              `json:"duration"`
+	Service        bool             `json:"service"`
+	Local          bool             `json:"local"`
+	Virt           bool             `json:"virt"`
+	AcrossAZ       bool             `json:"acrossAZ"`
+	Samples        int              `json:"samples"`
+	Messagesize    int              `json:"messageSize"`
+	Burst          int              `json:"burst"`
+	Throughput     float64          `json:"throughput"`
+	Latency        float64          `json:"latency"`
+	TputMetric     string           `json:"tputMetric"`
+	LtcyMetric     string           `json:"ltcyMetric"`
+	TCPRetransmit  float64          `json:"tcpRetransmits"`
+	UDPLossPercent float64          `json:"udpLossPercent"`
+	ToolVersion    string           `json:"toolVersion"`
+	ToolGitCommit  string           `json:"toolGitCommit"`
+	Metadata       result.Metadata  `json:"metadata"`
+	ServerNodeCPU  metrics.NodeCPU  `json:"serverCPU"`
+	ServerPodCPU   []metrics.PodCPU `json:"serverPods"`
+	ClientNodeCPU  metrics.NodeCPU  `json:"clientCPU"`
+	ClientPodCPU   []metrics.PodCPU `json:"clientPods"`
+	Confidence     []float64        `json:"confidence"`
+	ServerNodeInfo metrics.NodeInfo `json:"serverNodeInfo"`
+	ClientNodeInfo metrics.NodeInfo `json:"clientNodeInfo"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -89,29 +89,31 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		}
 		c := []float64{lo, hi}
 		d := Doc{
-			UUID:          uuid,
-			Timestamp:     time,
-			ToolVersion:   sr.Version,
-			ToolGitCommit: sr.GitCommit,
-			Driver:        r.Driver,
-			HostNetwork:   r.HostNetwork,
-			Parallelism:   r.Parallelism,
-			Profile:       r.Profile,
-			Duration:      r.Duration,
-			Virt:          sr.Virt,
-			Samples:       r.Samples,
-			Service:       r.Service,
-			Messagesize:   r.MessageSize,
-			Burst:         r.Burst,
-			TputMetric:    r.Metric,
-			LtcyMetric:    ltcyMetric,
-			ServerNodeCPU: r.ServerMetrics,
-			ClientNodeCPU: r.ClientMetrics,
-			ServerPodCPU:  r.ServerPodCPU.Results,
-			ClientPodCPU:  r.ClientPodCPU.Results,
-			Metadata:      sr.Metadata,
-			AcrossAZ:      r.AcrossAZ,
-			Confidence:    c,
+			UUID:           uuid,
+			Timestamp:      time,
+			ToolVersion:    sr.Version,
+			ToolGitCommit:  sr.GitCommit,
+			Driver:         r.Driver,
+			HostNetwork:    r.HostNetwork,
+			Parallelism:    r.Parallelism,
+			Profile:        r.Profile,
+			Duration:       r.Duration,
+			Virt:           sr.Virt,
+			Samples:        r.Samples,
+			Service:        r.Service,
+			Messagesize:    r.MessageSize,
+			Burst:          r.Burst,
+			TputMetric:     r.Metric,
+			LtcyMetric:     ltcyMetric,
+			ServerNodeCPU:  r.ServerMetrics,
+			ClientNodeCPU:  r.ClientMetrics,
+			ServerPodCPU:   r.ServerPodCPU.Results,
+			ClientPodCPU:   r.ClientPodCPU.Results,
+			Metadata:       sr.Metadata,
+			AcrossAZ:       r.AcrossAZ,
+			Confidence:     c,
+			ClientNodeInfo: r.ClientNodeInfo,
+			ServerNodeInfo: r.ServerNodeInfo,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {

@@ -11,14 +11,15 @@ import (
 	"github.com/cloud-bulldozer/go-commons/prometheus"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/prometheus/common/model"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 // NodeInfo stores the node metadata like IP and Hostname
 type NodeInfo struct {
-	IP       string
-	Hostname string
-	NodeName string
+	IP       string `json:"ip"`
+	NodeName string `json:"nodeName"`
+	corev1.NodeSystemInfo
 }
 
 // NodeCPU stores CPU information for a specific Node
@@ -127,7 +128,7 @@ func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Tim
 	query := fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s:.*\"}[2m])) * 100)", node.IP)
 	if conn.OpenShift {
 		// OpenShift changes the instance in its metrics.
-		query = fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s\"}[2m])) * 100)", node.Hostname)
+		query = fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s\"}[2m])) * 100)", node.NodeName)
 	}
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
