@@ -154,16 +154,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	// Get node count
-	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker=,node-role.kubernetes.io/infra!="})
 	if err != nil {
 		return err
 	}
-	ncount := 0
-	for _, node := range nodes.Items {
-		if _, ok := node.Labels["node-role.kubernetes.io/infra"]; !ok {
-			ncount++
-		}
-	}
+	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 	if (s.HostNetwork || !s.NodeLocal) && ncount < 2 {
 		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
@@ -220,7 +215,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 		}
 		s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdp.Labels).String())
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create iperf service
@@ -412,7 +409,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		sdpHost.PodAntiAffinity = antiAffinity
 	}
-
 	if ncount > 1 {
 		if s.HostNetwork {
 			if !s.VM {
