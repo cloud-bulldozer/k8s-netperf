@@ -32,7 +32,7 @@ $ make build
 ```shell
 $ git clone http://github.com/cloud-bulldozer/k8s-netperf
 $ cd k8s-netperf
-$ make docker-build
+$ make container-build
 ```
 
 ## Running with Pods
