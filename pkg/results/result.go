@@ -44,8 +44,6 @@ type Data struct {
 	ServerMetrics     metrics.NodeCPU
 	ClientPodCPU      metrics.PodValues
 	ServerPodCPU      metrics.PodValues
-	ClientNodeLabels  map[string]string
-	ServerNodeLabels  map[string]string
 }
 
 // ScenarioResults each scenario could have multiple results

@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -153,16 +154,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	// Get node count
-	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker=,node-role.kubernetes.io/infra!="})
 	if err != nil {
 		return err
 	}
-	ncount := 0
-	for _, node := range nodes.Items {
-		if _, ok := node.Labels["node-role.kubernetes.io/infra"]; !ok {
-			ncount++
-		}
-	}
+	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 	if (s.HostNetwork || !s.NodeLocal) && ncount < 2 {
 		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
@@ -218,7 +214,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		}
-		s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdp)
+		s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdp.Labels).String())
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create iperf service
@@ -410,7 +409,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		sdpHost.PodAntiAffinity = antiAffinity
 	}
-
 	if ncount > 1 {
 		if s.HostNetwork {
 			if !s.VM {
@@ -431,9 +429,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if err != nil {
 			return err
 		}
-		s.ServerNodeInfo, _ = GetPodNodeInfo(client, sdp)
+		s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
+		if err != nil {
+			return err
+		}
 		if !s.NodeLocal {
-			s.ClientNodeInfo, _ = GetPodNodeInfo(client, cdpAcross)
+			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
 		}
 		if err != nil {
 			return err
@@ -459,17 +460,17 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	if strings.Contains(name, "host") {
-		perf.ServerHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.Server, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.Server, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
 			return err
 		}
 	}
-	perf.ServerNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 	return nil
 }
 
@@ -485,17 +486,17 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	if strings.Contains(name, "host") {
-		perf.ClientHost, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		perf.ClientHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.ClientAcross, err = GetNakedPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		perf.ClientAcross, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	}
-	perf.ClientNodeInfo, _ = GetNakedPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
+	perf.ClientNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
 
@@ -525,7 +526,7 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (corev1
 		return pods, err
 	}
 	// Retrieve pods which match the server/client role labels
-	pods, err = GetPods(client, dp)
+	pods, err = GetPods(client, labels.Set(dp.Labels).String())
 	if err != nil {
 		return pods, err
 	}
@@ -544,7 +545,7 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 	for event := range dw.ResultChan() {
 		d, ok := event.Object.(*appsv1.Deployment)
 		if !ok {
-			fmt.Println("❌ Issue with the Deployment")
+			log.Error("❌ Issue with the Deployment")
 		}
 		if d.Name == dp.Name {
 			if d.Status.ReadyReplicas == 1 {
@@ -660,46 +661,8 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	return dc.Create(context.TODO(), deployment, metav1.CreateOptions{})
 }
 
-// GetNodeLabels Return Labels for a specific node
-func GetNodeLabels(c *kubernetes.Clientset, node string) (map[string]string, error) {
-	log.Debugf("Looking for Node labels for node - %s", node)
-	nodeInfo, err := c.CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return nodeInfo.GetLabels(), nil
-}
-
-// GetPodNodeInfo collects the node information for a specific pod
-func GetPodNodeInfo(c *kubernetes.Clientset, dp DeploymentParams) (metrics.NodeInfo, error) {
-	var info metrics.NodeInfo
-	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
-	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture deployment: %v", err)
-	}
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
-	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture deployment label: %v", err)
-	}
-	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
-	if err != nil {
-		return info, fmt.Errorf("❌ Failure to capture pods: %v", err)
-	}
-	for pod := range pods.Items {
-		p := pods.Items[pod]
-		if pods.Items[pod].DeletionTimestamp != nil {
-			continue
-		} else {
-			info.IP = p.Status.HostIP
-			info.Hostname = p.Spec.NodeName
-		}
-	}
-	log.Debugf("%s Running on %s with IP %s", d.Name, info.Hostname, info.IP)
-	return info, nil
-}
-
-// GetNakedPodNodeInfo collects the node information for a specific pod
-func GetNakedPodNodeInfo(c *kubernetes.Clientset, label string) (metrics.NodeInfo, error) {
+// GetPodNodeInfo collects the node information for a node running a pod with a specific label
+func GetPodNodeInfo(c *kubernetes.Clientset, label string) (metrics.NodeInfo, error) {
 	var info metrics.NodeInfo
 	listOpt := metav1.ListOptions{
 		LabelSelector: label,
@@ -709,65 +672,29 @@ func GetNakedPodNodeInfo(c *kubernetes.Clientset, label string) (metrics.NodeInf
 	if err != nil {
 		return info, fmt.Errorf("❌ Failure to capture pods: %v", err)
 	}
-	for pod := range pods.Items {
-		p := pods.Items[pod]
-		if pods.Items[pod].DeletionTimestamp != nil {
-			continue
-		} else {
-			info.IP = p.Status.HostIP
-			info.Hostname = p.Spec.NodeName
-		}
+	info.NodeName = pods.Items[0].Spec.NodeName
+	info.IP = pods.Items[0].Status.HostIP
+	node, err := c.CoreV1().Nodes().Get(context.TODO(), info.NodeName, metav1.GetOptions{})
+	if err != nil {
+		return info, err
 	}
-	log.Debugf("Machine with lablel %s is Running on %s with IP %s", label, info.Hostname, info.IP)
+	info.NodeSystemInfo = node.Status.NodeInfo
+	log.Debugf("Machine with label %s is Running on %s with IP %s", label, info.NodeName, info.IP)
 	return info, nil
 }
 
-// GetPods searches for a specific set of pods from DeploymentParms
-// It returns a PodList if the deployment is found.
-// NOTE : Since we can update the replicas to be > 1, is why I return a PodList.
-func GetPods(c *kubernetes.Clientset, dp DeploymentParams) (corev1.PodList, error) {
-	d, err := c.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
-	npl := corev1.PodList{}
-	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture deployment: %v", err)
-	}
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
-	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture deployment label: %v", err)
-	}
-	pods, err := c.CoreV1().Pods(dp.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String(), FieldSelector: "status.phase=Running"})
-	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture pods: %v", err)
-	}
-	for pod := range pods.Items {
-		if pods.Items[pod].DeletionTimestamp != nil {
-			continue
-		} else {
-			npl.Items = append(npl.Items, pods.Items[pod])
-		}
-	}
-	return npl, nil
-}
-
-// GetNakedPods when we deploy pods without a higher-level controller like deployment
-func GetNakedPods(c *kubernetes.Clientset, label string) (corev1.PodList, error) {
-	npl := corev1.PodList{}
+// GetPods returns pods with a specific label
+func GetPods(c *kubernetes.Clientset, label string) (corev1.PodList, error) {
 	listOpt := metav1.ListOptions{
 		LabelSelector: label,
+		FieldSelector: "status.phase=Running",
 	}
 	log.Infof("Looking for pods with label %s", fmt.Sprint(label))
 	pods, err := c.CoreV1().Pods(namespace).List(context.TODO(), listOpt)
 	if err != nil {
-		return npl, fmt.Errorf("❌ Failure to capture pods: %v", err)
+		return *pods, fmt.Errorf("❌ Failure to capture pods: %v", err)
 	}
-	for pod := range pods.Items {
-		if pods.Items[pod].DeletionTimestamp != nil {
-			continue
-		} else {
-			npl.Items = append(npl.Items, pods.Items[pod])
-		}
-	}
-	return npl, nil
+	return *pods, nil
 
 }
 

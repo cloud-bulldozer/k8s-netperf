@@ -254,7 +254,7 @@ var rootCmd = &cobra.Command{
 
 		if pavail {
 			for i, npr := range sr.Results {
-				if len(npr.ClientNodeInfo.Hostname) > 0 && len(npr.ServerNodeInfo.Hostname) > 0 {
+				if len(npr.ClientNodeInfo.NodeName) > 0 && len(npr.ServerNodeInfo.NodeName) > 0 {
 					sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 					sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 					sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
@@ -465,8 +465,6 @@ func executeWorkload(nc config.Config,
 	npr.EndTime = time.Now()
 	npr.ClientNodeInfo = s.ClientNodeInfo
 	npr.ServerNodeInfo = s.ServerNodeInfo
-	npr.ServerNodeLabels, _ = k8s.GetNodeLabels(s.ClientSet, s.ServerNodeInfo.Hostname)
-	npr.ClientNodeLabels, _ = k8s.GetNodeLabels(s.ClientSet, s.ClientNodeInfo.Hostname)
 
 	return npr
 }
