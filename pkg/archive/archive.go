@@ -160,6 +160,7 @@ func commonCsvHeaderFields() []string {
 		"Parallelism",
 		"# of Samples",
 		"Message Size",
+		"Burst",
 		"Confidence metric - low",
 		"Confidence metric - high",
 	}
