@@ -40,9 +40,15 @@ type PodCPU struct {
 	Value float64 `json:"cpuUsage"`
 }
 
+type PodMem struct {
+	Name  string  `json:"podName"`
+	Value float64 `json:"memUsage"`
+}
+
 // PodValues is a collection of PodCPU
 type PodValues struct {
-	Results []PodCPU
+	Results    []PodCPU
+	MemResults []PodMem
 }
 
 // PromConnect stores the prom information
@@ -183,6 +189,27 @@ func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 			Value: avg(s.Values),
 		}
 		pods.Results = append(pods.Results, p)
+	}
+	return pods, true
+}
+
+// TopPodMem will return the top 5 Mem consumers for a specific node
+func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
+	var pods PodValues
+	query := fmt.Sprintf("topk(5,container_memory_rss{container!=\"POD\",name!=\"\",node=~\"%s\"})", node.NodeName)
+	logging.Debugf("Prom Query : %s", query)
+	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
+	if err != nil {
+		logging.Error("Issue querying Prometheus")
+		return pods, false
+	}
+	v := val.(model.Matrix)
+	for _, s := range v {
+		p := PodMem{
+			Name:  string(s.Metric["pod"]),
+			Value: avg(s.Values),
+		}
+		pods.MemResults = append(pods.MemResults, p)
 	}
 	return pods, true
 }

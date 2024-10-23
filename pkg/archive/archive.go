@@ -44,8 +44,10 @@ type Doc struct {
 	Metadata       result.Metadata  `json:"metadata"`
 	ServerNodeCPU  metrics.NodeCPU  `json:"serverCPU"`
 	ServerPodCPU   []metrics.PodCPU `json:"serverPods"`
+	ServerPodMem   []metrics.PodMem `json:"serverPodsMem"`
 	ClientNodeCPU  metrics.NodeCPU  `json:"clientCPU"`
 	ClientPodCPU   []metrics.PodCPU `json:"clientPods"`
+	ClientPodMem   []metrics.PodMem `json:"clientPodsMem"`
 	Confidence     []float64        `json:"confidence"`
 	ServerNodeInfo metrics.NodeInfo `json:"serverNodeInfo"`
 	ClientNodeInfo metrics.NodeInfo `json:"clientNodeInfo"`
@@ -108,6 +110,8 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			ServerNodeCPU:  r.ServerMetrics,
 			ClientNodeCPU:  r.ClientMetrics,
 			ServerPodCPU:   r.ServerPodCPU.Results,
+			ServerPodMem:   r.ServerPodMem.MemResults,
+			ClientPodMem:   r.ClientPodMem.MemResults,
 			ClientPodCPU:   r.ClientPodCPU.Results,
 			Metadata:       sr.Metadata,
 			AcrossAZ:       r.AcrossAZ,
@@ -189,10 +193,19 @@ func commonCsvDataFields(row result.Data) []string {
 }
 
 // Writes all the mertics to the archive.
-func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU) error {
+func writeArchive(cpuarchive, podarchive, podmemarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU, podMem []metrics.PodMem) error {
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
 		if err := podarchive.Write(append(append(roleFieldData,
+			commonCsvDataFields(row)...),
+			pod.Name,
+			fmt.Sprintf("%f", pod.Value),
+		)); err != nil {
+			return fmt.Errorf("failed to write archive to file")
+		}
+	}
+	for _, pod := range podMem {
+		if err := podmemarchive.Write(append(append(roleFieldData,
 			commonCsvDataFields(row)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
@@ -223,6 +236,12 @@ func writeArchive(cpuarchive, podarchive *csv.Writer, role string, row result.Da
 // WritePromCSVResult writes the prom data in CSV format
 func WritePromCSVResult(r result.ScenarioResults) error {
 	d := time.Now().Unix()
+
+	podmemfp, err := os.Create(fmt.Sprintf("podmem-result-%d.csv", d))
+	if err != nil {
+		return fmt.Errorf("failed to open pod mem archive file")
+	}
+	defer podmemfp.Close()
 	podfp, err := os.Create(fmt.Sprintf("podcpu-result-%d.csv", d))
 	if err != nil {
 		return fmt.Errorf("failed to open pod cpu archive file")
@@ -237,6 +256,9 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	defer cpuarchive.Flush()
 	podarchive := csv.NewWriter(podfp)
 	defer podarchive.Flush()
+
+	podmemarchive := csv.NewWriter(podmemfp)
+	defer podmemarchive.Flush()
 	roleField := []string{"Role"}
 	cpudata := append(append(roleField,
 		commonCsvHeaderFields()...),
@@ -260,13 +282,14 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		return fmt.Errorf("failed to write pod archive to file")
 	}
 	for _, row := range r.Results {
-		if err := writeArchive(cpuarchive, podarchive, "Client", row, row.ClientPodCPU.Results); err != nil {
+		if err := writeArchive(cpuarchive, podarchive, podmemarchive, "Client", row, row.ClientPodCPU.Results, row.ClientPodMem.MemResults); err != nil {
 			return err
 		}
-		if err := writeArchive(cpuarchive, podarchive, "Server", row, row.ServerPodCPU.Results); err != nil {
+		if err := writeArchive(cpuarchive, podarchive, podmemarchive, "Server", row, row.ServerPodCPU.Results, row.ServerPodMem.MemResults); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 

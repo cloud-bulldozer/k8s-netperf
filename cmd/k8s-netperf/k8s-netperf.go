@@ -259,6 +259,8 @@ var rootCmd = &cobra.Command{
 					sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 					sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
 					sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					sr.Results[i].ClientPodMem, _ = metrics.TopPodMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					sr.Results[i].ServerPodMem, _ = metrics.TopPodMem(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
 				}
 			}
 		}
@@ -319,6 +321,7 @@ var rootCmd = &cobra.Command{
 			if showMetrics {
 				result.ShowNodeCPU(sr)
 				result.ShowPodCPU(sr)
+				result.ShowPodMem(sr)
 			}
 		} else {
 			err = archive.WriteJSONResult(sr)
