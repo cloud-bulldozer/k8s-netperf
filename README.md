@@ -70,15 +70,19 @@ Flags:
       --clean                 Clean-up resources created by k8s-netperf (default true)
       --json                  Instead of human-readable output, return JSON to stdout
       --local                 Run network performance tests with Server-Pods/Client-Pods on the same Node
+      --vm                    Launch Virtual Machines instead of pods for client/servers
       --across                Place the client and server across availability zones
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
       --debug                 Enable debug log
+      --udn                   Create and use a UDN called 'udn-l2-primary' as a primary network.
       --prom string           Prometheus URL
       --uuid string           User provided UUID
       --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
+      --index string          OpenSearch Index to save the results to, defaults to k8s-netperf
       --metrics               Show all system metrics retrieved from prom
       --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
       --version               k8s-netperf version
+      --csv                   Archive results, cluster and benchmark metrics in CSV files (default true)
   -h, --help                  help for k8s-netperf
 
 
