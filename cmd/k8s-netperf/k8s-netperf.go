@@ -468,6 +468,7 @@ func executeWorkload(nc config.Config,
 		//when using a bridge
 	} else if s.BridgeServerNetwork != "" {
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
+
 	} else {
 		if hostNet {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
