@@ -12,9 +12,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
 )
@@ -120,6 +123,36 @@ func BuildInfra(client *kubernetes.Clientset) error {
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
 		}
+	}
+	return nil
+}
+
+// Create a NetworkAttachcmentDefinition object for a bridge connection
+func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
+	nadBridge := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.cni.cncf.io/v1",
+			"kind":       "NetworkAttachmentDefinition",
+			"metadata": map[string]interface{}{
+				"name":      "br-netperf",
+				"namespace": "netperf",
+				"annotations": map[string]interface{}{
+					"k8s.v1.cni.cncf.io/resourceName": "bridge.network.kubevirt.io/" + bridgeName,
+				},
+			},
+			"spec": map[string]interface{}{
+				"config": `{"cniVersion": "0.3.1", "type": "bridge", "name": "br-netperf", "bridge": "` + bridgeName + `"}`,
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
+	_, err := dyn.Resource(gvr).Namespace(namespace).Create(context.TODO(), nadBridge, metav1.CreateOptions{})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -451,7 +484,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff)
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.Bridge)
 	if err != nil {
 		return err
 	}
@@ -476,7 +509,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff)
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.Bridge)
 	if err != nil {
 		return err
 	}

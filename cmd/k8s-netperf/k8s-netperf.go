@@ -43,6 +43,7 @@ var (
 	full        bool
 	vm          bool
 	debug       bool
+	bridge      string
 	promURL     string
 	id          string
 	searchURL   string
@@ -164,6 +165,13 @@ var rootCmd = &cobra.Command{
 			}
 			s.KClient = kclient
 			s.DClient = dynClient
+			if len(bridge) > 0 {
+				err := k8s.DeployNADBridge(s.DClient, bridge)
+				if err != nil {
+					log.Error(err)
+				}
+				s.Bridge = true
+			}
 		}
 
 		// Build the SUT (Deployments)
@@ -384,6 +392,9 @@ func executeWorkload(nc config.Config,
 		} else {
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
+		//when using a bridge, ip is static
+	} else if s.Bridge {
+		serverIP = "10.10.10.14"
 	} else {
 		if hostNet {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
@@ -481,6 +492,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
+	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NNCP to be used for creating bridge interface - VM only.")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

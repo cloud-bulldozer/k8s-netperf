@@ -158,7 +158,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, bridge bool) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -171,6 +171,7 @@ func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Cli
 	if err != nil {
 		return "", err
 	}
+	netData := "{}"
 	data := fmt.Sprintf(`#cloud-config
 users:
   - name: fedora
@@ -184,7 +185,7 @@ chpasswd: { expire: False }
 runcmd:
   - export HOME=/home/fedora
   - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
-  - git clone https://github.com/HewlettPackard/netperf
+  - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
   - curl -o netperf.diff https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/netperf.diff
@@ -196,7 +197,43 @@ runcmd:
   - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
   - chmod 0777 /usr/bin/super-netperf
 `, ssh)
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff)
+	interfaces := []v1.Interface{
+		{
+			Name: "default",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		},
+	}
+	networks := []v1.Network{
+		{
+			Name: "default",
+			NetworkSource: v1.NetworkSource{
+				Pod: &v1.PodNetwork{},
+			},
+		},
+	}
+	if bridge {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "br-netperf",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "br-netperf",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: "netperf/br-netperf",
+				},
+			},
+		})
+		netData = `version: 2
+ethernets:
+  eth1:
+    addresses: [ 10.10.10.12/24 ]`
+	}
+	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 	if err != nil {
 		return "", err
 	}
@@ -213,11 +250,12 @@ runcmd:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, bridge bool) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
 	}
+	netData := "{}"
 	dirname, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -239,7 +277,7 @@ chpasswd: { expire: False }
 runcmd:
   - dnf install -y --nodocs uperf iperf3 git ethtool
   - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
-  - git clone https://github.com/HewlettPackard/netperf
+  - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
   - curl -o netperf.diff https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/netperf.diff
@@ -252,12 +290,48 @@ runcmd:
   - iperf3 -s -p %d &
   - netserver &
 `, string(ssh), UperfServerCtlPort, IperfServerCtlPort)
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
+	interfaces := []v1.Interface{
+		{
+			Name: "default",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		},
+	}
+	networks := []v1.Network{
+		{
+			Name: "default",
+			NetworkSource: v1.NetworkSource{
+				Pod: &v1.PodNetwork{},
+			},
+		},
+	}
+	if bridge {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "br-netperf",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "br-netperf",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: "netperf/br-netperf",
+				},
+			},
+		})
+		netData = `version: 2
+ethernets:
+  eth1:
+    addresses: [ 10.10.10.14/24 ]`
+	}
+	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, interfaces []v1.Interface, networks []v1.Network, netDatab64 string) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
 	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
@@ -300,8 +374,10 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 							},
 						},
 					},
+					Interfaces: interfaces,
 				},
 			},
+			Networks: networks,
 			Volumes: []v1.Volume{
 				v1.Volume{
 					Name: "disk0",
@@ -315,7 +391,8 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 					Name: "cloudinit",
 					VolumeSource: v1.VolumeSource{
 						CloudInitNoCloud: &v1.CloudInitNoCloudSource{
-							UserDataBase64: b64data,
+							UserDataBase64:    b64data,
+							NetworkDataBase64: netDatab64,
 						},
 					},
 				},
