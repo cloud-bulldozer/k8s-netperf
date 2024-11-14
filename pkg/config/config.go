@@ -38,6 +38,7 @@ type PerfScenarios struct {
 	Configs        []Config
 	VM             bool
 	VMHost         string
+	Bridge         bool
 	ServerNodeInfo metrics.NodeInfo
 	ClientNodeInfo metrics.NodeInfo
 	Client         apiv1.PodList
