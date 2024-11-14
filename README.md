@@ -122,6 +122,35 @@ If the two above are in place, users can orhestrate k8s-netperf to launch VMs by
 
 `k8s-netperf --vm`
 
+### Using a linux bridge interface
+When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required. For example:
+```yaml
+apiVersion: nmstate.io/v1alpha1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: br0-eth1
+spec:
+  desiredState:
+    interfaces:
+      - name: br0
+        description: Linux bridge with eno2 as a port
+        type: linux-bridge
+        state: up
+        ipv4:
+          dhcp: true
+          enabled: true
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: eno2
+```
+Then you can launch a test using the bridge interface:
+```
+./bin/amd64/k8s-netperf --vm --bridge br0
+```
+
 ### Config file
 #### Config File v2
 The v2 config file will be executed in the order the tests are presented in the config file.

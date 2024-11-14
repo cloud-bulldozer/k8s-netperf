@@ -185,7 +185,6 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 			s.KClient = kclient
-			s.DClient = dynClient
 			if len(bridge) > 0 {
 				err := k8s.DeployNADBridge(s.DClient, bridge)
 				if err != nil {
