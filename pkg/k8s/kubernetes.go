@@ -171,6 +171,36 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 	return nil
 }
 
+// Create a NetworkAttachcmentDefinition object for a bridge connection
+func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
+	nadBridge := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.cni.cncf.io/v1",
+			"kind":       "NetworkAttachmentDefinition",
+			"metadata": map[string]interface{}{
+				"name":      "br-netperf",
+				"namespace": "netperf",
+				"annotations": map[string]interface{}{
+					"k8s.v1.cni.cncf.io/resourceName": "bridge.network.kubevirt.io/" + bridgeName,
+				},
+			},
+			"spec": map[string]interface{}{
+				"config": `{"cniVersion": "0.3.1", "type": "bridge", "name": "br-netperf", "bridge": "` + bridgeName + `"}`,
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
+	_, err := dyn.Resource(gvr).Namespace(namespace).Create(context.TODO(), nadBridge, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
@@ -557,7 +587,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage)
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.Bridge)
 	if err != nil {
 		return err
 	}
@@ -582,7 +612,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage)
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.Bridge)
 	if err != nil {
 		return err
 	}
