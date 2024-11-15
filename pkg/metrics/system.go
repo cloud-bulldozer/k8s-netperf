@@ -174,7 +174,7 @@ func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Tim
 	return cpu, true
 }
 
-// TopPodCPU will return the top 5 CPU consumers for a specific node
+// TopPodCPU will return the top 10 CPU consumers for a specific node
 func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
 	var pods PodValues
 	query := fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
