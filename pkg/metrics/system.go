@@ -227,7 +227,7 @@ func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 	return true
 }
 
-// TopPodMem will return the top 5 Mem consumers for a specific node
+// TopPodMem will return the top 10 Mem consumers for a specific node
 func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
 	var pods PodValues
 	query := fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",node=~\"%s\"}) by (pod, namespace, node))", node.NodeName)
