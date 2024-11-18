@@ -24,14 +24,16 @@ type NodeInfo struct {
 
 // NodeCPU stores CPU information for a specific Node
 type NodeCPU struct {
-	Idle    float64 `json:"idleCPU"`
-	User    float64 `json:"userCPU"`
-	Steal   float64 `json:"stealCPU"`
-	System  float64 `json:"systemCPU"`
-	Nice    float64 `json:"niceCPU"`
-	Irq     float64 `json:"irqCPU"`
-	Softirq float64 `json:"softCPU"`
-	Iowait  float64 `json:"ioCPU"`
+	Idle       float64 `json:"idleCPU"`
+	User       float64 `json:"userCPU"`
+	Steal      float64 `json:"stealCPU"`
+	System     float64 `json:"systemCPU"`
+	Nice       float64 `json:"niceCPU"`
+	Irq        float64 `json:"irqCPU"`
+	Softirq    float64 `json:"softCPU"`
+	Iowait     float64 `json:"ioCPU"`
+	VSwitchCPU float64 `json:"vSwitchCPU"`
+	VSwitchMem float64 `json:"vSwitchMem"`
 }
 
 // PodCPU stores pod CPU
@@ -40,9 +42,15 @@ type PodCPU struct {
 	Value float64 `json:"cpuUsage"`
 }
 
+type PodMem struct {
+	Name  string  `json:"podName"`
+	Value float64 `json:"memUsage"`
+}
+
 // PodValues is a collection of PodCPU
 type PodValues struct {
-	Results []PodCPU
+	Results    []PodCPU
+	MemResults []PodMem
 }
 
 // PromConnect stores the prom information
@@ -166,10 +174,10 @@ func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Tim
 	return cpu, true
 }
 
-// TopPodCPU will return the top 5 CPU consumers for a specific node
+// TopPodCPU will return the top 10 CPU consumers for a specific node
 func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
 	var pods PodValues
-	query := fmt.Sprintf("topk(5,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
+	query := fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
@@ -183,6 +191,59 @@ func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 			Value: avg(s.Values),
 		}
 		pods.Results = append(pods.Results, p)
+	}
+	return pods, true
+}
+
+// VSwitchCPU will return the vswitchd cpu usage for specific node
+func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
+	query := fmt.Sprintf("irate(container_cpu_usage_seconds_total{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}[2m])*100", node.NodeName)
+	logging.Debugf("Prom Query : %s", query)
+	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
+	if err != nil {
+		logging.Error("Issue querying Prometheus")
+		return false
+	}
+	v := val.(model.Matrix)
+	for _, s := range v {
+		ndata.VSwitchCPU = avg(s.Values)
+	}
+	return true
+}
+
+// VSwitchMem will return the vswitchd cpu usage for specific node
+func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
+	query := fmt.Sprintf("container_memory_rss{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}", node.NodeName)
+	logging.Debugf("Prom Query : %s", query)
+	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
+	if err != nil {
+		logging.Error("Issue querying Prometheus")
+		return false
+	}
+	v := val.(model.Matrix)
+	for _, s := range v {
+		ndata.VSwitchMem = avg(s.Values)
+	}
+	return true
+}
+
+// TopPodMem will return the top 10 Mem consumers for a specific node
+func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
+	var pods PodValues
+	query := fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",node=~\"%s\"}) by (pod, namespace, node))", node.NodeName)
+	logging.Debugf("Prom Query : %s", query)
+	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
+	if err != nil {
+		logging.Error("Issue querying Prometheus")
+		return pods, false
+	}
+	v := val.(model.Matrix)
+	for _, s := range v {
+		p := PodMem{
+			Name:  string(s.Metric["pod"]),
+			Value: avg(s.Values),
+		}
+		pods.MemResults = append(pods.MemResults, p)
 	}
 	return pods, true
 }
