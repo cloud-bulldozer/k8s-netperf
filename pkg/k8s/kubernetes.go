@@ -2,10 +2,10 @@ package k8s
 
 import (
 	"context"
-	"fmt"
-	"strings"
-
 	"encoding/json"
+	"fmt"
+	"net"
+	"strings"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
@@ -47,6 +47,13 @@ type ServiceParams struct {
 	Labels    map[string]string
 	CtlPort   int32
 	DataPorts []int32
+}
+
+type PodNetworksData struct {
+	IPAddresses []string `json:"ip_addresses"`
+	MacAddress  string   `json:"mac_address"`
+	GatewayIPs  []string `json:"gateway_ips"`
+	Role        string   `json:"role"`
 }
 
 const sa string = "netperf"
@@ -132,6 +139,7 @@ func BuildInfra(client *kubernetes.Clientset) error {
 
 // Create a User Defined Network for the tests
 func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
+	log.Infof("Deploying L2 Primary UDN in the NS : %s", namespace)
 	udn := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "k8s.ovn.org/v1",
@@ -491,23 +499,30 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 // Extract the UDN Ip address of a pod from the annotations - Support only ipv4
 func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 	podNetworksJson := s.Server.Items[0].Annotations["k8s.ovn.org/pod-networks"]
-	var podNetworks map[string]interface{}
-	err := json.Unmarshal([]byte(podNetworksJson), &podNetworks)
+	//
+	var root map[string]json.RawMessage
+	err := json.Unmarshal([]byte(podNetworksJson), &root)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return "", err
+	}
+	//
+	var udnData PodNetworksData
+	err = json.Unmarshal(root["netperf/"+udnName], &udnData)
 	if err != nil {
 		return "", err
 	}
-	UdnJson := podNetworks[namespace+"/"+udnName].(map[string]interface{})
-	UdnIpAddreses := UdnJson["ip_addresses"].([]interface{})
 	// Extract the IPv4 address
-	var ipv4 string
-	for _, ip := range UdnIpAddreses {
-		ipStr := ip.(string)
-		if strings.Contains(ipStr, ".") { // Check if it's an IPv4 address
-			ipv4 = strings.Split(ipStr, "/")[0] // Extract the IP address part before the subnet
-			break
+	var ipv4 net.IP
+	for _, ip := range udnData.IPAddresses {
+		if strings.Contains(ip, ".") { // Check if it's an IPv4 address
+			ipv4, _, err = net.ParseCIDR(ip)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
-	return ipv4, nil
+	return ipv4.String(), nil
 }
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
