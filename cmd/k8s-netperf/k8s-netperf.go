@@ -39,6 +39,7 @@ var (
 	netperf     bool
 	iperf3      bool
 	uperf       bool
+	udn         bool
 	acrossAZ    bool
 	full        bool
 	vm          bool
@@ -151,19 +152,36 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if vm {
-			s.VM = true
+		if udn {
+			s.Udn = true
 			// Create a dynamic client
 			dynClient, err := dynamic.NewForConfig(rconfig)
 			if err != nil {
 				log.Error(err)
+			}
+			s.DClient = dynClient
+			err = k8s.DeployL2Udn(dynClient)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+		}
+
+		if vm {
+			s.VM = true
+			// Create a dynamic client
+			if s.DClient == nil {
+				dynClient, err := dynamic.NewForConfig(rconfig)
+				if err != nil {
+					log.Error(err)
+				}
+				s.DClient = dynClient
 			}
 			kclient, err := kubevirtv1.NewForConfig(rconfig)
 			if err != nil {
 				log.Error(err)
 			}
 			s.KClient = kclient
-			s.DClient = dynClient
 		}
 
 		// Build the SUT (Deployments)
@@ -381,6 +399,7 @@ func executeWorkload(nc config.Config,
 	hostNet bool,
 	driverName string, virt bool) result.Data {
 	serverIP := ""
+	var err error
 	Client := s.Client
 	var driver drivers.Driver
 	if nc.Service {
@@ -390,6 +409,11 @@ func executeWorkload(nc config.Config,
 			serverIP = s.UperfService.Spec.ClusterIP
 		} else {
 			serverIP = s.NetperfService.Spec.ClusterIP
+		}
+	} else if s.Udn {
+		serverIP, err = k8s.ExtractUdnIp(s)
+		if err != nil {
+			log.Fatal(err)
 		}
 	} else {
 		if hostNet {
@@ -488,6 +512,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
+	rootCmd.Flags().BoolVar(&udn, "udn", false, "Create and use a UDN called 'udn-l2-primary' as primary network.")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

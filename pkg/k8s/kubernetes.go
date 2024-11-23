@@ -2,7 +2,9 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
@@ -12,9 +14,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
 )
@@ -42,6 +47,13 @@ type ServiceParams struct {
 	Labels    map[string]string
 	CtlPort   int32
 	DataPorts []int32
+}
+
+type PodNetworksData struct {
+	IPAddresses []string `json:"ip_addresses"`
+	MacAddress  string   `json:"mac_address"`
+	GatewayIPs  []string `json:"gateway_ips"`
+	Role        string   `json:"role"`
 }
 
 const sa string = "netperf"
@@ -72,6 +84,7 @@ const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
+const udnName = "udn-l2-primary"
 
 // BuildInfra will create the infra for the SUT
 func BuildInfra(client *kubernetes.Clientset) error {
@@ -120,6 +133,40 @@ func BuildInfra(client *kubernetes.Clientset) error {
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
 		}
+	}
+	return nil
+}
+
+// Create a User Defined Network for the tests
+func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
+	log.Infof("Deploying L2 Primary UDN in the NS : %s", namespace)
+	udn := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.ovn.org/v1",
+			"kind":       "UserDefinedNetwork",
+			"metadata": map[string]interface{}{
+				"name":      udnName,
+				"namespace": "netperf",
+			},
+			"spec": map[string]interface{}{
+				"topology": "Layer2",
+				"layer2": map[string]interface{}{
+					"role":    "Primary",
+					"subnets": []string{"10.0.0.0/24", "2001:db8::/60"},
+				},
+			},
+		},
+	}
+
+	// Specify the GVR for UDN
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "userdefinednetworks",
+	}
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(context.TODO(), udn, metav1.CreateOptions{})
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -447,6 +494,35 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	return nil
+}
+
+// Extract the UDN Ip address of a pod from the annotations - Support only ipv4
+func ExtractUdnIp(s config.PerfScenarios) (string, error) {
+	podNetworksJson := s.Server.Items[0].Annotations["k8s.ovn.org/pod-networks"]
+	//
+	var root map[string]json.RawMessage
+	err := json.Unmarshal([]byte(podNetworksJson), &root)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return "", err
+	}
+	//
+	var udnData PodNetworksData
+	err = json.Unmarshal(root["netperf/"+udnName], &udnData)
+	if err != nil {
+		return "", err
+	}
+	// Extract the IPv4 address
+	var ipv4 net.IP
+	for _, ip := range udnData.IPAddresses {
+		if strings.Contains(ip, ".") { // Check if it's an IPv4 address
+			ipv4, _, err = net.ParseCIDR(ip)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	return ipv4.String(), nil
 }
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
