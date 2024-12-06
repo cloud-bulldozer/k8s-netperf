@@ -151,8 +151,9 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 			"spec": map[string]interface{}{
 				"topology": "Layer2",
 				"layer2": map[string]interface{}{
-					"role":    "Primary",
-					"subnets": []string{"10.0.0.0/24", "2001:db8::/60"},
+					"role":          "Primary",
+					"subnets":       []string{"10.0.0.0/24"},
+					"ipamLifecycle": "Persistent",
 				},
 			},
 		},
@@ -587,7 +588,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork)
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding)
 	if err != nil {
 		return err
 	}
@@ -595,6 +596,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	if err != nil {
 		return err
 	}
+
 	if strings.Contains(name, "host") {
 		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
@@ -612,7 +614,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork)
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding)
 	if err != nil {
 		return err
 	}
