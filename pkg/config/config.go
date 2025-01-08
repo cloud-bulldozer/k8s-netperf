@@ -37,6 +37,7 @@ type PerfScenarios struct {
 	HostNetwork    bool
 	Configs        []Config
 	VM             bool
+	VMImage        string
 	VMHost         string
 	Udn            bool
 	ServerNodeInfo metrics.NodeInfo

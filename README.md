@@ -71,6 +71,7 @@ Flags:
       --json                  Instead of human-readable output, return JSON to stdout
       --local                 Run network performance tests with Server-Pods/Client-Pods on the same Node
       --vm                    Launch Virtual Machines instead of pods for client/servers
+      --vm-image string       Use specified VM image (default "kubevirt/fedora-cloud-container-disk-demo:latest")
       --across                Place the client and server across availability zones
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
       --debug                 Enable debug log
