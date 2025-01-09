@@ -342,6 +342,21 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
 		}
+	} else {
+		affinity := corev1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+				{
+					Weight: 100,
+					Preference: corev1.NodeSelectorTerm{
+						MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{"true"}},
+						},
+					},
+				},
+			},
+		}
+		cdpAcross.NodeAffinity = affinity
+		cdpHostAcross.NodeAffinity = affinity
 	}
 
 	if ncount > 1 {
@@ -424,6 +439,21 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			affinity = corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 			}
+		}
+		sdp.NodeAffinity = affinity
+		sdpHost.NodeAffinity = affinity
+	} else {
+		affinity := corev1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+				{
+					Weight: 100,
+					Preference: corev1.NodeSelectorTerm{
+						MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{"true"}},
+						},
+					},
+				},
+			},
 		}
 		sdp.NodeAffinity = affinity
 		sdpHost.NodeAffinity = affinity
@@ -583,6 +613,7 @@ func zoneNodeSelectorExpression(zone string) []corev1.PreferredSchedulingTerm {
 			Preference: corev1.NodeSelectorTerm{
 				MatchExpressions: []corev1.NodeSelectorRequirement{
 					{Key: "topology.kubernetes.io/zone", Operator: corev1.NodeSelectorOpIn, Values: []string{zone}},
+					{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{"true"}},
 				},
 			},
 		},
