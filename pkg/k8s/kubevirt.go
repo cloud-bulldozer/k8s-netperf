@@ -158,7 +158,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -196,7 +196,7 @@ runcmd:
   - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
   - chmod 0777 /usr/bin/super-netperf
 `, ssh)
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff)
+	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage)
 	if err != nil {
 		return "", err
 	}
@@ -213,7 +213,7 @@ runcmd:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -252,12 +252,12 @@ runcmd:
   - iperf3 -s -p %d &
   - netserver &
 `, string(ssh), UperfServerCtlPort, IperfServerCtlPort)
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff)
+	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage)
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
 	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
@@ -307,7 +307,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 					Name: "disk0",
 					VolumeSource: v1.VolumeSource{
 						ContainerDisk: &v1.ContainerDiskSource{
-							Image: "kubevirt/fedora-cloud-container-disk-demo:latest",
+							Image: vmimage,
 						},
 					},
 				},

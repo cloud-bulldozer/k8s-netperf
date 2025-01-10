@@ -43,6 +43,7 @@ var (
 	acrossAZ    bool
 	full        bool
 	vm          bool
+	vmimage     string
 	debug       bool
 	promURL     string
 	id          string
@@ -169,6 +170,7 @@ var rootCmd = &cobra.Command{
 
 		if vm {
 			s.VM = true
+			s.VMImage = vmimage
 			// Create a dynamic client
 			if s.DClient == nil {
 				dynClient, err := dynamic.NewForConfig(rconfig)
@@ -509,6 +511,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Launch Virtual Machines instead of pods for client/servers")
+	rootCmd.Flags().StringVar(&vmimage, "vm-image", "kubevirt/fedora-cloud-container-disk-demo:latest", "Use specified VM image")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
