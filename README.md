@@ -37,12 +37,13 @@ $ make container-build
 
 ## Label nodes
 k8s-netperf will make the best decision it can to schedule the client and server in your cluster. However,
-you can provide hints to ensure the client and server will always land on specific nodes.
+you can provide hints to ensure the client and server lands on specific nodes.
 
 To do this, apply a label to the nodes you want the client and server running
 
 ```shell
-$ oc label nodes node-name netperf=true
+$ oc label nodes node-name netperf=client
+$ oc label nodes node-name netperf=server
 ```
 
 ## Running with Pods
