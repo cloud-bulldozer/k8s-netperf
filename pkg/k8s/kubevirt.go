@@ -158,7 +158,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridge bool) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -213,7 +213,7 @@ runcmd:
 			},
 		},
 	}
-	if bridge {
+	if bridgeNetwork != "" {
 		interfaces = append(interfaces, v1.Interface{
 			Name: "br-netperf",
 			InterfaceBindingMethod: v1.InterfaceBindingMethod{
@@ -228,10 +228,10 @@ runcmd:
 				},
 			},
 		})
-		netData = `version: 2
+		netData = fmt.Sprintf(`version: 2
 ethernets:
   eth1:
-    addresses: [ 10.10.10.12/24 ]`
+    addresses: [ %s ]`, bridgeNetwork)
 	}
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 	if err != nil {
@@ -250,7 +250,7 @@ ethernets:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, bridge bool) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -306,7 +306,7 @@ runcmd:
 			},
 		},
 	}
-	if bridge {
+	if bridgeNetwork != "" {
 		interfaces = append(interfaces, v1.Interface{
 			Name: "br-netperf",
 			InterfaceBindingMethod: v1.InterfaceBindingMethod{
@@ -321,10 +321,10 @@ runcmd:
 				},
 			},
 		})
-		netData = `version: 2
+		netData = fmt.Sprintf(`version: 2
 ethernets:
   eth1:
-    addresses: [ 10.10.10.14/24 ]`
+    addresses: [ %s ]`, bridgeNetwork)
 	}
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 }

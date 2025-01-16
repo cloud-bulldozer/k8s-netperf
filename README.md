@@ -150,6 +150,11 @@ Then you can launch a test using the bridge interface:
 ```
 ./bin/amd64/k8s-netperf --vm --bridge br0
 ```
+By default, it will read the `bridgeNetwork.json` file from the git repository. If the default IP addresses (10.10.10.12/24 and 10.10.10.14/24) are not available for your setup, it is possible to change it by passing a JSON file as a parameter with `--bridgeNetwork`, like follow:
+```
+k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
+
+```
 
 ### Config file
 #### Config File v2

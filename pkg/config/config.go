@@ -32,30 +32,37 @@ type Config struct {
 
 // PerfScenarios describes the different scenarios
 type PerfScenarios struct {
-	NodeLocal      bool
-	AcrossAZ       bool
-	HostNetwork    bool
-	Configs        []Config
-	VM             bool
-	VMImage        string
-	VMHost         string
-	Udn            bool
-	Bridge         bool
-	ServerNodeInfo metrics.NodeInfo
-	ClientNodeInfo metrics.NodeInfo
-	Client         apiv1.PodList
-	Server         apiv1.PodList
-	ClientAcross   apiv1.PodList
-	ClientHost     apiv1.PodList
-	ServerHost     apiv1.PodList
-	NetperfService *apiv1.Service
-	IperfService   *apiv1.Service
-	UperfService   *apiv1.Service
-	RestConfig     rest.Config
-	ClientSet      *kubernetes.Clientset
-	KClient        *kubevirtv1.KubevirtV1Client
-	DClient        *dynamic.DynamicClient
-	SSHClient      *goph.Client
+	NodeLocal           bool
+	AcrossAZ            bool
+	HostNetwork         bool
+	Configs             []Config
+	VM                  bool
+	VMImage             string
+	VMHost              string
+	Udn                 bool
+	BridgeServerNetwork string
+	BridgeClientNetwork string
+	ServerNodeInfo      metrics.NodeInfo
+	ClientNodeInfo      metrics.NodeInfo
+	Client              apiv1.PodList
+	Server              apiv1.PodList
+	ClientAcross        apiv1.PodList
+	ClientHost          apiv1.PodList
+	ServerHost          apiv1.PodList
+	NetperfService      *apiv1.Service
+	IperfService        *apiv1.Service
+	UperfService        *apiv1.Service
+	RestConfig          rest.Config
+	ClientSet           *kubernetes.Clientset
+	KClient             *kubevirtv1.KubevirtV1Client
+	DClient             *dynamic.DynamicClient
+	SSHClient           *goph.Client
+}
+
+// struct for bridge options
+type BridgeNetworkConfig struct {
+	BridgeServerNetwork string `json:"bridgeServerNetwork"`
+	BridgeClientNetwork string `json:"bridgeClientNetwork"`
 }
 
 // Tests we will support in k8s-netperf
