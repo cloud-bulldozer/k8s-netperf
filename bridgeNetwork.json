@@ -1,0 +1,4 @@
+{
+ "bridgeServerNetwork": "10.10.10.12/24",
+ "bridgeClientNetwork": "10.10.10.14/24"
+}

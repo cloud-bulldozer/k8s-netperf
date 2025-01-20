@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	encodeJson "encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -33,27 +35,29 @@ const index = "k8s-netperf"
 const retry = 3
 
 var (
-	cfgfile     string
-	nl          bool
-	clean       bool
-	netperf     bool
-	iperf3      bool
-	uperf       bool
-	udn         bool
-	acrossAZ    bool
-	full        bool
-	vm          bool
-	vmimage     string
-	debug       bool
-	promURL     string
-	id          string
-	searchURL   string
-	showMetrics bool
-	tcpt        float64
-	json        bool
-	version     bool
-	csvArchive  bool
-	searchIndex string
+	cfgfile       string
+	nl            bool
+	clean         bool
+	netperf       bool
+	iperf3        bool
+	uperf         bool
+	udn           bool
+	acrossAZ      bool
+	full          bool
+	vm            bool
+	vmimage       string
+	debug         bool
+	bridge        string
+	bridgeNetwork string
+	promURL       string
+	id            string
+	searchURL     string
+	showMetrics   bool
+	tcpt          float64
+	json          bool
+	version       bool
+	csvArchive    bool
+	searchIndex   string
 )
 
 var rootCmd = &cobra.Command{
@@ -184,6 +188,16 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 			s.KClient = kclient
+			if len(bridge) > 0 {
+				err := k8s.DeployNADBridge(s.DClient, bridge)
+				if err != nil {
+					log.Error(err)
+				}
+				s.BridgeServerNetwork, s.BridgeClientNetwork, err = parseNetworkConfig(bridgeNetwork)
+				if err != nil {
+					log.Error(err)
+				}
+			}
 		}
 
 		// Build the SUT (Deployments)
@@ -395,6 +409,40 @@ func cleanup(client *kubernetes.Clientset) {
 	}
 }
 
+// Function to parse the JSON from a file and return the IP parts (before '/')
+func parseNetworkConfig(jsonFile string) (string, string, error) {
+
+	// Open the JSON file
+	file, err := os.Open(jsonFile)
+	if err != nil {
+		return "", "", fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
+
+	// Read the file contents
+	log.Debugf("Reading BridgeNetwork configuration from JSON file: %s ", jsonFile)
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	// Create an instance of the struct
+	var netConfig config.BridgeNetworkConfig
+
+	// Unmarshal the JSON string into the struct
+	err = encodeJson.Unmarshal(content, &netConfig)
+	if err != nil {
+		return "", "", fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	// Extract the IP parts (before '/')
+	serverIP := netConfig.BridgeServerNetwork
+	clientIP := netConfig.BridgeClientNetwork
+
+	// Return the extracted IPs
+	return serverIP, clientIP, nil
+}
+
 // executeWorkload executes the workload and returns the result data.
 func executeWorkload(nc config.Config,
 	s config.PerfScenarios,
@@ -417,6 +465,9 @@ func executeWorkload(nc config.Config,
 		if err != nil {
 			log.Fatal(err)
 		}
+		//when using a bridge
+	} else if s.BridgeServerNetwork != "" {
+		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 	} else {
 		if hostNet {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
@@ -516,6 +567,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().BoolVar(&udn, "udn", false, "Create and use a UDN called 'udn-l2-primary' as primary network.")
+	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NNCP to be used for creating bridge interface - VM only.")
+	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the network defined by the bridge interface - bridge should be enabled")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
