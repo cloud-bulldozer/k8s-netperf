@@ -158,7 +158,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -232,6 +232,27 @@ runcmd:
 ethernets:
   eth1:
     addresses: [ %s ]`, bridgeNetwork)
+	} else if udn {
+		interfaces = []v1.Interface{
+			{
+				Name: "primary-l2-net",
+				Binding: &v1.PluginBinding{
+					Name: udnPluginBinding,
+				},
+			},
+		}
+		networks = []v1.Network{
+			{
+				Name: "primary-l2-net",
+				NetworkSource: v1.NetworkSource{
+					Pod: &v1.PodNetwork{},
+				},
+			},
+		}
+		netData = `version: 2
+ethernets:
+  eth0:
+    dhcp4: true`
 	}
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 	if err != nil {
@@ -250,7 +271,7 @@ ethernets:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -275,6 +296,7 @@ ssh_deletekeys: false
 password: fedora
 chpasswd: { expire: False }
 runcmd:
+  - export HOME=/home/fedora
   - dnf install -y --nodocs uperf iperf3 git ethtool
   - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
   - git clone https://github.com/HewlettPackard/netperf.git
@@ -325,6 +347,27 @@ runcmd:
 ethernets:
   eth1:
     addresses: [ %s ]`, bridgeNetwork)
+	} else if udn {
+		interfaces = []v1.Interface{
+			{
+				Name: "primary-l2-net",
+				Binding: &v1.PluginBinding{
+					Name: udnPluginBinding,
+				},
+			},
+		}
+		networks = []v1.Network{
+			{
+				Name: "primary-l2-net",
+				NetworkSource: v1.NetworkSource{
+					Pod: &v1.PodNetwork{},
+				},
+			},
+		}
+		netData = `version: 2
+ethernets:
+  eth0:
+    dhcp4: true`
 	}
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 }

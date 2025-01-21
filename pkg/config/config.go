@@ -40,6 +40,7 @@ type PerfScenarios struct {
 	VMImage             string
 	VMHost              string
 	Udn                 bool
+	UdnPluginBinding    string
 	BridgeServerNetwork string
 	BridgeClientNetwork string
 	ServerNodeInfo      metrics.NodeInfo
