@@ -128,6 +128,9 @@ var rootCmd = &cobra.Command{
 			Configs:     cfg,
 			ClientSet:   client,
 		}
+		if serverIPAddr != "" {
+			s.ExternalServer = true
+		}
 		// Get node count
 		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 		if err != nil {
@@ -480,7 +483,7 @@ func executeWorkload(nc config.Config,
 			serverIP = s.Server.Items[0].Status.PodIP
 		}
 	}
-	if !s.NodeLocal {
+	if !s.NodeLocal && !s.ExternalServer {
 		Client = s.ClientAcross
 	}
 	if hostNet {
