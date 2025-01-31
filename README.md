@@ -87,6 +87,7 @@ Flags:
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
       --debug                 Enable debug log
       --udn                   Create and use a UDN called 'udn-l2-primary' as a primary network.
+      --serverIP string       External Server IP Address for the OCP client pod to communicate with.
       --prom string           Prometheus URL
       --uuid string           User provided UUID
       --search string         OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
@@ -103,6 +104,7 @@ Flags:
 - `--across` will force the client to be across availability zones from the server
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
+- `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
 - `--prom` accepts a string (URL). Example  http://localhost:9090
   - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
@@ -110,6 +112,15 @@ Flags:
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
+
+## Using External Server
+This enables k8s-netperf to use the IP address provided via the `--serverIP` option as server address and the client sends requests to this IP address. This allows dataplane testing between ocp internal client pod and external server.
+
+> *Note: User has to create a server with the provided IP address and run the intented k8s-netperf driver (i.e uperf, iperf or netperf). User has to enable respective ports on this server to allow the traffic from the client*
+
+Once the external server is ready to accept the traffic, users can orhestrate k8s-netperf by running
+
+`k8s-netperf --serverIP=44.243.95.221`
 
 ## Running with VMs
 Running k8s-netperf against Virtual Machines (OpenShift CNV) requires
@@ -197,57 +208,57 @@ In order to have `k8s-netperf` determine pass/fail the user must pass the `--all
 
 ```shell
 $ ./k8s-netperf --tcp-tolerance 1
-+-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
-|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
-+-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 2661.006667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 2483.078229 (Mb/s) |
-| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 2581.705097 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2702.230000 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2523.434069 (Mb/s) |
-| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2567.665412 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 2697.276667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 2542.793728 (Mb/s) |
-| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 2571.881579 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 2707.076667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 2604.067072 (Mb/s) |
-| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 2687.276667 (Mb/s) |
-| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 1143.926667 (Mb/s) |
-| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 1202.428288 (Mb/s) |
-| 📊 Stream Results | uperf   | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 1242.059988 (Mb/s) |
-| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1145.066667 (Mb/s) |
-| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1239.580672 (Mb/s) |
-| 📊 Stream Results | uperf   | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1261.840000 (Mb/s) |
++-------------------+---------+------------+-------------+--------------+---------+-----------------+-------+-----------+----------+---------+--------------------+
+|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
++-------------------+---------+------------+-------------+--------------+---------+-----------------+-------+-----------+----------+---------+--------------------+
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 2661.006667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 2483.078229 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 2581.705097 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2702.230000 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2523.434069 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2567.665412 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 2697.276667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 2542.793728 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 2571.881579 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 2707.076667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 2604.067072 (Mb/s) |
+| 📊 Stream Results | uperf   | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 2687.276667 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 1143.926667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 1202.428288 (Mb/s) |
+| 📊 Stream Results | uperf   | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 1242.059988 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1145.066667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1239.580672 (Mb/s) |
+| 📊 Stream Results | uperf   | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1261.840000 (Mb/s) |
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
 +---------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+---------------------+
-|  RESULT TYPE  | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |      AVG VALUE      |
+|  RESULT TYPE  | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |      AVG VALUE      |
 +---------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+---------------------+
-| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | true    | 1024         | 0     | false     | 10       | 3       | 2370.196667 (OP/s)  |
-| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | true    | 1024         | 0     | false     | 10       | 3       | 3046.126667 (OP/s)  |
-| 📊 Rr Results | netperf | TCP_RR   | 1           | true         | false   | 1024         | 2     | false     | 10       | 3       | 16849.056667 (OP/s) |
-| 📊 Rr Results | netperf | TCP_RR   | 1           | false        | false   | 1024         | 2     | false     | 10       | 3       | 17101.856667 (OP/s) |
-| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 3166.136667 (OP/s)  |
-| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1787.530000 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | true    | false           | 1024         | 0     | false     | 10       | 3       | 2370.196667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | true    | false           | 1024         | 0     | false     | 10       | 3       | 3046.126667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_RR   | 1           | true         | false   | false           | 1024         | 2     | false     | 10       | 3       | 16849.056667 (OP/s) |
+| 📊 Rr Results | netperf | TCP_RR   | 1           | false        | false   | false           | 1024         | 2     | false     | 10       | 3       | 17101.856667 (OP/s) |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 3166.136667 (OP/s)  |
+| 📊 Rr Results | netperf | TCP_CRR  | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1787.530000 (OP/s)  |
 +---------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+---------------------+
 +---------------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+-----------------------------+
-|        RESULT TYPE        | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
+|        RESULT TYPE        | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
 +---------------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-------------------+
-| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 71.333333 (usec)  |
-| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2.333333 (usec)   |
-| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 276.000000 (usec) |
-| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 124.333333 (usec) |
-| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 14.666667 (usec)  |
-| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 14.666667 (usec)  |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 71.333333 (usec)  |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2.333333 (usec)   |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 276.000000 (usec) |
+| 📊 Stream Latency Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 124.333333 (usec) |
+| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 14.666667 (usec)  |
+| 📊 Stream Latency Results | netperf | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 14.666667 (usec)  |
 +---------------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-------------------+
 +-----------------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-------------------+
-|      RESULT TYPE      | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
+|      RESULT TYPE      | DRIVER  | SCENARIO | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |   99%TILE VALUE   |
 +-----------------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-------------------+
-| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | true    | 1024         | 0     | false     | 10       | 3       | 817.333333 (usec) |
-| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | true    | 1024         | 0     | false     | 10       | 3       | 647.666667 (usec) |
-| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | true         | false   | 1024         | 2     | false     | 10       | 3       | 125.333333 (usec) |
-| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | false        | false   | 1024         | 2     | false     | 10       | 3       | 119.666667 (usec) |
-| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 621.000000 (usec) |
-| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 539.666667 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | true    | false           | 1024         | 0     | false     | 10       | 3       | 817.333333 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | true    | false           | 1024         | 0     | false     | 10       | 3       | 647.666667 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | true         | false   | false           | 1024         | 2     | false     | 10       | 3       | 125.333333 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_RR   | 1           | false        | false   | false           | 1024         | 2     | false     | 10       | 3       | 119.666667 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 621.000000 (usec) |
+| 📊 Rr Latency Results | netperf | TCP_CRR  | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 539.666667 (usec) |
 +-----------------------+---------+----------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-------------------+
 😥 TCP Stream percent difference when comparing hostNetwork to podNetwork is greater than 1.0 percent (2.7 percent)
 $ echo $?
@@ -275,20 +286,20 @@ Document format can be seen in `pkg/archive/archive.go`
 Same node refers to how the pods were deployed. If the cluster has > 2 nodes with nodes which have `worker=` there will be a cross-node throughput test.
 ```shell
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
-|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
+|    RESULT TYPE    | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES |     AVG VALUE      |
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 2661.006667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 2483.078229 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2702.230000 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 2523.434069 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 2697.276667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | 8192         | 0     | false     | 10       | 3       | 2542.793728 (Mb/s) |
-| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 2707.076667 (Mb/s) |
-| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 2604.067072 (Mb/s) |
-| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 1143.926667 (Mb/s) |
-| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | 1024         | 0     | false     | 10       | 3       | 1202.428288 (Mb/s) |
-| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1145.066667 (Mb/s) |
-| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 1239.580672 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 2661.006667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 2483.078229 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2702.230000 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 2523.434069 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 2697.276667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | true         | false   | false           | 8192         | 0     | false     | 10       | 3       | 2542.793728 (Mb/s) |
+| 📊 Stream Results | netperf | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 2707.076667 (Mb/s) |
+| 📊 Stream Results | iperf3  | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 2604.067072 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 1143.926667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | true         | false   | false           | 1024         | 0     | false     | 10       | 3       | 1202.428288 (Mb/s) |
+| 📊 Stream Results | netperf | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1145.066667 (Mb/s) |
+| 📊 Stream Results | iperf3  | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 1239.580672 (Mb/s) |
 +-------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+--------------------+
 ```
 
@@ -296,11 +307,11 @@ Same node refers to how the pods were deployed. If the cluster has > 2 nodes wit
 k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drivers (netperf and iperf).
 ```shell
 +---------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-----------+
-|        TYPE         | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES | AVG VALUE |
+|        TYPE         | DRIVER  |  SCENARIO  | PARALLELISM | HOST NETWORK | SERVICE | EXTERNAL SERVER | MESSAGE SIZE | BURST | SAME NODE | DURATION | SAMPLES | AVG VALUE |
 +---------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-----------+
-| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 54.666667 |
-| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | 8192         | 0     | false     | 10       | 3       | 15.000000 |
-| UDP Loss Percent    | netperf | UDP_STREAM | 1           | false        | false   | 1024         | 0     | false     | 10       | 3       | 0.067031  |
+| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 54.666667 |
+| TCP Retransmissions | netperf | TCP_STREAM | 1           | false        | false   | false           | 8192         | 0     | false     | 10       | 3       | 15.000000 |
+| UDP Loss Percent    | netperf | UDP_STREAM | 1           | false        | false   | false           | 1024         | 0     | false     | 10       | 3       | 0.067031  |
 +---------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-----------+
 ```
 
@@ -309,11 +320,11 @@ k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drive
 
 Example output
 ```csv
-Driver,Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
-netperf,TCP_STREAM,false,false,false,10,1,3,1024,861.9391413991156,885.2741919342178,873.606667,Mb/s,3.3333333333333335,usec
-netperf,TCP_STREAM,false,false,false,10,1,3,8192,178.12442996547009,1310.3422367011967,744.233333,Mb/s,2394.6666666666665,usec
-netperf,UDP_STREAM,false,false,false,10,1,3,1024,584.3478157889886,993.4588508776783,788.903333,Mb/s,23,usec
-netperf,TCP_CRR,false,false,false,10,1,3,1024,1889.3183973002176,2558.074936033115,2223.696667,OP/s,4682.666666666667,usec
-netperf,TCP_CRR,false,false,true,10,1,3,1024,1169.206855676418,2954.3464776569153,2061.776667,OP/s,4679.333333333333,usec
-netperf,TCP_RR,false,false,false,10,1,3,1024,6582.5359452538705,12085.437388079461,9333.986667,OP/s,451.3333333333333,usec
+Driver,Profile,Same node,Host Network,Service,External Server,Duration,Parallelism,# of Samples,Message Size,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
+netperf,TCP_STREAM,false,false,false,false,10,1,3,1024,861.9391413991156,885.2741919342178,873.606667,Mb/s,3.3333333333333335,usec
+netperf,TCP_STREAM,false,false,false,false,10,1,3,8192,178.12442996547009,1310.3422367011967,744.233333,Mb/s,2394.6666666666665,usec
+netperf,UDP_STREAM,false,false,false,false,10,1,3,1024,584.3478157889886,993.4588508776783,788.903333,Mb/s,23,usec
+netperf,TCP_CRR,false,false,false,false,10,1,3,1024,1889.3183973002176,2558.074936033115,2223.696667,OP/s,4682.666666666667,usec
+netperf,TCP_CRR,false,false,true,false,10,1,3,1024,1169.206855676418,2954.3464776569153,2061.776667,OP/s,4679.333333333333,usec
+netperf,TCP_RR,false,false,false,false,10,1,3,1024,6582.5359452538705,12085.437388079461,9333.986667,OP/s,451.3333333333333,usec
 ```

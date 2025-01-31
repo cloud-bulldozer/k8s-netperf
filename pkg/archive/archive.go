@@ -55,6 +55,7 @@ type Doc struct {
 	ServerVSwitchMem  float64          `json:"serverVswitchMem"`
 	ClientVSwitchCpu  float64          `json:"clientVswtichCpu"`
 	ClientVSwiitchMem float64          `json:"clientVswitchMem"`
+	ExternalServer    bool             `json:"externalServer"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -107,6 +108,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			Virt:              sr.Virt,
 			Samples:           r.Samples,
 			Service:           r.Service,
+			ExternalServer:    r.ExternalServer,
 			Messagesize:       r.MessageSize,
 			Burst:             r.Burst,
 			TputMetric:        r.Metric,
@@ -168,6 +170,7 @@ func commonCsvHeaderFields() []string {
 		"Same node",
 		"Host Network",
 		"Service",
+		"External Server",
 		"Duration",
 		"Parallelism",
 		"# of Samples",
@@ -190,6 +193,7 @@ func commonCsvDataFields(row result.Data) []string {
 		fmt.Sprint(row.SameNode),
 		fmt.Sprint(row.HostNetwork),
 		fmt.Sprint(row.Service),
+		fmt.Sprint(row.ExternalServer),
 		strconv.Itoa(row.Duration),
 		strconv.Itoa(row.Parallelism),
 		strconv.Itoa(row.Samples),

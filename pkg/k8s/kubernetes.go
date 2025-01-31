@@ -209,6 +209,48 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
+	var err error
+
+	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
+	workerNodeSelectorExpression := &corev1.NodeSelector{
+		NodeSelectorTerms: []corev1.NodeSelectorTerm{
+			{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
+					{Key: "node-role.kubernetes.io/worker", Operator: corev1.NodeSelectorOpIn, Values: []string{""}},
+					{Key: "node-role.kubernetes.io/infra", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
+					{Key: "node-role.kubernetes.io/workload", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
+				},
+			},
+		},
+	}
+
+	if s.ExternalServer {
+		//  Create Netperf client on any worker node. No service or server pod required in this scenario.
+		cdp := DeploymentParams{
+			Name:      "client",
+			Namespace: "netperf",
+			Replicas:  1,
+			Image:     k8sNetperfImage,
+			Labels:    map[string]string{"role": clientRole},
+			Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+			Port:      NetperfServerCtlPort,
+		}
+
+		cdp.NodeAffinity = corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+		}
+
+		s.Client, err = deployDeployment(client, cdp)
+		if err != nil {
+			return err
+		}
+
+		s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdp.Labels).String())
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
 	z, zones, err := GetZone(client)
@@ -244,19 +286,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 	if (s.HostNetwork || !s.NodeLocal) && ncount < 2 {
 		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
-	}
-
-	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
-	workerNodeSelectorExpression := &corev1.NodeSelector{
-		NodeSelectorTerms: []corev1.NodeSelectorTerm{
-			{
-				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{Key: "node-role.kubernetes.io/worker", Operator: corev1.NodeSelectorOpIn, Values: []string{""}},
-					{Key: "node-role.kubernetes.io/infra", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
-					{Key: "node-role.kubernetes.io/workload", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
-				},
-			},
-		},
 	}
 
 	clientRoleAffinity := []corev1.PodAffinityTerm{
