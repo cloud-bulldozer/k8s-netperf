@@ -87,13 +87,18 @@ const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const udnName = "udn-l2-primary"
 
 // BuildInfra will create the infra for the SUT
-func BuildInfra(client *kubernetes.Clientset) error {
+func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err == nil {
 		log.Infof("♻️ Namespace already exists, reusing it")
 	} else {
 		log.Infof("🔨 Creating namespace: %s", namespace)
-		_, err := client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
+		if udn {
+			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
+				Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
+		} else {
+			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
+		}
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create namespace: %v", err)
 		}
