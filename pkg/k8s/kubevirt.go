@@ -235,7 +235,7 @@ ethernets:
 	} else if udn {
 		interfaces = []v1.Interface{
 			{
-				Name: "primary-l2-net",
+				Name: "udn-primary-netperf",
 				Binding: &v1.PluginBinding{
 					Name: udnPluginBinding,
 				},
@@ -243,7 +243,7 @@ ethernets:
 		}
 		networks = []v1.Network{
 			{
-				Name: "primary-l2-net",
+				Name: "udn-primary-netperf",
 				NetworkSource: v1.NetworkSource{
 					Pod: &v1.PodNetwork{},
 				},
