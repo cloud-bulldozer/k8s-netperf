@@ -41,7 +41,8 @@ var (
 	netperf          bool
 	iperf3           bool
 	uperf            bool
-	udn              bool
+	udnl2            bool
+	udnl3            bool
 	udnPluginBinding string
 	acrossAZ         bool
 	full             bool
@@ -156,13 +157,13 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Build the namespace and create the sa account
-		err = k8s.BuildInfra(client, udn)
+		err = k8s.BuildInfra(client, udnl2 || udnl3)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
 		}
 
-		if udn {
+		if udnl2 || udnl3 {
 			s.Udn = true
 			// Create a dynamic client
 			dynClient, err := dynamic.NewForConfig(rconfig)
@@ -170,7 +171,11 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 			s.DClient = dynClient
-			err = k8s.DeployL2Udn(dynClient)
+			if udnl2 {
+				err = k8s.DeployL2Udn(dynClient)
+			} else if udnl3 {
+				err = k8s.DeployL3Udn(dynClient)
+			}
 			if err != nil {
 				log.Error(err)
 				os.Exit(1)
@@ -203,7 +208,7 @@ var rootCmd = &cobra.Command{
 					log.Error(err)
 				}
 			}
-			if udn {
+			if s.Udn {
 				s.UdnPluginBinding = udnPluginBinding
 			}
 		}
@@ -577,7 +582,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
-	rootCmd.Flags().BoolVar(&udn, "udn", false, "Create and use a UDN called 'udn-l2-primary' as primary network.")
+	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
+	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NNCP to be used for creating bridge interface - VM only.")
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the network defined by the bridge interface - bridge should be enabled")

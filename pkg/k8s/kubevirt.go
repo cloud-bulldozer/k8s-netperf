@@ -235,7 +235,7 @@ ethernets:
 	} else if udn {
 		interfaces = []v1.Interface{
 			{
-				Name: "primary-l2-net",
+				Name: "udn-primary-netperf",
 				Binding: &v1.PluginBinding{
 					Name: udnPluginBinding,
 				},
@@ -243,7 +243,7 @@ ethernets:
 		}
 		networks = []v1.Network{
 			{
-				Name: "primary-l2-net",
+				Name: "udn-primary-netperf",
 				NetworkSource: v1.NetworkSource{
 					Pod: &v1.PodNetwork{},
 				},
@@ -253,6 +253,7 @@ ethernets:
 ethernets:
   eth0:
     dhcp4: true`
+		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
 	}
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 	if err != nil {
@@ -296,7 +297,6 @@ ssh_deletekeys: false
 password: fedora
 chpasswd: { expire: False }
 runcmd:
-  - export HOME=/home/fedora
   - dnf install -y --nodocs uperf iperf3 git ethtool
   - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
   - git clone https://github.com/HewlettPackard/netperf.git
@@ -368,6 +368,7 @@ ethernets:
 ethernets:
   eth0:
     dhcp4: true`
+		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
 	}
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
 }
