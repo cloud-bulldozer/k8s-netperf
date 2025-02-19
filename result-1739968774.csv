@@ -1,0 +1,3 @@
+Driver,Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Burst,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
+netperf,TCP_CRR,false,false,false,10,1,3,1024,0,693.2548608367787,704.4784724965547,698.866667,OP/s,1598.6666666666667,usec
+netperf,TCP_CRR,false,false,true,10,1,3,1024,0,70.88274091823118,422.25059241510223,246.566667,OP/s,1709,usec

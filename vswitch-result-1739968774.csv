@@ -1,0 +1,5 @@
+Role,Driver,Profile,Same node,Host Network,Service,Duration,Parallelism,# of Samples,Message Size,Burst,Confidence metric - low,Confidence metric - high,CPU Utilization,Memory Utilization
+Client,netperf,TCP_CRR,false,false,false,10,1,3,1024,0,693.2548608367787,704.4784724965547,0.683210,244191232.000000
+Server,netperf,TCP_CRR,false,false,false,10,1,3,1024,0,693.2548608367787,704.4784724965547,0.978334,243425280.000000
+Client,netperf,TCP_CRR,false,false,true,10,1,3,1024,0,70.88274091823118,422.25059241510223,0.649201,244191232.000000
+Server,netperf,TCP_CRR,false,false,true,10,1,3,1024,0,70.88274091823118,422.25059241510223,0.572224,243429376.000000
