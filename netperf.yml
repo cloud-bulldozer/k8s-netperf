@@ -1,5 +1,26 @@
 ---
 tests:
+  - TCPStream:
+    parallelism: 1
+    profile: "TCP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 1024
+
+  - TCPStream2:
+    parallelism: 1
+    profile: "TCP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 8192
+
+  - UDPStream:
+    parallelism: 1
+    profile: "UDP_STREAM"
+    duration: 10
+    samples: 3
+    messagesize: 1024
+
   - CRR:
     parallelism: 1
     profile: "TCP_CRR"
@@ -14,3 +35,10 @@ tests:
     samples: 3
     messagesize: 1024
     service: True
+
+  - RR:
+    parallelism: 1
+    profile: "TCP_RR"
+    duration: 10
+    samples: 3
+    messagesize: 1024
