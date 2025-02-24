@@ -58,6 +58,7 @@ var (
 	version       bool
 	csvArchive    bool
 	searchIndex   string
+	serverIPAddr  string
 )
 
 var rootCmd = &cobra.Command{
@@ -126,6 +127,9 @@ var rootCmd = &cobra.Command{
 			RestConfig:  *rconfig,
 			Configs:     cfg,
 			ClientSet:   client,
+		}
+		if serverIPAddr != "" {
+			s.ExternalServer = true
 		}
 		// Get node count
 		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
@@ -452,7 +456,11 @@ func executeWorkload(nc config.Config,
 	var err error
 	Client := s.Client
 	var driver drivers.Driver
-	if nc.Service {
+	npr := result.Data{}
+	if serverIPAddr != "" {
+		serverIP = serverIPAddr
+		npr.ExternalServer = true
+	} else if nc.Service {
 		if driverName == "iperf3" {
 			serverIP = s.IperfService.Spec.ClusterIP
 		} else if driverName == "uperf" {
@@ -475,13 +483,12 @@ func executeWorkload(nc config.Config,
 			serverIP = s.Server.Items[0].Status.PodIP
 		}
 	}
-	if !s.NodeLocal {
+	if !s.NodeLocal && !s.ExternalServer {
 		Client = s.ClientAcross
 	}
 	if hostNet {
 		Client = s.ClientHost
 	}
-	npr := result.Data{}
 	npr.Config = nc
 	npr.Metric = nc.Metric
 	npr.Service = nc.Service
@@ -493,7 +500,7 @@ func executeWorkload(nc config.Config,
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. hostNetwork is %t, service is %t", hostNet, nc.Service)
+	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t", hostNet, nc.Service, npr.ExternalServer)
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
 		if driverName == "iperf3" {
@@ -577,6 +584,7 @@ func main() {
 	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
+	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
