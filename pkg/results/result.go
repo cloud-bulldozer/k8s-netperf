@@ -207,7 +207,7 @@ func ShowPodCPU(s ScenarioResults) {
 
 // ShowPodMem accepts ScenarioResults and presents to the user via stdout the Podmem info
 func ShowPodMem(s ScenarioResults) {
-	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "External Server", "Message Size", "Burst", "Same node", "Pod", "Utilization"})
+	table := initTable([]string{"Result Type", "Driver", "Role", "Scenario", "Parallelism", "Host Network", "Service", "External Server", "UDN Info", "Message Size", "Burst", "Same node", "Pod", "Utilization"})
 	for _, r := range s.Results {
 		for _, pod := range r.ClientPodMem.MemResults {
 			table.Append([]string{"Pod Mem RSS Utilization", r.Driver, "Client", r.Profile, fmt.Sprintf("%d", r.Parallelism), fmt.Sprintf("%t", r.HostNetwork), fmt.Sprintf("%t", r.Service), fmt.Sprintf("%t", r.ExternalServer), r.UdnInfo, fmt.Sprintf("%d", r.MessageSize), fmt.Sprintf("%d", r.Burst), fmt.Sprintf("%t", r.SameNode), fmt.Sprintf("%.20s", pod.Name), fmt.Sprintf("%f", pod.Value)})

@@ -160,7 +160,13 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	var exec remotecommand.Executor
 
 	pod := client.Items[0]
-	log.Debugf("🔥 Client (%s,%s) starting uperf against server: %s", pod.Name, pod.Status.PodIP, serverIP)
+	var clientIp string
+	if perf.Udn {
+		clientIp, _ = k8s.ExtractUdnIp(pod)
+	} else {
+		clientIp = pod.Status.PodIP
+	}
+	log.Debugf("🔥 Client (%s,%s) starting uperf against server: %s", pod.Name, clientIp, serverIP)	
 	config.Show(nc, u.driverName)
 
 	log.Debug("Creating uperf configuration file")

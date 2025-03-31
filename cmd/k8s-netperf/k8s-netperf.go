@@ -479,7 +479,7 @@ func executeWorkload(nc config.Config,
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else if s.Udn {
-		serverIP, err = k8s.ExtractUdnIp(s)
+		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0])
 		if err != nil {
 			log.Fatal(err)
 		}

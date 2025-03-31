@@ -158,7 +158,6 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 				"layer2": map[string]interface{}{
 					"role":    "Primary",
 					"subnets": []string{"10.0.0.0/24"},
-					"subnets": []string{"10.0.0.0/24"},
 					"ipam": map[string]interface{}{
 						"lifecycle": "Persistent",
 					},	
@@ -635,9 +634,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 }
 
 // Extract the UDN Ip address of a pod from the annotations - Support only ipv4
-func ExtractUdnIp(s config.PerfScenarios) (string, error) {
-	podNetworksJson := s.Server.Items[0].Annotations["k8s.ovn.org/pod-networks"]
-	//
+	func ExtractUdnIp(pod corev1.Pod) (string, error) {
+	podNetworksJson := pod.Annotations["k8s.ovn.org/pod-networks"]
 	var root map[string]json.RawMessage
 	err := json.Unmarshal([]byte(podNetworksJson), &root)
 	if err != nil {
