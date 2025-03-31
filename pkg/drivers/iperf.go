@@ -61,7 +61,13 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	id := uuid.New()
 	file := fmt.Sprintf("/tmp/iperf-%s", id.String())
 	pod := client.Items[0]
-	log.Debugf("🔥 Client (%s,%s) starting iperf3 against server: %s", pod.Name, pod.Status.PodIP, serverIP)
+	var clientIp string
+	if perf.Udn {
+		clientIp, _ = k8s.ExtractUdnIp(pod)
+	} else {
+		clientIp = pod.Status.PodIP
+	}
+	log.Debugf("🔥 Client (%s,%s) starting iperf3 against server: %s", pod.Name, clientIp, serverIP)
 	config.Show(nc, i.driverName)
 	tcp := true
 	if !strings.Contains(nc.Profile, "STREAM") {

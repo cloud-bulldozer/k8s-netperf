@@ -478,9 +478,18 @@ func executeWorkload(nc config.Config,
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else if s.Udn {
-		serverIP, err = k8s.ExtractUdnIp(s)
+		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0])
 		if err != nil {
 			log.Fatal(err)
+		}
+		// collect UDN info
+		if udnl2 {
+			npr.UdnInfo = "layer2"
+		} else if udnl3 {
+			npr.UdnInfo = "layer3"
+		}
+		if s.VM {
+			npr.UdnInfo = npr.UdnInfo + " - " + s.UdnPluginBinding
 		}
 		//when using a bridge
 	} else if s.BridgeServerNetwork != "" {
@@ -584,6 +593,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
 	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
+	rootCmd.MarkFlagsMutuallyExclusive("udnl2", "udnl3")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NNCP to be used for creating bridge interface - VM only.")
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the network defined by the bridge interface - bridge should be enabled")

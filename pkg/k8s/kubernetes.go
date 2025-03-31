@@ -151,7 +151,7 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 			"kind":       "UserDefinedNetwork",
 			"metadata": map[string]interface{}{
 				"name":      udnName,
-				"namespace": "netperf",
+				"namespace": namespace,
 			},
 			"spec": map[string]interface{}{
 				"topology": "Layer2",
@@ -188,7 +188,7 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 			"kind":       "UserDefinedNetwork",
 			"metadata": map[string]interface{}{
 				"name":      udnName,
-				"namespace": "netperf",
+				"namespace": namespace,
 			},
 			"spec": map[string]interface{}{
 				"topology": "Layer3",
@@ -229,7 +229,7 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 			"kind":       "NetworkAttachmentDefinition",
 			"metadata": map[string]interface{}{
 				"name":      "br-netperf",
-				"namespace": "netperf",
+				"namespace": namespace,
 				"annotations": map[string]interface{}{
 					"k8s.v1.cni.cncf.io/resourceName": "bridge.network.kubevirt.io/" + bridgeName,
 				},
@@ -635,10 +635,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	return nil
 }
 
-// Extract the UDN Ip address of a pod from the annotations - Support only ipv4
-func ExtractUdnIp(s config.PerfScenarios) (string, error) {
-	podNetworksJson := s.Server.Items[0].Annotations["k8s.ovn.org/pod-networks"]
-	//
+// Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
+func ExtractUdnIp(pod corev1.Pod) (string, error) {
+	podNetworksJson := pod.Annotations["k8s.ovn.org/pod-networks"]
 	var root map[string]json.RawMessage
 	err := json.Unmarshal([]byte(podNetworksJson), &root)
 	if err != nil {
@@ -647,7 +646,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 	}
 	//
 	var udnData PodNetworksData
-	err = json.Unmarshal(root["netperf/"+udnName], &udnData)
+	err = json.Unmarshal(root[namespace+"/"+udnName], &udnData)
 	if err != nil {
 		return "", err
 	}
