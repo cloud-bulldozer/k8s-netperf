@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "*" ]
+    paths-ignore:
+    - '**.md'
+    - '**.sh'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      KUBECONFIG: "/home/runner/ovn.conf"
+      KIND_IPV4_SUPPORT: "true"
+      KIND_IPV6_SUPPORT: "false"
+      OVN_GATEWAY_MODE: "shared"
+
+    steps:
+      - name: Checkoput OVN-kubernetes repo
+        uses: actions/checkout@v4
+        with:
+          repository: 'ovn-org/ovn-kubernetes'
+          fetch-depth: 1
+          path: ovn-k
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get -y update && sudo apt-get install -y --no-install-recommends make git golang
+      
+      - name: Kind setup
+        timeout-minutes: 30
+        run: |
+          make -C ovn-k/test install-kind
+          kubectl get po -A
+
+      - name: Label worker nodes
+        run: |
+          docker ps
+          kubectl label node ovn-worker node-role.kubernetes.io/worker="" --overwrite=true
+          kubectl label node ovn-worker2 node-role.kubernetes.io/worker="" --overwrite=true
+          kubectl get node -o wide
+
+      - name: Checkout k8s-netperf
+        uses: actions/checkout@v4
+
+      - name: Build k8s-netperf
+        run: |
+          make build
+      
+      - name: Run simple tests
+        run: |
+          ./bin/amd64/k8s-netperf --debug
