@@ -84,7 +84,7 @@ const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
-const udnName = "udn-l2-primary"
+const udnName = "udn-primary-netperf"
 
 // BuildInfra will create the infra for the SUT
 func BuildInfra(client *kubernetes.Clientset, udn bool) error {
@@ -151,13 +151,58 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 			"kind":       "UserDefinedNetwork",
 			"metadata": map[string]interface{}{
 				"name":      udnName,
-				"namespace": "netperf",
+				"namespace": namespace,
 			},
 			"spec": map[string]interface{}{
 				"topology": "Layer2",
 				"layer2": map[string]interface{}{
 					"role":    "Primary",
-					"subnets": []string{"10.0.0.0/24", "2001:db8::/60"},
+					"subnets": []string{"10.0.0.0/24"},
+					"ipam": map[string]interface{}{
+						"lifecycle": "Persistent",
+					},
+				},
+			},
+		},
+	}
+
+	// Specify the GVR for UDN
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "userdefinednetworks",
+	}
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(context.TODO(), udn, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Create a User Defined Network for the tests
+func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
+	log.Infof("Deploying L3 Primary UDN in the NS : %s", namespace)
+	udn := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.ovn.org/v1",
+			"kind":       "UserDefinedNetwork",
+			"metadata": map[string]interface{}{
+				"name":      udnName,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				"topology": "Layer3",
+				"layer3": map[string]interface{}{
+					"role": "Primary",
+					"ipam": map[string]interface{}{
+						"lifecycle": "Persistent",
+					},
+					"subnets": []interface{}{
+						map[string]interface{}{
+							"cidr":       "10.0.0.0/16",
+							"hostSubnet": 24,
+						},
+					},
 				},
 			},
 		},
@@ -184,7 +229,7 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 			"kind":       "NetworkAttachmentDefinition",
 			"metadata": map[string]interface{}{
 				"name":      "br-netperf",
-				"namespace": "netperf",
+				"namespace": namespace,
 				"annotations": map[string]interface{}{
 					"k8s.v1.cni.cncf.io/resourceName": "bridge.network.kubevirt.io/" + bridgeName,
 				},
@@ -590,10 +635,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	return nil
 }
 
-// Extract the UDN Ip address of a pod from the annotations - Support only ipv4
-func ExtractUdnIp(s config.PerfScenarios) (string, error) {
-	podNetworksJson := s.Server.Items[0].Annotations["k8s.ovn.org/pod-networks"]
-	//
+// Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
+func ExtractUdnIp(pod corev1.Pod) (string, error) {
+	podNetworksJson := pod.Annotations["k8s.ovn.org/pod-networks"]
 	var root map[string]json.RawMessage
 	err := json.Unmarshal([]byte(podNetworksJson), &root)
 	if err != nil {
@@ -602,7 +646,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 	}
 	//
 	var udnData PodNetworksData
-	err = json.Unmarshal(root["netperf/"+udnName], &udnData)
+	err = json.Unmarshal(root[namespace+"/"+udnName], &udnData)
 	if err != nil {
 		return "", err
 	}
@@ -621,7 +665,7 @@ func ExtractUdnIp(s config.PerfScenarios) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork)
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding)
 	if err != nil {
 		return err
 	}
@@ -629,6 +673,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	if err != nil {
 		return err
 	}
+
 	if strings.Contains(name, "host") {
 		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
@@ -646,7 +691,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork)
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding)
 	if err != nil {
 		return err
 	}

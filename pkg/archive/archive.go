@@ -56,6 +56,7 @@ type Doc struct {
 	ClientVSwitchCpu  float64          `json:"clientVswtichCpu"`
 	ClientVSwiitchMem float64          `json:"clientVswitchMem"`
 	ExternalServer    bool             `json:"externalServer"`
+	UdnInfo           string           `json:"udnInfo"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -128,6 +129,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			Confidence:        c,
 			ClientNodeInfo:    r.ClientNodeInfo,
 			ServerNodeInfo:    r.ServerNodeInfo,
+			UdnInfo:           r.UdnInfo,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
@@ -171,6 +173,7 @@ func commonCsvHeaderFields() []string {
 		"Host Network",
 		"Service",
 		"External Server",
+		"UDN Info",
 		"Duration",
 		"Parallelism",
 		"# of Samples",
@@ -194,6 +197,7 @@ func commonCsvDataFields(row result.Data) []string {
 		fmt.Sprint(row.HostNetwork),
 		fmt.Sprint(row.Service),
 		fmt.Sprint(row.ExternalServer),
+		fmt.Sprint(row.UdnInfo),
 		strconv.Itoa(row.Duration),
 		strconv.Itoa(row.Parallelism),
 		strconv.Itoa(row.Samples),

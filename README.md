@@ -86,7 +86,9 @@ Flags:
       --across                Place the client and server across availability zones
       --all                   Run all tests scenarios - hostNet and podNetwork (if possible)
       --debug                 Enable debug log
-      --udn                   Create and use a UDN called 'udn-l2-primary' as a primary network.
+      --udnl2                 Create and use a layer2 UDN as a primary network.
+      --udnl3                 Create and use a layer3 UDN as a primary network.
+      --udnPluginBinding string   UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge' (default "passt")
       --serverIP string       External Server IP Address for the OCP client pod to communicate with.
       --prom string           Prometheus URL
       --uuid string           User provided UUID
@@ -132,6 +134,22 @@ Running k8s-netperf against Virtual Machines (OpenShift CNV) requires
 If the two above are in place, users can orhestrate k8s-netperf to launch VMs by running
 
 `k8s-netperf --vm`
+
+## Using User Defined Network - UDN (only on OCP 4.18 and above)
+To run k8s-netperf using a UDN primary network for the test instead of the default network of OVN-k:
+For a layer3 UDN:
+```
+$ k8s-netperf --udnl3
+```
+For a layer2 UDN:
+```
+$ k8s-netperf --udnl2
+```
+It works also with VMs
+```
+$ k8s-netperf --udnl2 --vm --udnPluginBinding=l2bridge
+```
+ > Warning! Support of k8s Services with UDN is not fully supported yet, you may faced inconsistent results when using a service in your tests. 
 
 ### Using a linux bridge interface
 When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required. For example:
