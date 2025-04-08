@@ -52,6 +52,11 @@ jobs:
         run: |
           make build
       
-      - name: Run simple tests
+      - name: Run default tests
         run: |
           ./bin/amd64/k8s-netperf --debug
+
+      - name: Run UDN L2 tests
+        run: |
+          ./bin/amd64/k8s-netperf --debug --udnl2
+          cat podAnnotation.json
