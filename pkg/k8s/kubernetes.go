@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
@@ -194,9 +195,6 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 				"topology": "Layer3",
 				"layer3": map[string]interface{}{
 					"role": "Primary",
-					"ipam": map[string]interface{}{
-						"lifecycle": "Persistent",
-					},
 					"subnets": []interface{}{
 						map[string]interface{}{
 							"cidr":       "10.0.0.0/16",
@@ -637,6 +635,24 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 // Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
 func ExtractUdnIp(pod corev1.Pod) (string, error) {
+	fmt.Println("DEBUG - pod annotation:")
+	for str := range pod.Annotations {
+		fmt.Println(str)
+	}
+	file, errj := os.Create("podAnnotation.json")
+	if errj != nil {
+		fmt.Println("Error creating file:", errj)
+		return "", errj
+	}
+	defer file.Close()
+
+	for key, value := range pod.Annotations {
+		_, errj := file.WriteString(fmt.Sprintf("%s: %s\n", key, value))
+		if errj != nil {
+			fmt.Println("Error writing to file:", errj)
+			return "", errj
+		}
+	}
 	podNetworksJson := pod.Annotations["k8s.ovn.org/pod-networks"]
 	var root map[string]json.RawMessage
 	err := json.Unmarshal([]byte(podNetworksJson), &root)
@@ -652,10 +668,15 @@ func ExtractUdnIp(pod corev1.Pod) (string, error) {
 	}
 	// Extract the IPv4 address
 	var ipv4 net.IP
+	fmt.Println("DEBUG - UDN IPAddresses:")
+	for st := range udnData.IPAddresses {
+		fmt.Println(st)
+	}
 	for _, ip := range udnData.IPAddresses {
 		if strings.Contains(ip, ".") { // Check if it's an IPv4 address
 			ipv4, _, err = net.ParseCIDR(ip)
 			if err != nil {
+				fmt.Println("Error w/ IPv4 annotations:", err)
 				return "", err
 			}
 		}
