@@ -27,10 +27,6 @@ jobs:
           repository: 'ovn-org/ovn-kubernetes'
           fetch-depth: 1
           path: ovn-k
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get -y update && sudo apt-get install -y --no-install-recommends make git golang
       
       - name: Kind setup
         timeout-minutes: 30
@@ -40,7 +36,6 @@ jobs:
 
       - name: Label worker nodes
         run: |
-          docker ps
           kubectl label node ovn-worker node-role.kubernetes.io/worker="" --overwrite=true
           kubectl label node ovn-worker2 node-role.kubernetes.io/worker="" --overwrite=true
           kubectl get node -o wide
@@ -52,6 +47,14 @@ jobs:
         run: |
           make build
       
-      - name: Run simple tests
+      - name: Run default tests
         run: |
           ./bin/amd64/k8s-netperf --debug
+
+      - name: Run UDN L3 tests (using SVC)
+        run: |
+          ./bin/amd64/k8s-netperf --debug --udnl3 --config examples/netperf-svc.yml
+
+      - name: Run UDN L2 tests (using SVC)
+        run: |
+          ./bin/amd64/k8s-netperf --debug --udnl2 --config examples/netperf-svc.yml
