@@ -194,9 +194,6 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 				"topology": "Layer3",
 				"layer3": map[string]interface{}{
 					"role": "Primary",
-					"ipam": map[string]interface{}{
-						"lifecycle": "Persistent",
-					},
 					"subnets": []interface{}{
 						map[string]interface{}{
 							"cidr":       "10.0.0.0/16",
@@ -637,11 +634,14 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 // Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
 func ExtractUdnIp(pod corev1.Pod) (string, error) {
+	for key, value := range pod.Annotations {
+		log.Debugf("Pod Annotation key: %s, value: %s", key, value)
+	}
 	podNetworksJson := pod.Annotations["k8s.ovn.org/pod-networks"]
 	var root map[string]json.RawMessage
 	err := json.Unmarshal([]byte(podNetworksJson), &root)
 	if err != nil {
-		fmt.Println("Error unmarshalling JSON:", err)
+		log.Error("Error unmarshalling JSON:", err)
 		return "", err
 	}
 	//
@@ -656,8 +656,10 @@ func ExtractUdnIp(pod corev1.Pod) (string, error) {
 		if strings.Contains(ip, ".") { // Check if it's an IPv4 address
 			ipv4, _, err = net.ParseCIDR(ip)
 			if err != nil {
+				log.Error("Error w/ IPv4 annotations:", err)
 				return "", err
 			}
+			log.Debugf("Pod %s UDN Ip: %s\n", pod.Name, ipv4.String())
 		}
 	}
 	return ipv4.String(), nil
