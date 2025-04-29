@@ -354,7 +354,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z, "client"),
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
 			}
 		}
 
@@ -440,7 +440,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if z != "" {
 		if numNodes > 1 {
 			cdpAcross.NodeAffinity = corev1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z, "client"),
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
 				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 		} else {
@@ -468,7 +468,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if ncount > 1 {
 		if s.HostNetwork {
 			cdpHostAcross.NodeAffinity = corev1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z, "client"),
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
 				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 			cdpHostAcross.PodAntiAffinity = corev1.PodAntiAffinity{
@@ -533,9 +533,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if z != "" {
 		var affinity corev1.NodeAffinity
 		if numNodes > 1 {
-			nodeZone := zoneNodeSelectorExpression(z, "server")
+			nodeZone := zoneNodeSelectorExpression(*client, z, "server")
 			if s.AcrossAZ {
-				nodeZone = zoneNodeSelectorExpression(acrossZone, "server")
+				nodeZone = zoneNodeSelectorExpression(*client, acrossZone, "server")
 			}
 			affinity = corev1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: nodeZone,
@@ -717,8 +717,9 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	return nil
 }
 
-func zoneNodeSelectorExpression(zone string, role string) []corev1.PreferredSchedulingTerm {
-	if zone != "" {
+func zoneNodeSelectorExpression(c kubernetes.Clientset, zone string, role string) []corev1.PreferredSchedulingTerm {
+	labeled := areNodesLabeled(&c)
+	if !labeled && zone != "" {
 		return []corev1.PreferredSchedulingTerm{
 			{
 				Weight: 100,
@@ -739,7 +740,6 @@ func zoneNodeSelectorExpression(zone string, role string) []corev1.PreferredSche
 					{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{role}},
 				},
 			},
-
 		},
 	}
 }
@@ -785,6 +785,21 @@ func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
 		}
 	}
 	return false, fmt.Errorf("❌ Deployment had issues")
+}
+
+func areNodesLabeled(c *kubernetes.Clientset) bool {
+	server, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "netperf=server"})
+	if err != nil {
+		log.Errorf("Unable to query nodes: %v", err)
+	}
+	client, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "netperf=client"})
+	if err != nil {
+		log.Errorf("Unable to query nodes: %v", err)
+	}
+	if len(server.Items) == 0 && len(client.Items) == 0 {
+		return false
+	}
+	return true
 }
 
 // WaitForDelete return nil if the namespace is deleted, error otherwise
