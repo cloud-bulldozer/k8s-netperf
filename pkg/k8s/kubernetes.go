@@ -718,15 +718,28 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 }
 
 func zoneNodeSelectorExpression(zone string, role string) []corev1.PreferredSchedulingTerm {
+	if zone != "" {
+		return []corev1.PreferredSchedulingTerm{
+			{
+				Weight: 100,
+				Preference: corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{
+						{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{role}},
+						{Key: "topology.kubernetes.io/zone", Operator: corev1.NodeSelectorOpIn, Values: []string{zone}},
+					},
+				},
+			},
+		}
+	}
 	return []corev1.PreferredSchedulingTerm{
 		{
 			Weight: 100,
 			Preference: corev1.NodeSelectorTerm{
 				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{Key: "topology.kubernetes.io/zone", Operator: corev1.NodeSelectorOpIn, Values: []string{zone}},
 					{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{role}},
 				},
 			},
+
 		},
 	}
 }
