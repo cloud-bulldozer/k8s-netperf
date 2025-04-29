@@ -468,7 +468,16 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if ncount > 1 {
 		if s.HostNetwork {
 			cdpHostAcross.NodeAffinity = corev1.NodeAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(z, "client"),
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+					{
+						Weight: 100,
+						Preference: corev1.NodeSelectorTerm{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{Key: "netperf", Operator: corev1.NodeSelectorOpIn, Values: []string{"client"}},
+							},
+						},
+					},
+				},
 				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
 			}
 			cdpHostAcross.PodAntiAffinity = corev1.PodAntiAffinity{
