@@ -62,6 +62,9 @@ var (
 	csvArchive       bool
 	searchIndex      string
 	serverIPAddr     string
+	sockets          uint32
+	cores            uint32
+	threads          uint32
 )
 
 var rootCmd = &cobra.Command{
@@ -132,6 +135,9 @@ var rootCmd = &cobra.Command{
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
+			Sockets:     sockets,
+			Cores:       cores,
+			Threads:     threads,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -623,6 +629,9 @@ func main() {
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Launch Virtual Machines instead of pods for client/servers")
 	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image")
+	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM")
+	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM")
+	rootCmd.Flags().Uint32Var(&threads, "threads", 2, "Number of threads for VM")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
@@ -642,6 +651,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
+
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
