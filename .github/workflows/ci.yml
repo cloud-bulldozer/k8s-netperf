@@ -16,8 +16,8 @@ jobs:
 
     env:
       KUBECONFIG: "/home/runner/ovn.conf"
-      KIND_IPV4_SUPPORT: "true"
-      KIND_IPV6_SUPPORT: "false"
+      PLATFORM_IPV4_SUPPORT: "true"
+      PLATFORM_IPV6_SUPPORT: "false"
       OVN_GATEWAY_MODE: "shared"
 
     steps:
