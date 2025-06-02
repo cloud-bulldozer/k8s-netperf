@@ -158,7 +158,8 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
+	sockets uint32, cores uint32, threads uint32) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -255,7 +256,7 @@ ethernets:
     dhcp4: true`
 		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
 	}
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
+	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
 	if err != nil {
 		return "", err
 	}
@@ -272,7 +273,8 @@ ethernets:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
+	sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -370,12 +372,13 @@ ethernets:
     dhcp4: true`
 		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
 	}
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)))
+	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string) (*v1.VirtualMachineInstance, error) {
+	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
+	sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
 	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
@@ -402,9 +405,9 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 					},
 				},
 				CPU: &v1.CPU{
-					Sockets: 2,
-					Cores:   2,
-					Threads: 1,
+					Sockets: sockets,
+					Cores:   cores,
+					Threads: threads,
 				},
 				Devices: v1.Devices{
 					NetworkInterfaceMultiQueue: &mutliQ,
