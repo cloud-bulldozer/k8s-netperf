@@ -631,7 +631,7 @@ func main() {
 	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image")
 	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM")
 	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM")
-	rootCmd.Flags().Uint32Var(&threads, "threads", 2, "Number of threads for VM")
+	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
