@@ -51,6 +51,7 @@ var (
 	debug            bool
 	bridge           string
 	bridgeNetwork    string
+	bridgeNamespace  string
 	promURL          string
 	id               string
 	searchURL        string
@@ -123,12 +124,14 @@ var rootCmd = &cobra.Command{
 			cleanup(client)
 		}
 		s := config.PerfScenarios{
-			HostNetwork: full,
-			NodeLocal:   nl,
-			AcrossAZ:    acrossAZ,
-			RestConfig:  *rconfig,
-			Configs:     cfg,
-			ClientSet:   client,
+			HostNetwork:     full,
+			NodeLocal:       nl,
+			AcrossAZ:        acrossAZ,
+			RestConfig:      *rconfig,
+			Configs:         cfg,
+			ClientSet:       client,
+			BridgeNetwork:   bridge,
+			BridgeNamespace: bridgeNamespace,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -210,6 +213,25 @@ var rootCmd = &cobra.Command{
 			}
 			if s.Udn {
 				s.UdnPluginBinding = udnPluginBinding
+			}
+		}
+
+		// Validate bridge network configuration before creating pods
+		if bridge != "" && !vm {
+			// Create dynamic client for validation if not already created
+			var dynClient dynamic.Interface
+			if s.DClient != nil {
+				dynClient = s.DClient
+			} else {
+				dynClient, err = dynamic.NewForConfig(rconfig)
+				if err != nil {
+					log.Fatalf("Failed to create dynamic client for bridge validation: %v", err)
+				}
+			}
+
+			err = k8s.ValidateBridgeNetwork(client, dynClient, bridge, bridgeNamespace)
+			if err != nil {
+				log.Fatalf("Bridge network validation failed: %v", err)
 			}
 		}
 
@@ -491,9 +513,22 @@ func executeWorkload(nc config.Config,
 		if s.VM {
 			npr.UdnInfo = npr.UdnInfo + " - " + s.UdnPluginBinding
 		}
-		//when using a bridge
+	} else if s.BridgeNetwork != "" {
+		// For regular pods, extract bridge IP from network status
+		serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
+		if err != nil {
+			log.Errorf("Failed to extract bridge IP: %v", err)
+			// Fall back to default IP
+			serverIP = s.Server.Items[0].Status.PodIP
+		}
+		log.Debugf("Using bridge network IP: %s (interface: net1)", serverIP)
+
+		// Set bridge info similar to UdnInfo
+		npr.BridgeInfo = fmt.Sprintf("%s/%s", s.BridgeNamespace, s.BridgeNetwork)
 	} else if s.BridgeServerNetwork != "" {
+		// For VMs, use static bridge IP from JSON config
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
+		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
 		if hostNet {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
@@ -595,8 +630,9 @@ func main() {
 	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
 	rootCmd.MarkFlagsMutuallyExclusive("udnl2", "udnl3")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
-	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NNCP to be used for creating bridge interface - VM only.")
-	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the network defined by the bridge interface - bridge should be enabled")
+	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
+	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface")
+	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
