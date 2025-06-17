@@ -39,12 +39,17 @@ const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_r
 func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
-	var clientIp string
 	log.Debugf("Server IP: %s", serverIP)
+	clientIp := pod.Status.PodIP
+
 	if perf.Udn {
-		clientIp, _ = k8s.ExtractUdnIp(pod)
-	} else {
-		clientIp = pod.Status.PodIP
+		if udnIp, _ := k8s.ExtractUdnIp(pod); udnIp != "" {
+			clientIp = udnIp
+		}
+	} else if perf.BridgeNetwork != "" {
+		if bridgeClientIp, err := k8s.ExtractBridgeIp(pod, perf.BridgeNetwork, perf.BridgeNamespace); err == nil {
+			clientIp = bridgeClientIp
+		}
 	}
 	log.Debugf("🔥 Client (%s,%s) starting netperf against server: %s", pod.Name, clientIp, serverIP)
 	config.Show(nc, n.driverName)
