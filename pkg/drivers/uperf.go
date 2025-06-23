@@ -160,11 +160,16 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	var exec remotecommand.Executor
 
 	pod := client.Items[0]
-	var clientIp string
+	clientIp := pod.Status.PodIP
+
 	if perf.Udn {
-		clientIp, _ = k8s.ExtractUdnIp(pod)
-	} else {
-		clientIp = pod.Status.PodIP
+		if udnIp, _ := k8s.ExtractUdnIp(pod); udnIp != "" {
+			clientIp = udnIp
+		}
+	} else if perf.BridgeNetwork != "" {
+		if bridgeClientIp, err := k8s.ExtractBridgeIp(pod, perf.BridgeNetwork, perf.BridgeNamespace); err == nil {
+			clientIp = bridgeClientIp
+		}
 	}
 	log.Debugf("🔥 Client (%s,%s) starting uperf against server: %s", pod.Name, clientIp, serverIP)
 	config.Show(nc, u.driverName)

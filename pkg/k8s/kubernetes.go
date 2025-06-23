@@ -27,17 +27,18 @@ import (
 // DeploymentParams describes the deployment
 // Server pod can run multiple containers, each command in Commands will represent a container command
 type DeploymentParams struct {
-	HostNetwork     bool
-	Name            string
-	Namespace       string
-	Replicas        int32
-	Image           string
-	Labels          map[string]string
-	Commands        [][]string
-	PodAffinity     corev1.PodAffinity
-	PodAntiAffinity corev1.PodAntiAffinity
-	NodeAffinity    corev1.NodeAffinity
-	Port            int
+	HostNetwork        bool
+	Name               string
+	Namespace          string
+	Replicas           int32
+	Image              string
+	Labels             map[string]string
+	Commands           [][]string
+	PodAffinity        corev1.PodAffinity
+	PodAntiAffinity    corev1.PodAntiAffinity
+	NodeAffinity       corev1.NodeAffinity
+	Port               int
+	NetworkAnnotations map[string]string
 }
 
 // ServiceParams describes the service specific details
@@ -85,6 +86,46 @@ const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const udnName = "udn-primary-netperf"
+
+// ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
+func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
+	if bridgeNetwork == "" {
+		return nil
+	}
+
+	// Check if the namespace exists
+	_, err := client.CoreV1().Namespaces().Get(context.TODO(), bridgeNamespace, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("bridge namespace '%s' does not exist: %v", bridgeNamespace, err)
+	}
+
+	// Check if the NetworkAttachmentDefinition exists in the specified namespace
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
+
+	_, err = dyn.Resource(gvr).Namespace(bridgeNamespace).Get(context.TODO(), bridgeNetwork, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("NetworkAttachmentDefinition '%s' does not exist in namespace '%s': %v", bridgeNetwork, bridgeNamespace, err)
+	}
+
+	log.Infof("✅ Bridge network validation passed: %s/%s", bridgeNamespace, bridgeNetwork)
+	return nil
+}
+
+// buildNetworkAnnotations creates the network annotations for Multus CNI bridge networks
+func buildNetworkAnnotations(bridgeNetwork, bridgeNamespace string) map[string]string {
+	annotations := make(map[string]string)
+	if bridgeNetwork != "" && bridgeNamespace != "" {
+		// Use cross-namespace format: namespace/network-name
+		networkRef := fmt.Sprintf("%s/%s", bridgeNamespace, bridgeNetwork)
+		annotations["k8s.v1.cni.cncf.io/networks"] = networkRef
+		log.Infof("🌉 Configuring bridge network: %s", networkRef)
+	}
+	return annotations
+}
 
 // BuildInfra will create the infra for the SUT
 func BuildInfra(client *kubernetes.Clientset, udn bool) error {
@@ -269,13 +310,14 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if s.ExternalServer {
 		//  Create Netperf client on any worker node. No service or server pod required in this scenario.
 		cdp := DeploymentParams{
-			Name:      "client",
-			Namespace: "netperf",
-			Replicas:  1,
-			Image:     k8sNetperfImage,
-			Labels:    map[string]string{"role": clientRole},
-			Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
-			Port:      NetperfServerCtlPort,
+			Name:               "client",
+			Namespace:          "netperf",
+			Replicas:           1,
+			Image:              k8sNetperfImage,
+			Labels:             map[string]string{"role": clientRole},
+			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+			Port:               NetperfServerCtlPort,
+			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
 		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
@@ -344,13 +386,14 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if s.NodeLocal {
 		//  Create Netperf client on the same node as the server.
 		cdp := DeploymentParams{
-			Name:      "client",
-			Namespace: "netperf",
-			Replicas:  1,
-			Image:     k8sNetperfImage,
-			Labels:    map[string]string{"role": clientRole},
-			Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
-			Port:      NetperfServerCtlPort,
+			Name:               "client",
+			Namespace:          "netperf",
+			Replicas:           1,
+			Image:              k8sNetperfImage,
+			Labels:             map[string]string{"role": clientRole},
+			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+			Port:               NetperfServerCtlPort,
+			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -415,13 +458,14 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		return fmt.Errorf("😥 Unable to create netperf service: %v", err)
 	}
 	cdpAcross := DeploymentParams{
-		Name:      "client-across",
-		Namespace: "netperf",
-		Replicas:  1,
-		Image:     k8sNetperfImage,
-		Labels:    map[string]string{"role": clientAcrossRole},
-		Commands:  [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
-		Port:      NetperfServerCtlPort,
+		Name:               "client-across",
+		Namespace:          "netperf",
+		Replicas:           1,
+		Image:              k8sNetperfImage,
+		Labels:             map[string]string{"role": clientAcrossRole},
+		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+		Port:               NetperfServerCtlPort,
+		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
@@ -517,13 +561,14 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
-		Name:      "server",
-		Namespace: "netperf",
-		Replicas:  1,
-		Image:     k8sNetperfImage,
-		Labels:    map[string]string{"role": serverRole},
-		Commands:  dpCommands,
-		Port:      NetperfServerCtlPort,
+		Name:               "server",
+		Namespace:          "netperf",
+		Replicas:           1,
+		Image:              k8sNetperfImage,
+		Labels:             map[string]string{"role": serverRole},
+		Commands:           dpCommands,
+		Port:               NetperfServerCtlPort,
+		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
 	}
 	if s.NodeLocal {
 		sdp.PodAffinity = corev1.PodAffinity{
@@ -630,6 +675,42 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	return nil
+}
+
+// ExtractBridgeIp extracts the bridge network IP address from pod network status annotation
+func ExtractBridgeIp(pod corev1.Pod, bridgeNetworkName, bridgeNamespace string) (string, error) {
+	networkStatusJson := pod.Annotations["k8s.v1.cni.cncf.io/network-status"]
+	if networkStatusJson == "" {
+		return "", fmt.Errorf("no network status annotation found on pod %s", pod.Name)
+	}
+
+	var networkStatuses []struct {
+		Name      string   `json:"name"`
+		Interface string   `json:"interface"`
+		IPs       []string `json:"ips"`
+		Default   bool     `json:"default,omitempty"`
+	}
+
+	err := json.Unmarshal([]byte(networkStatusJson), &networkStatuses)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling network status: %v", err)
+	}
+
+	// Look for the bridge network by name
+	expectedNetworkName := fmt.Sprintf("%s/%s", bridgeNamespace, bridgeNetworkName)
+	for _, netStatus := range networkStatuses {
+		if netStatus.Name == expectedNetworkName && len(netStatus.IPs) > 0 {
+			// Return the first IP (should be IPv4)
+			for _, ip := range netStatus.IPs {
+				if strings.Contains(ip, ".") {
+					log.Debugf("Pod %s bridge network IP: %s", pod.Name, ip)
+					return ip, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("bridge network IP not found for %s on pod %s", expectedNetworkName, pod.Name)
 }
 
 // Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
@@ -874,6 +955,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			})
 	}
 
+	// Merge network annotations with default annotations
+	annotations := map[string]string{
+		"sidecar.istio.io/inject": "true",
+	}
+	for k, v := range dp.NetworkAnnotations {
+		annotations[k] = v
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: dp.Name,
@@ -885,10 +974,8 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: dp.Labels,
-					Annotations: map[string]string{
-						"sidecar.istio.io/inject": "true",
-					},
+					Labels:      dp.Labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: pointer.Int64(1),
