@@ -4,11 +4,9 @@ FROM registry.access.redhat.com/${RHEL_VERSION}:latest
 
 COPY appstream.repo /etc/yum.repos.d/centos8-appstream.repo
 
-RUN dnf install -y perftest 
-
 COPY netperf.diff /tmp/netperf.diff
 RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && dnf clean all
-RUN dnf install -y uperf && dnf clean all
+RUN dnf install -y uperf perftest && dnf clean all
 
 RUN dnf install -y --nodocs make automake --enablerepo=centos9 --allowerasing  && \
     dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo --enablerepo=*
