@@ -5,19 +5,19 @@ Running Networking Performance Tests against K8s
 
 ### Benchmark Tool and Tests
 
-| Tool | Test | Status | Pass/Fail Context |
-|------|------|--------|-------------------|
-| netperf | TCP_STREAM | Working | Yes |
-| netperf | UDP_STREAM | Working | No |
-| netperf | TCP_RR | Working | No |
-| netperf | UDP_RR | Working | No |
-| netperf | TCP_CRR | Working | No|
-| uperf   | TCP_STREAM | Working | Yes |
-| uperf   | UDP_STREAM | Working | No |
-| uperf   | TCP_RR | Working | No |
-| uperf | UDP_RR | Working | No |
-| iperf3  | TCP_STREAM | Working | Yes |
-| iperf3  | UDP_STREAM | Working | No |
+| Tool    | Test       | Status  | Pass/Fail Context |
+| ------- | ---------- | ------- | ----------------- |
+| netperf | TCP_STREAM | Working | Yes               |
+| netperf | UDP_STREAM | Working | No                |
+| netperf | TCP_RR     | Working | No                |
+| netperf | UDP_RR     | Working | No                |
+| netperf | TCP_CRR    | Working | No                |
+| uperf   | TCP_STREAM | Working | Yes               |
+| uperf   | UDP_STREAM | Working | No                |
+| uperf   | TCP_RR     | Working | No                |
+| uperf   | UDP_RR     | Working | No                |
+| iperf3  | TCP_STREAM | Working | Yes               |
+| iperf3  | UDP_STREAM | Working | No                |
 
 ## Setup
 
@@ -33,6 +33,15 @@ $ make build
 $ git clone http://github.com/cloud-bulldozer/k8s-netperf
 $ cd k8s-netperf
 $ make container-build
+```
+
+## Testing locally with kind
+
+```shell
+$ kind create cluster --config testing/kind-config.yaml
+$ kubectl label node kind-worker  node-role.kubernetes.io/worker=""
+$ kubectl label node kind-worker2 node-role.kubernetes.io/worker=""
+$ k8s-netperf --config netperf.yml
 ```
 
 ## Label nodes
@@ -283,8 +292,8 @@ $ echo $?
 1
 ```
 
-| Tool | Test | pass/fail|
-|-----------|------|----------|
+| Tool    | Test       | pass/fail             |
+| ------- | ---------- | --------------------- |
 | netperf | TCP_STREAM | working (default:10%) |
 
 ## Indexing to OpenSearch
