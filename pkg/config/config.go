@@ -46,6 +46,9 @@ type PerfScenarios struct {
 	BridgeNamespace     string
 	BridgeServerNetwork string
 	BridgeClientNetwork string
+	Sockets             uint32
+	Cores               uint32
+	Threads             uint32
 	ServerNodeInfo      metrics.NodeInfo
 	ClientNodeInfo      metrics.NodeInfo
 	Client              apiv1.PodList
