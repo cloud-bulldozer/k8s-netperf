@@ -136,6 +136,9 @@ var rootCmd = &cobra.Command{
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
+			Sockets:         sockets,
+			Cores:           cores,
+			Threads:         threads,
 			Privileged:      privileged,
 		}
 		if serverIPAddr != "" {
