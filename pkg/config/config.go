@@ -36,6 +36,7 @@ type PerfScenarios struct {
 	AcrossAZ            bool
 	HostNetwork         bool
 	ExternalServer      bool
+	Privileged          bool
 	Configs             []Config
 	VM                  bool
 	VMImage             string
