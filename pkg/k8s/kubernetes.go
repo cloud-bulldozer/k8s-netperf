@@ -28,6 +28,7 @@ import (
 // Server pod can run multiple containers, each command in Commands will represent a container command
 type DeploymentParams struct {
 	HostNetwork        bool
+	Privileged         bool
 	Name               string
 	Namespace          string
 	Replicas           int32
@@ -318,6 +319,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			Privileged:         s.Privileged,
 		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
@@ -394,6 +396,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			Privileged:         s.Privileged,
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -466,6 +469,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
@@ -480,6 +484,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
+		Privileged:  s.Privileged,
 	}
 	if z != "" {
 		if numNodes > 1 {
@@ -558,6 +563,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:      map[string]string{"role": hostNetServerRole},
 		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
+		Privileged:  s.Privileged,
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
@@ -569,6 +575,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
 	}
 	if s.NodeLocal {
 		sdp.PodAffinity = corev1.PodAffinity{
@@ -948,13 +955,21 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	for i := 0; i < len(dp.Commands); i++ {
 		// each container should have a unique name
 		containerName := fmt.Sprintf("%s-%d", dp.Name, i)
-		cmdContainers = append(cmdContainers,
-			corev1.Container{
-				Name:            containerName,
-				Image:           dp.Image,
-				Command:         dp.Commands[i],
-				ImagePullPolicy: corev1.PullAlways,
-			})
+		container := corev1.Container{
+			Name:            containerName,
+			Image:           dp.Image,
+			Command:         dp.Commands[i],
+			ImagePullPolicy: corev1.PullAlways,
+		}
+		
+		// Add privileged security context if requested
+		if dp.Privileged {
+			container.SecurityContext = &corev1.SecurityContext{
+				Privileged: pointer.Bool(true),
+			}
+		}
+		
+		cmdContainers = append(cmdContainers, container)
 	}
 
 	// Merge network annotations with default annotations
