@@ -65,6 +65,7 @@ var (
 	sockets          uint32
 	cores            uint32
 	threads          uint32
+	privileged       bool
 )
 
 var rootCmd = &cobra.Command{
@@ -135,9 +136,6 @@ var rootCmd = &cobra.Command{
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
-			Sockets:     sockets,
-			Cores:       cores,
-			Threads:     threads,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -651,7 +649,6 @@ func main() {
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
-
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
