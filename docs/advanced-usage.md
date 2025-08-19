@@ -76,3 +76,10 @@ By default, it will read the `bridgeNetwork.json` file from the git repository. 
 ```
 k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
 ```
+
+## Privileged pods
+
+If your use case requires running pods with privileged security context, use the `--privileged` flag:
+```
+$ k8s-netperf --privileged
+```
