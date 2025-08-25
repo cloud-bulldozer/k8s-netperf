@@ -535,15 +535,27 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		if !s.VM {
-			s.ClientAcross, err = deployDeployment(client, cdpAcross)
+		
+		// If HostNetworkOnly mode, get client node info from host network pods
+		if s.HostNetworkOnly && s.HostNetwork {
+			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
 			if err != nil {
 				return err
 			}
-		} else {
-			err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
-			if err != nil {
-				return err
+		}
+		
+		// Only create regular client pods if not in HostNetworkOnly mode
+		if !s.HostNetworkOnly {
+			if !s.VM {
+				s.ClientAcross, err = deployDeployment(client, cdpAcross)
+				if err != nil {
+					return err
+				}
+			} else {
+				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -658,26 +670,37 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
+		
+		// If HostNetworkOnly mode, get server node info from host network pods
+		if s.HostNetworkOnly && s.HostNetwork {
+			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
+			if err != nil {
+				return err
+			}
+		}
 	}
-	if !s.VM {
-		s.Server, err = deployDeployment(client, sdp)
-		if err != nil {
-			return err
-		}
-		s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
-		if err != nil {
-			return err
-		}
-		if !s.NodeLocal {
-			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
-		}
-		if err != nil {
-			return err
-		}
-	} else {
-		err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
-		if err != nil {
-			return err
+	// Only create regular server pods if not in HostNetworkOnly mode
+	if !s.HostNetworkOnly {
+		if !s.VM {
+			s.Server, err = deployDeployment(client, sdp)
+			if err != nil {
+				return err
+			}
+			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
+			if err != nil {
+				return err
+			}
+			if !s.NodeLocal {
+				s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
+			}
+			if err != nil {
+				return err
+			}
+		} else {
+			err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
