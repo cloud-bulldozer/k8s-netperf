@@ -431,7 +431,7 @@ var rootCmd = &cobra.Command{
 		}
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
-		if result.CheckHostResults(sr) {
+		if !hostNetOnly && result.CheckHostResults(sr) {
 			diffs, err := result.TCPThroughputDiff(&sr)
 			if err != nil {
 				log.Error("Unable to calculate difference between HostNetwork and PodNetwork")
