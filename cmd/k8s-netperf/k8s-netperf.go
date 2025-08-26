@@ -46,6 +46,7 @@ var (
 	udnPluginBinding string
 	acrossAZ         bool
 	full             bool
+	hostNetOnly      bool
 	vm               bool
 	vmimage          string
 	debug            bool
@@ -128,7 +129,8 @@ var rootCmd = &cobra.Command{
 			cleanup(client)
 		}
 		s := config.PerfScenarios{
-			HostNetwork:     full,
+			HostNetwork:     full || hostNetOnly,
+			HostNetworkOnly: hostNetOnly,
 			NodeLocal:       nl,
 			AcrossAZ:        acrossAZ,
 			RestConfig:      *rconfig,
@@ -290,9 +292,12 @@ var rootCmd = &cobra.Command{
 							sr.Results = append(sr.Results, pr)
 						}
 					}
-					pr = executeWorkload(nc, s, false, driver, false)
-					if len(pr.Profile) > 1 {
-						sr.Results = append(sr.Results, pr)
+					// Skip podNetwork tests if hostNetOnly is enabled
+					if !hostNetOnly {
+						pr = executeWorkload(nc, s, false, driver, false)
+						if len(pr.Profile) > 1 {
+							sr.Results = append(sr.Results, pr)
+						}
 					}
 				}
 			}
@@ -321,9 +326,12 @@ var rootCmd = &cobra.Command{
 							sr.Results = append(sr.Results, pr)
 						}
 					}
-					pr = executeWorkload(nc, s, false, driver, true)
-					if len(pr.Profile) > 1 {
-						sr.Results = append(sr.Results, pr)
+					// Skip podNetwork tests if hostNetOnly is enabled
+					if !hostNetOnly {
+						pr = executeWorkload(nc, s, false, driver, true)
+						if len(pr.Profile) > 1 {
+							sr.Results = append(sr.Results, pr)
+						}
 					}
 				}
 			}
@@ -423,7 +431,7 @@ var rootCmd = &cobra.Command{
 		}
 		// Initially we are just checking against TCP_STREAM results.
 		retCode := 0
-		if result.CheckHostResults(sr) {
+		if !hostNetOnly && result.CheckHostResults(sr) {
 			diffs, err := result.TCPThroughputDiff(&sr)
 			if err != nil {
 				log.Error("Unable to calculate difference between HostNetwork and PodNetwork")
@@ -636,10 +644,12 @@ func main() {
 	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
+	rootCmd.Flags().BoolVar(&hostNetOnly, "hostNet", false, "Run only hostNetwork tests (no podNetwork tests)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
 	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
 	rootCmd.MarkFlagsMutuallyExclusive("udnl2", "udnl3")
+	rootCmd.MarkFlagsMutuallyExclusive("all", "hostNet")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
 	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface")
