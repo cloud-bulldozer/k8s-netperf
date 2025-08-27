@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/cloud-bulldozer/go-commons v1.0.16
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.6.0
 	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.6.6
 	github.com/olekukonko/tablewriter v0.0.5
