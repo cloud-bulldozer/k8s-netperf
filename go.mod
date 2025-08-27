@@ -1,6 +1,6 @@
 module github.com/cloud-bulldozer/k8s-netperf
 
-go 1.19
+go 1.23.0
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
@@ -12,8 +12,8 @@ require (
 	github.com/prometheus/common v0.44.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
-	golang.org/x/crypto v0.14.0
-	golang.org/x/text v0.13.0
+	golang.org/x/crypto v0.41.0
+	golang.org/x/text v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
@@ -54,10 +54,10 @@ require (
 	github.com/pkg/sftp v1.13.5 // indirect
 	github.com/prometheus/client_golang v1.15.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/term v0.13.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
