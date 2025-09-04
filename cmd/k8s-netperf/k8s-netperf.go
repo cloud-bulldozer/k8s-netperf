@@ -43,6 +43,7 @@ var (
 	netperf          bool
 	iperf3           bool
 	uperf            bool
+	ibWriteBw        bool
 	udnl2            bool
 	udnl3            bool
 	cudn             string
@@ -91,16 +92,18 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-		if !uperf && !netperf && !iperf3 {
+		if !(uperf || netperf || iperf3 || ibWriteBw) {
 			log.Fatalf("😭 At least one driver needs to be enabled")
 		}
-
 		// Validate mutually exclusive UDN flags
 		if udnl2 && udnl3 {
 			log.Fatal("flags --udnl2 and --udnl3 are mutually exclusive; please set only one")
 		}
 		if cudn != "" && (udnl2 || udnl3) {
 			log.Fatal("flags --cudn and --udnl2/--udnl3 are mutually exclusive; please set only one")
+		}
+		if ibWriteBw && (!privileged || !hostNetOnly) {
+			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
 		}
 		uid := ""
 		if len(id) > 0 {
@@ -299,6 +302,12 @@ var rootCmd = &cobra.Command{
 		if iperf3 {
 			requestedDrivers = append(requestedDrivers, "iperf3")
 		}
+		if ibWriteBw {
+			requestedDrivers = append(requestedDrivers, "ib_write_bw")
+		}
+
+		// Set requested drivers after they are defined
+		s.RequestedDrivers = requestedDrivers
 
 		// Run pod tests if enabled
 		if s.Pod {
@@ -577,6 +586,8 @@ func executeWorkload(nc config.Config,
 			serverIP = s.IperfService.Spec.ClusterIP
 		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
+		case "ib_write_bw":
+			serverIP = s.ServerHost.Items[0].Status.PodIP
 		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
@@ -701,6 +712,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver (default true)")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (default false)")
 	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (default false)")
+	rootCmd.Flags().BoolVar(&ibWriteBw, "ib-write-bw", false, "Use ib_write_bw as load driver (requires --hostNet) (default false)")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf (default true)")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout (default false)")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")

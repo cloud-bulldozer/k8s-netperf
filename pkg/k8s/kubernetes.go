@@ -653,10 +653,32 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	}
 
-	// Use separate containers for servers
-	dpCommands := [][]string{{"/bin/bash", "-c", "netserver && sleep 10000000"},
-		{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
-		{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)}}
+	// Use separate containers for servers based on requested drivers
+	var dpCommands [][]string
+	
+	// Helper function to check if a driver is requested
+	containsDriver := func(drivers []string, driver string) bool {
+		for _, d := range drivers {
+			if d == driver {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Add server commands only for requested drivers
+	if containsDriver(s.RequestedDrivers, "netperf") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
+	}
+	if containsDriver(s.RequestedDrivers, "iperf3") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "uperf") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "ib_write_bw") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "ib_write_bw -d mlx5_0 -x 3 -F && sleep 10000000"})
+	}
 
 	sdpHost := DeploymentParams{
 		Name:        "server-host",
