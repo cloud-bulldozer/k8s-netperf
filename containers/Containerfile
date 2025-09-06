@@ -9,7 +9,7 @@ RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.n
 RUN dnf install -y uperf perftest && dnf clean all
 
 RUN dnf install -y --nodocs make automake --enablerepo=centos9 --allowerasing  && \
-    dnf install -y --nodocs gcc git bc lksctp-tools-devel texinfo --enablerepo=*
+    dnf install -y --nodocs gcc git bc lksctp-tools-devel --enablerepo=*
 
 RUN git clone https://github.com/HewlettPackard/netperf
 WORKDIR netperf
@@ -17,7 +17,7 @@ WORKDIR netperf
 RUN git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4 && \
     git apply /tmp/netperf.diff && \
     ./autogen.sh && \
-    ./configure --enable-sctp=yes --enable-demo=yes && \
+    ./configure --enable-sctp=yes --enable-demo=yes MAKEINFO=true && \
     make && make install
 
 WORKDIR ../
