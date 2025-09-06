@@ -1,29 +1,24 @@
-name: Build k8s-netperf container image
+name: Release k8s-netperf container image
 
 on:
-  pull_request:
-    branches-ignore:
-      - main
-    paths:
-      - "containers/**" # Trigger only when Dockerfile changes in a pull request
   push:
-    branches: [ main ]
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
 
 env:
+  CONTAINER_REGISTRY: ${{ 'quay.io' }}
   GO_VER: 1.19
   RHEL_VERSION: ubi9
 
 jobs:
   build-and-push-container-images:
-    name: Build Multi Architecture Container Images
+    name: Build and Publish Multi Architecture Container Images
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
       packages: write
-
+    
     steps:
       - name: Setup QEMU & Install Dependecies
         run: |
@@ -40,20 +35,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VER }}
 
-      - name: Build multi-arch Image
-        id: build
+      - name: Build and Push multi-arch Image
+        id: push
         run: |
           make build
-          make gha-build
-        env:
-          GO_VER: ${{ env.GO_VER }}
-
-      - name: Push multi-arch Image
-        id: push
-        if: github.event_name == 'push'
-        run: |
-          podman login ${{ env.CONTAINER_REGISTRY }} -u ${QUAY_USER} -p ${QUAY_TOKEN}
+          podman login quay.io -u ${QUAY_USER} -p ${QUAY_TOKEN}
           make gha-push
         env:
+          GO_VER: ${{ env.GO_VER }}
           QUAY_USER: ${{ secrets.QUAY_USER }}
-          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }} 
