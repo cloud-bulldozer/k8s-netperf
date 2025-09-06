@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
+  pull_request:
+    branches: [ "*" ]
+    paths:
+      - "containers/**" # Trigger only when Dockerfile changes in a pull request
 
 env:
   CONTAINER_REGISTRY: ${{ 'quay.io' }}
@@ -18,7 +22,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Setup QEMU & Install Dependecies
         run: |
