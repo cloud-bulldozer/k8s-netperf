@@ -34,8 +34,8 @@ type ibWriteBw struct {
 
 // IsTestSupported determines if the test is supported for ib_write_bw driver
 func (i *ibWriteBw) IsTestSupported() bool {
-	// ib_write_bw only supports bandwidth tests (STREAM profiles)
-	return strings.Contains(i.testConfig.Profile, "STREAM")
+	// ib_write_bw only supports UDP_STREAM profile
+	return strings.ToUpper(i.testConfig.Profile) == "UDP_STREAM"
 }
 
 // Run will invoke ib_write_bw in a client container

@@ -105,6 +105,11 @@ var rootCmd = &cobra.Command{
 		if ibWriteBw && (!privileged || !hostNetOnly) {
 			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
 		}
+		
+		// If a specific driver is explicitly requested, disable the default netperf driver
+		if (iperf3 || uperf || ibWriteBw) && cmd.Flags().Changed("netperf") == false {
+			netperf = false
+		}
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -275,6 +280,28 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// Determine requested drivers BEFORE building SUT
+		var requestedDrivers []string
+		if netperf {
+			requestedDrivers = append(requestedDrivers, "netperf")
+		}
+		if uperf {
+			requestedDrivers = append(requestedDrivers, "uperf")
+		}
+		if iperf3 {
+			requestedDrivers = append(requestedDrivers, "iperf3")
+		}
+		if ibWriteBw {
+			requestedDrivers = append(requestedDrivers, "ib_write_bw")
+		}
+
+		// Set requested drivers BEFORE BuildSUT
+		s.RequestedDrivers = requestedDrivers
+		
+		// Debug: Print requested drivers
+		log.Debugf("🔥 Requested drivers: %v", requestedDrivers)
+		log.Debugf("🔥 netperf=%v, iperf3=%v, uperf=%v, ibWriteBw=%v", netperf, iperf3, uperf, ibWriteBw)
+
 		// Build the SUT (Deployments)
 		err = k8s.BuildSUT(client, &s)
 		if err != nil {
@@ -292,22 +319,6 @@ var rootCmd = &cobra.Command{
 			acrossAZ = true
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
-		var requestedDrivers []string
-		if netperf {
-			requestedDrivers = append(requestedDrivers, "netperf")
-		}
-		if uperf {
-			requestedDrivers = append(requestedDrivers, "uperf")
-		}
-		if iperf3 {
-			requestedDrivers = append(requestedDrivers, "iperf3")
-		}
-		if ibWriteBw {
-			requestedDrivers = append(requestedDrivers, "ib_write_bw")
-		}
-
-		// Set requested drivers after they are defined
-		s.RequestedDrivers = requestedDrivers
 
 		// Run pod tests if enabled
 		if s.Pod {
