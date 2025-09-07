@@ -515,7 +515,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	// Debug: Print requested drivers in BuildSUT
 	log.Debugf("🔥 BuildSUT: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
-	
+
 	// Create services only for requested drivers
 	// If no specific drivers are requested (default behavior), include all standard drivers
 	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "iperf3") {
@@ -678,10 +678,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	// Use separate containers for servers
 	var dpCommands [][]string
-	
+
 	// Debug: Print requested drivers for server commands
 	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
-	
+
 	// If no specific drivers are requested (default behavior), include all standard drivers
 	if len(s.RequestedDrivers) == 0 {
 		dpCommands = [][]string{
@@ -701,10 +701,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
 		}
 		if containsDriver(s.RequestedDrivers, "ib_write_bw") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "ib_write_bw -d mlx5_0 -x 3 -F && sleep 10000000"})
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "stdbuf -oL -eL ib_write_bw -d mlx5_0 -x 3 -F"})
 		}
 	}
-	
+
 	// Debug: Print final dpCommands
 	log.Debugf("🔥 Final dpCommands count: %d", len(dpCommands))
 	for i, cmd := range dpCommands {

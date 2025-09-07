@@ -49,9 +49,9 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	log.Debugf("Client (%s,%s) starting ib_write_bw against server: %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, i.driverName)
 
-	// ib_write_bw client command: "ib_write_bw -d mlx5_0 -x 3 -F --report_gbits $server_ip"
-	cmd := []string{"ib_write_bw", "-d", "mlx5_0", "-x", "3", "-F", "--report_gbits", serverIP}
-	
+	// ib_write_bw client command: "ib_write_bw -d mlx5_0 -x 3 -F $server_ip"
+	cmd := []string{"stdbuf", "-oL", "-eL", "ib_write_bw", "-d", "mlx5_0", "-x", "3", "-F", serverIP}
+
 	// Add duration if specified (ib_write_bw uses -D for duration in seconds)
 	if nc.Duration > 0 {
 		cmd = append(cmd, "-D", fmt.Sprint(nc.Duration))
@@ -131,18 +131,41 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 
 // ParseResults accepts the stdout from the execution of ib_write_bw benchmark.
 // It will return a Sample struct or error
-// TODO: Implement proper parsing of ib_write_bw output
 func (i *ibWriteBw) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = i.driverName
-	sample.Metric = "Gb/s"
-	
-	// Mock implementation - returns a placeholder value
-	// TODO: Parse actual ib_write_bw output format
-	sample.Throughput = 0.0
-	
-	log.Debugf("Mock parsing for %s - actual implementation needed", sample.Driver)
-	log.Debugf("Raw output to parse: %s", stdout.String())
-	
-	return sample, nil
+	sample.Metric = "MiB/s"
+
+	output := stdout.String()
+	lines := strings.Split(output, "\n")
+
+	// Look for the results line that contains the bandwidth data
+	// Format: " 65536      130030           0.00               2708.88              0.043342"
+	// We want the 4th column which is "BW average[MiB/sec]"
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Skip header lines and empty lines
+		if strings.Contains(line, "#bytes") || strings.Contains(line, "---") || line == "" {
+			continue
+		}
+		
+		// Look for data lines with numeric values
+		fields := strings.Fields(line)
+		if len(fields) >= 4 {
+			// Check if first field is numeric (bytes)
+			if _, err := fmt.Sscanf(fields[0], "%d", new(int)); err == nil {
+				// Parse the BW average field (4th column)
+				var bwAverage float64
+				if _, err := fmt.Sscanf(fields[3], "%f", &bwAverage); err == nil {
+					sample.Throughput = bwAverage
+					log.Debugf("Parsed ib_write_bw BW average: %.2f MiB/s", bwAverage)
+					return sample, nil
+				}
+			}
+		}
+	}
+
+	log.Debugf("Failed to parse ib_write_bw output: %s", output)
+	return sample, fmt.Errorf("failed to parse BW average from ib_write_bw output")
 }
