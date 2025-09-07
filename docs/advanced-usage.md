@@ -56,7 +56,7 @@ $ k8s-netperf --cudn layer2 --vm
 $ k8s-netperf --cudn layer3 --vm
 ```
 ## Using a Linux Bridge Interface
-When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required. 
+When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required.
 
 For example:
 ```yaml
@@ -97,4 +97,11 @@ k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
 If your use case requires running pods with privileged security context, use the `--privileged` flag:
 ```
 $ k8s-netperf --privileged
+```
+
+## RoCEv2 testing
+
+Using the `ib_write_bw` driver, your hardware should include RDMA devices:
+```
+$ k8s-netperf --ib-write-bw --privileged --hostNet
 ```
