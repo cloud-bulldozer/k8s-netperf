@@ -431,7 +431,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	// Debug: Print requested drivers in BuildSUT
 	log.Debugf("🔥 BuildSUT: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
-	
+
 	// Create services only for requested drivers
 	// If no specific drivers are requested (default behavior), include all standard drivers
 	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "iperf3") {
@@ -558,7 +558,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get client node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
@@ -566,7 +566,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		}
-		
+
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
 			if !s.VM {
@@ -586,10 +586,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	// Use separate containers for servers
 	var dpCommands [][]string
-	
+
 	// Debug: Print requested drivers for server commands
 	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
-	
+
 	// If no specific drivers are requested (default behavior), include all standard drivers
 	if len(s.RequestedDrivers) == 0 {
 		dpCommands = [][]string{
@@ -609,10 +609,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
 		}
 		if containsDriver(s.RequestedDrivers, "ib_write_bw") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "ib_write_bw -d mlx5_0 -x 3 -F && sleep 10000000"})
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "stdbuf -oL -eL ib_write_bw -d mlx5_0 -x 3 -F"})
 		}
 	}
-	
+
 	// Debug: Print final dpCommands
 	log.Debugf("🔥 Final dpCommands count: %d", len(dpCommands))
 	for i, cmd := range dpCommands {
@@ -723,7 +723,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get server node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
@@ -1037,14 +1037,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			Command:         dp.Commands[i],
 			ImagePullPolicy: corev1.PullAlways,
 		}
-		
+
 		// Add privileged security context if requested
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
 				Privileged: pointer.Bool(true),
 			}
 		}
-		
+
 		cmdContainers = append(cmdContainers, container)
 	}
 
