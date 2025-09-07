@@ -107,7 +107,7 @@ var rootCmd = &cobra.Command{
 		}
 		
 		// If a specific driver is explicitly requested, disable the default netperf driver
-		if (iperf3 || uperf || ibWriteBw) && cmd.Flags().Changed("netperf") == false {
+		if (iperf3 || uperf || ibWriteBw) && !cmd.Flags().Changed("netperf") {
 			netperf = false
 		}
 		uid := ""
