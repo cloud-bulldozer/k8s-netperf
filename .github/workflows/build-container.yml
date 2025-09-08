@@ -10,10 +10,6 @@ on:
     branches: [ main ]
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
-  push:
-    branches: [ main ]
-    paths:
-      - "containers/**" # Trigger only when Dockerfile changes in a pull request
 
 env:
   CONTAINER_REGISTRY: ${{ 'quay.io' }}
@@ -61,8 +57,4 @@ jobs:
           make gha-push
         env:
           QUAY_USER: ${{ secrets.QUAY_USER }}
-<<<<<<< HEAD
-          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }} 
-=======
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
->>>>>>> 59d3d63 (Remove double quotes)
