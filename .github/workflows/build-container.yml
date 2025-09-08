@@ -6,6 +6,7 @@ on:
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
   push:
+    branches: [ main ]
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
 
