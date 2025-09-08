@@ -16,7 +16,7 @@ env:
 
 jobs:
   build-and-push-container-images:
-    name: Build Multi Architecture Container Images
+    name: Build and Publish Multi Architecture Container Images
     runs-on: ubuntu-latest
 
     permissions:
