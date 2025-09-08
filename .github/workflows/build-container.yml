@@ -44,10 +44,20 @@ jobs:
         with:
           go-version: ${{ env.GO_VER }}
 
-      - name: Build and Push multi-arch Image
-        id: push
+      - name: Build multi-arch Image
+        id: build
         run: |
           make build
           make gha-build
         env:
           GO_VER: ${{ env.GO_VER }}
+
+      - name: Push multi-arch Image
+        id: push
+        if: github.event_name == "push"
+        run: |
+          podman login ${{ env.CONTAINER_REGISTRY }} -u ${QUAY_USER} -p ${QUAY_TOKEN}
+          make gha-push
+        env:
+          QUAY_USER: ${{ secrets.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }} 
