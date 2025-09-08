@@ -2,7 +2,8 @@ name: Build k8s-netperf container image
 
 on:
   pull_request:
-    branches: [ "*" ]
+    branches-ignore:
+      - main
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
   push:
