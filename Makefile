@@ -46,7 +46,7 @@ gha-build:
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) --platform=linux/amd64,linux/arm64,linux/ppc64le,linux/s390x \
 		./containers --manifest=$(CONTAINER_NS)/${BIN}:latest
 
-gha-push: gha-build
+gha-push:
 	@echo "Pushing Container Images & manifest"
 	$(CONTAINER) manifest push $(CONTAINER_NS)/${BIN}:latest $(CONTAINER_NS)/${BIN}:latest
 
