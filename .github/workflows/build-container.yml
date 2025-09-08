@@ -5,8 +5,12 @@ on:
     branches: [ "*" ]
     paths:
       - "containers/**" # Trigger only when Dockerfile changes in a pull request
+  push:
+    paths:
+      - "containers/**" # Trigger only when Dockerfile changes in a pull request
 
 env:
+  CONTAINER_REGISTRY: ${{ 'quay.io' }}
   GO_VER: 1.19
   RHEL_VERSION: ubi9
 
@@ -36,9 +40,19 @@ jobs:
           go-version: ${{ env.GO_VER }}
 
       - name: Build and Push multi-arch Image
-        id: push
+        id: build
         run: |
           make build
           make gha-build
         env:
           GO_VER: ${{ env.GO_VER }}
+
+      - name: Build and Push multi-arch Image
+        id: push
+        if: github.event_name == "push"
+        run: |
+          podman login quay.io -u ${QUAY_USER} -p ${QUAY_TOKEN}
+          make gha-push
+        env:
+          QUAY_USER: ${{ secrets.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }} 
