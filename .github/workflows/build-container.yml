@@ -39,7 +39,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VER }}
 
-      - name: Build and Push multi-arch Image
+      - name: Build multi-arch Image
         id: build
         run: |
           make build
@@ -47,11 +47,11 @@ jobs:
         env:
           GO_VER: ${{ env.GO_VER }}
 
-      - name: Build and Push multi-arch Image
+      - name: Push multi-arch Image
         id: push
         if: github.event_name == "push"
         run: |
-          podman login quay.io -u ${QUAY_USER} -p ${QUAY_TOKEN}
+          podman login ${{ env.CONTAINER_REGISTRY }} -u ${QUAY_USER} -p ${QUAY_TOKEN}
           make gha-push
         env:
           QUAY_USER: ${{ secrets.QUAY_USER }}
