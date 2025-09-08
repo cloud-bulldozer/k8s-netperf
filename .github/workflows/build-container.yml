@@ -54,10 +54,14 @@ jobs:
 
       - name: Push multi-arch Image
         id: push
-        if: github.event_name == "push"
+        if: github.event_name == 'push'
         run: |
           podman login ${{ env.CONTAINER_REGISTRY }} -u ${QUAY_USER} -p ${QUAY_TOKEN}
           make gha-push
         env:
           QUAY_USER: ${{ secrets.QUAY_USER }}
+<<<<<<< HEAD
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }} 
+=======
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+>>>>>>> 59d3d63 (Remove double quotes)
