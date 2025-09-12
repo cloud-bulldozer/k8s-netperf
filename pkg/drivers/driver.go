@@ -41,6 +41,10 @@ func NewDriver(driverName string) Driver {
 		return &uperf{
 			driverName: driverName,
 		}
+	case "ib_write_bw":
+		return &ibWriteBw{
+			driverName: driverName,
+		}
 	default:
 		return &netperf{
 			driverName: driverName,

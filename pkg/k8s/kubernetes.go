@@ -419,47 +419,70 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	// Create iperf service
-	iperfSVC := ServiceParams{
-		Name:      "iperf-service",
-		Namespace: "netperf",
-		Labels:    map[string]string{"role": serverRole},
-		CtlPort:   IperfServerCtlPort,
-		DataPorts: []int32{IperfServerDataPort},
-	}
-	s.IperfService, err = CreateService(iperfSVC, client)
-	if err != nil {
-		return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+	// Helper function to check if a driver is requested
+	containsDriver := func(drivers []string, driver string) bool {
+		for _, d := range drivers {
+			if d == driver {
+				return true
+			}
+		}
+		return false
 	}
 
-	// Create uperf service
-	uperfSVC := ServiceParams{
-		Name:      "uperf-service",
-		Namespace: "netperf",
-		Labels:    map[string]string{"role": serverRole},
-		CtlPort:   UperfServerCtlPort,
-		DataPorts: []int32{UperfServerDataPort},
-	}
-	s.UperfService, err = CreateService(uperfSVC, client)
-	if err != nil {
-		return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+	// Debug: Print requested drivers in BuildSUT
+	log.Debugf("🔥 BuildSUT: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
+
+	// Create services only for requested drivers
+	// If no specific drivers are requested (default behavior), include all standard drivers
+	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "iperf3") {
+		// Create iperf service
+		iperfSVC := ServiceParams{
+			Name:      "iperf-service",
+			Namespace: "netperf",
+			Labels:    map[string]string{"role": serverRole},
+			CtlPort:   IperfServerCtlPort,
+			DataPorts: []int32{IperfServerDataPort},
+		}
+		s.IperfService, err = CreateService(iperfSVC, client)
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+		}
 	}
 
-	// Create netperf service
-	for i := 0; i < 16; i++ {
-		netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "uperf") {
+		// Create uperf service
+		uperfSVC := ServiceParams{
+			Name:      "uperf-service",
+			Namespace: "netperf",
+			Labels:    map[string]string{"role": serverRole},
+			CtlPort:   UperfServerCtlPort,
+			DataPorts: []int32{UperfServerDataPort},
+		}
+		s.UperfService, err = CreateService(uperfSVC, client)
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+		}
 	}
-	netperfSVC := ServiceParams{
-		Name:      "netperf-service",
-		Namespace: "netperf",
-		Labels:    map[string]string{"role": serverRole},
-		CtlPort:   NetperfServerCtlPort,
-		DataPorts: netperfDataPorts,
+
+	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "netperf") {
+		// Create netperf service
+		for i := 0; i < 16; i++ {
+			netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+		}
+		netperfSVC := ServiceParams{
+			Name:      "netperf-service",
+			Namespace: "netperf",
+			Labels:    map[string]string{"role": serverRole},
+			CtlPort:   NetperfServerCtlPort,
+			DataPorts: netperfDataPorts,
+		}
+		s.NetperfService, err = CreateService(netperfSVC, client)
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+		}
 	}
-	s.NetperfService, err = CreateService(netperfSVC, client)
-	if err != nil {
-		return fmt.Errorf("😥 Unable to create netperf service: %v", err)
-	}
+
+	// Note: ib_write_bw doesn't need a service since it uses direct pod IP communication
 	cdpAcross := DeploymentParams{
 		Name:               "client-across",
 		Namespace:          "netperf",
@@ -535,7 +558,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get client node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
@@ -543,7 +566,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		}
-		
+
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
 			if !s.VM {
@@ -562,9 +585,39 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	// Use separate containers for servers
-	dpCommands := [][]string{{"/bin/bash", "-c", "netserver && sleep 10000000"},
-		{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
-		{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)}}
+	var dpCommands [][]string
+
+	// Debug: Print requested drivers for server commands
+	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
+
+	// If no specific drivers are requested (default behavior), include all standard drivers
+	if len(s.RequestedDrivers) == 0 {
+		dpCommands = [][]string{
+			{"/bin/bash", "-c", "netserver && sleep 10000000"},
+			{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+			{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)},
+		}
+	} else {
+		// Add server commands only for requested drivers
+		if containsDriver(s.RequestedDrivers, "netperf") {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
+		}
+		if containsDriver(s.RequestedDrivers, "iperf3") {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
+		}
+		if containsDriver(s.RequestedDrivers, "uperf") {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
+		}
+		if containsDriver(s.RequestedDrivers, "ib_write_bw") {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "stdbuf -oL -eL ib_write_bw -d mlx5_0 -x 3 -F"})
+		}
+	}
+
+	// Debug: Print final dpCommands
+	log.Debugf("🔥 Final dpCommands count: %d", len(dpCommands))
+	for i, cmd := range dpCommands {
+		log.Debugf("🔥 dpCommand[%d]: %v", i, cmd)
+	}
 
 	sdpHost := DeploymentParams{
 		Name:        "server-host",
@@ -670,7 +723,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get server node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
@@ -984,14 +1037,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			Command:         dp.Commands[i],
 			ImagePullPolicy: corev1.PullAlways,
 		}
-		
+
 		// Add privileged security context if requested
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
 				Privileged: pointer.Bool(true),
 			}
 		}
-		
+
 		cmdContainers = append(cmdContainers, container)
 	}
 

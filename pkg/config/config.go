@@ -51,6 +51,7 @@ type PerfScenarios struct {
 	Sockets             uint32
 	Cores               uint32
 	Threads             uint32
+	RequestedDrivers    []string
 	ServerNodeInfo      metrics.NodeInfo
 	ClientNodeInfo      metrics.NodeInfo
 	Client              apiv1.PodList
