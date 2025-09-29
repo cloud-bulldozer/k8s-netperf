@@ -120,7 +120,7 @@ Flags:
   - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
-- `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
+- `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type, but supports fixed rate for RR tests.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
 
@@ -207,6 +207,7 @@ tests :
     samples: 1              # Iterations to run specified test
     messagesize: 1024       # Size of the data-gram
     burst: 1                # Number of transactions inflight at one time. By default, netperf does one transaction at a time. This is netperf's TCP_RR specific option. 
+    rate: 100               # Request rate for transaction generation. Used only for [TCP,UDP]_RR tests when running with uperf as load driver.
     service: false          # If we should test with the server pod behind a service
 ```
 #### Config File v1

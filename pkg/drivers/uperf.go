@@ -85,7 +85,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		<transaction iterations="1">
 		  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
 		</transaction>
-		<transaction duration="%d">
+		<transaction duration="%d" rate="%d">
 		  <flowop type=write options="size=%d"/>
 		  <flowop type=read  options="size=%d"/>		  
 		</transaction>
@@ -93,7 +93,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.Rate, nc.MessageSize, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
