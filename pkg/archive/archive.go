@@ -33,6 +33,7 @@ type Doc struct {
 	Samples           int              `json:"samples"`
 	Messagesize       int              `json:"messageSize"`
 	Burst             int              `json:"burst"`
+	Rate              int              `json:"rate"`
 	Throughput        float64          `json:"throughput"`
 	Latency           float64          `json:"latency"`
 	TputMetric        string           `json:"tputMetric"`
@@ -113,6 +114,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			ExternalServer:    r.ExternalServer,
 			Messagesize:       r.MessageSize,
 			Burst:             r.Burst,
+			Rate:              r.Rate,
 			TputMetric:        r.Metric,
 			LtcyMetric:        ltcyMetric,
 			ServerNodeCPU:     r.ServerMetrics,
@@ -207,6 +209,7 @@ func commonCsvDataFields(row result.Data) []string {
 		strconv.Itoa(row.Samples),
 		strconv.Itoa(row.MessageSize),
 		strconv.Itoa(row.Burst),
+		strconv.Itoa(row.Rate),
 		strconv.FormatFloat(lo, 'f', -1, 64),
 		strconv.FormatFloat(hi, 'f', -1, 64),
 	}

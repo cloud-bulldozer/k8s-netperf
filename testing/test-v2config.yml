@@ -6,3 +6,10 @@ tests:
      duration: 10
      samples: 1
      messagesize: 16384
+   - TCPRR:
+     parallelism: 1
+     profile: "TCP_RR"
+     duration: 10
+     samples: 1
+     rate: 100
+     messagesize: 16384

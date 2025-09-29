@@ -79,13 +79,20 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-stream-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	} else {
+		var transactionConfig string
+		if nc.Rate > 0 {
+			transactionConfig = fmt.Sprintf(`<transaction duration="%d" rate="%d">`, nc.Duration, nc.Rate)
+		} else {
+			transactionConfig = fmt.Sprintf(`<transaction duration="%d">`, nc.Duration)
+		}
+
 		fileContent = fmt.Sprintf(`<?xml version=1.0?>		
 		<profile name="rr-%s-%d-%d">
 		<group nprocs="%d">
 		<transaction iterations="1">
 		  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
 		</transaction>
-		<transaction duration="%d">
+		%s
 		  <flowop type=write options="size=%d"/>
 		  <flowop type=read  options="size=%d"/>		  
 		</transaction>
@@ -93,7 +100,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, transactionConfig, nc.MessageSize, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
@@ -250,7 +257,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 		}
 		sshclient.Close()
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run uperf")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run uperf")
 		} else {
 			return *bytes.NewBuffer(stdout), nil
 		}
@@ -259,7 +266,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
+func (u *uperf) ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = u.driverName
 	sample.Metric = "Mb/s"
@@ -283,7 +290,9 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 
 		normOps = ops - prevOps
 		if normOps != 0 && prevTimestamp != 0.0 {
-			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000
+			// Multiply by parallelism to account for operations being counted across all parallel processes
+			// normOps represents total operations across all processes, but timestamp is wall-clock time
+			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000 * float64(nc.Parallelism)
 			byteSummary = append(byteSummary, bytes-prevBytes)
 			latSummary = append(latSummary, float64(normLtcy))
 			opSummary = append(opSummary, normOps)
