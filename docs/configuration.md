@@ -14,6 +14,7 @@ tests :
     samples: 1              # Iterations to run specified test
     messagesize: 1024       # Size of the data-gram
     burst: 1                # Number of transactions inflight at one time. By default, netperf does one transaction at a time. This is netperf's TCP_RR specific option. 
+    rate: 100               # Request rate for transaction generation. Used only for [TCP,UDP]_RR tests when running with uperf as load driver.
     service: false          # If we should test with the server pod behind a service
 ```
 
