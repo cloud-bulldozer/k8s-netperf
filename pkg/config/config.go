@@ -36,7 +36,9 @@ type PerfScenarios struct {
 	NodeLocal           bool
 	AcrossAZ            bool
 	HostNetwork         bool
+	HostNetworkOnly     bool
 	ExternalServer      bool
+	Privileged          bool
 	Configs             []Config
 	VM                  bool
 	VMImage             string

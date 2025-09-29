@@ -28,6 +28,7 @@ import (
 // Server pod can run multiple containers, each command in Commands will represent a container command
 type DeploymentParams struct {
 	HostNetwork        bool
+	Privileged         bool
 	Name               string
 	Namespace          string
 	Replicas           int32
@@ -318,6 +319,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			Privileged:         s.Privileged,
 		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
@@ -394,6 +396,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			Privileged:         s.Privileged,
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -466,6 +469,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
@@ -480,6 +484,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:      map[string]string{"role": hostNetClientRole},
 		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
+		Privileged:  s.Privileged,
 	}
 	if z != "" {
 		if numNodes > 1 {
@@ -530,15 +535,27 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		if !s.VM {
-			s.ClientAcross, err = deployDeployment(client, cdpAcross)
+		
+		// If HostNetworkOnly mode, get client node info from host network pods
+		if s.HostNetworkOnly && s.HostNetwork {
+			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
 			if err != nil {
 				return err
 			}
-		} else {
-			err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
-			if err != nil {
-				return err
+		}
+		
+		// Only create regular client pods if not in HostNetworkOnly mode
+		if !s.HostNetworkOnly {
+			if !s.VM {
+				s.ClientAcross, err = deployDeployment(client, cdpAcross)
+				if err != nil {
+					return err
+				}
+			} else {
+				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -558,6 +575,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:      map[string]string{"role": hostNetServerRole},
 		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
+		Privileged:  s.Privileged,
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
@@ -569,6 +587,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
 	}
 	if s.NodeLocal {
 		sdp.PodAffinity = corev1.PodAffinity{
@@ -651,26 +670,37 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
+		
+		// If HostNetworkOnly mode, get server node info from host network pods
+		if s.HostNetworkOnly && s.HostNetwork {
+			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
+			if err != nil {
+				return err
+			}
+		}
 	}
-	if !s.VM {
-		s.Server, err = deployDeployment(client, sdp)
-		if err != nil {
-			return err
-		}
-		s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
-		if err != nil {
-			return err
-		}
-		if !s.NodeLocal {
-			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
-		}
-		if err != nil {
-			return err
-		}
-	} else {
-		err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
-		if err != nil {
-			return err
+	// Only create regular server pods if not in HostNetworkOnly mode
+	if !s.HostNetworkOnly {
+		if !s.VM {
+			s.Server, err = deployDeployment(client, sdp)
+			if err != nil {
+				return err
+			}
+			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
+			if err != nil {
+				return err
+			}
+			if !s.NodeLocal {
+				s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
+			}
+			if err != nil {
+				return err
+			}
+		} else {
+			err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -948,13 +978,21 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	for i := 0; i < len(dp.Commands); i++ {
 		// each container should have a unique name
 		containerName := fmt.Sprintf("%s-%d", dp.Name, i)
-		cmdContainers = append(cmdContainers,
-			corev1.Container{
-				Name:            containerName,
-				Image:           dp.Image,
-				Command:         dp.Commands[i],
-				ImagePullPolicy: corev1.PullAlways,
-			})
+		container := corev1.Container{
+			Name:            containerName,
+			Image:           dp.Image,
+			Command:         dp.Commands[i],
+			ImagePullPolicy: corev1.PullAlways,
+		}
+		
+		// Add privileged security context if requested
+		if dp.Privileged {
+			container.SecurityContext = &corev1.SecurityContext{
+				Privileged: pointer.Bool(true),
+			}
+		}
+		
+		cmdContainers = append(cmdContainers, container)
 	}
 
 	// Merge network annotations with default annotations
