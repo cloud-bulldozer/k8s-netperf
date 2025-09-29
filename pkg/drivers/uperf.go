@@ -79,13 +79,20 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-stream-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	} else {
+		var transactionConfig string
+		if nc.Rate > 0 {
+			transactionConfig = fmt.Sprintf(`<transaction duration="%d" rate="%d">`, nc.Duration, nc.Rate)
+		} else {
+			transactionConfig = fmt.Sprintf(`<transaction duration="%d">`, nc.Duration)
+		}
+
 		fileContent = fmt.Sprintf(`<?xml version=1.0?>		
 		<profile name="rr-%s-%d-%d">
 		<group nprocs="%d">
 		<transaction iterations="1">
 		  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
 		</transaction>
-		<transaction duration="%d" rate="%d">
+		%s
 		  <flowop type=write options="size=%d"/>
 		  <flowop type=read  options="size=%d"/>		  
 		</transaction>
@@ -93,7 +100,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.Rate, nc.MessageSize, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, transactionConfig, nc.MessageSize, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
@@ -250,7 +257,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 		}
 		sshclient.Close()
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run uperf")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run uperf")
 		} else {
 			return *bytes.NewBuffer(stdout), nil
 		}
