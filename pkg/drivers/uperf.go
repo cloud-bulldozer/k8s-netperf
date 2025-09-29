@@ -266,7 +266,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
+func (u *uperf) ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
 	sample := sample.Sample{}
 	sample.Driver = u.driverName
 	sample.Metric = "Mb/s"
@@ -290,7 +290,9 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 
 		normOps = ops - prevOps
 		if normOps != 0 && prevTimestamp != 0.0 {
-			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000
+			// Multiply by parallelism to account for operations being counted across all parallel processes
+			// normOps represents total operations across all processes, but timestamp is wall-clock time
+			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000 * float64(nc.Parallelism)
 			byteSummary = append(byteSummary, bytes-prevBytes)
 			latSummary = append(latSummary, float64(normLtcy))
 			opSummary = append(opSummary, normOps)
