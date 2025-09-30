@@ -12,7 +12,7 @@ import (
 )
 
 type Driver interface {
-	IsTestSupported(string) bool
+	IsTestSupported() bool
 	Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error)
 	ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error)
 }

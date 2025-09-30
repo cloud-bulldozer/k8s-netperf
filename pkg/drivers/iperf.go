@@ -39,8 +39,8 @@ type IperfResult struct {
 }
 
 // IsTestSupported Determine if the test is supported for driver
-func (i *iperf3) IsTestSupported(test string) bool {
-	return strings.Contains(test, "STREAM")
+func (i *iperf3) IsTestSupported() bool {
+	return strings.Contains(i.testConfig.Profile, "STREAM")
 }
 
 // Run will invoke iperf3 in a client container

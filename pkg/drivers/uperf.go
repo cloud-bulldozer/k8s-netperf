@@ -38,8 +38,8 @@ type Result struct {
 }
 
 // TestSupported Determine if the test is supported for driver
-func (u *uperf) IsTestSupported(test string) bool {
-	return !strings.Contains(test, "TCP_CRR")
+func (u *uperf) IsTestSupported() bool {
+	return !strings.Contains(u.testConfig.Profile, "TCP_CRR")
 }
 
 // uperf needs "rr" or "stream" profiles which are config files passed to uperf command through -m option

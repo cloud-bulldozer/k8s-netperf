@@ -576,7 +576,7 @@ func executeWorkload(nc config.Config,
 	}
 	npr.Driver = driverName
 	// Check if test is supported
-	if !driver.IsTestSupported(nc.Profile) {
+	if !driver.IsTestSupported() {
 		log.Warnf("Test %s is not supported with driver %s. Skipping.", nc.Profile, npr.Driver)
 		return npr
 	}
