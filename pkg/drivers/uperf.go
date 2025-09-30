@@ -272,30 +272,25 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 	}
 
 	var prevTimestamp, normLtcy float64
-	var prevBytes, prevOps, normOps float64
-	var byteSummary, latSummary, opSummary []float64
+	var prevOps, normOps float64
+	var latSummary, opSummary []float64
 
 	for _, transaction := range transactions {
 
 		timestamp, _ := strconv.ParseFloat(transaction[1], 64)
-		bytes, _ := strconv.ParseFloat(transaction[2], 64)
 		ops, _ := strconv.ParseFloat(transaction[3], 64)
 
 		normOps = ops - prevOps
 		if normOps != 0 && prevTimestamp != 0.0 {
 			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000
-			byteSummary = append(byteSummary, bytes-prevBytes)
 			latSummary = append(latSummary, float64(normLtcy))
 			opSummary = append(opSummary, normOps)
 		}
-		prevTimestamp, prevBytes, prevOps = timestamp, bytes, ops
-
+		prevTimestamp, prevOps = timestamp, ops
 	}
-	averageByte, _ := stats.Mean(byteSummary)
-	averageOps, _ := stats.Mean(opSummary)
-	sample.Throughput = float64(averageByte*8) / 1000000
+	sample.Throughput, _ = stats.Mean(opSummary)
 	sample.Latency99ptile, _ = stats.Percentile(latSummary, 99)
-	log.Debugf("Storing uperf sample throughput: %f Mbps, P99 Latency %f, Average ops: %f ", sample.Throughput, sample.Latency99ptile, averageOps)
+	log.Debugf("Storing uperf sample throughput: P99 Latency %f, Average ops: %f", sample.Latency99ptile, sample.Throughput)
 
 	return sample, nil
 
