@@ -21,14 +21,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-var Netperf netperf
-
-func init() {
-	Netperf = netperf{
-		driverName: "netperf",
-	}
-}
-
 const superNetperf = "super-netperf"
 
 // omniOptions are netperf specific options that we will pass to the netperf client.

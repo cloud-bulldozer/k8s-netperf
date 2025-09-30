@@ -23,14 +23,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-var Iperf iperf3
-
-func init() {
-	Iperf = iperf3{
-		driverName: "iperf",
-	}
-}
-
 type IperfResult struct {
 	Data struct {
 		TCPRetransmit struct {

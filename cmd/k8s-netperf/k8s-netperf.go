@@ -570,23 +570,18 @@ func executeWorkload(nc config.Config,
 	}
 	npr.StartTime = time.Now()
 	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t", hostNet, nc.Service, npr.ExternalServer)
+	driver, err = drivers.NewDriver(driverName, nc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	npr.Driver = driverName
+	// Check if test is supported
+	if !driver.IsTestSupported(nc.Profile) {
+		log.Warnf("Test %s is not supported with driver %s. Skipping.", nc.Profile, npr.Driver)
+		return npr
+	}
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
-		if driverName == "iperf3" {
-			driver = drivers.NewDriver("iperf3")
-			npr.Driver = "iperf3"
-		} else if driverName == "uperf" {
-			driver = drivers.NewDriver("uperf")
-			npr.Driver = "uperf"
-		} else {
-			driver = drivers.NewDriver("netperf")
-			npr.Driver = "netperf"
-		}
-		// Check if test is supported
-		if !driver.IsTestSupported(nc.Profile) {
-			log.Warnf("Test %s is not supported with driver %s. Skipping.", nc.Profile, npr.Driver)
-			return npr
-		}
 		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s)
 		if err != nil {
 			log.Fatal(err)
