@@ -21,14 +21,6 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-var Netperf netperf
-
-func init() {
-	Netperf = netperf{
-		driverName: "netperf",
-	}
-}
-
 const superNetperf = "super-netperf"
 
 // omniOptions are netperf specific options that we will pass to the netperf client.
@@ -208,6 +200,6 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 }
 
 // IsTestSupported Determine if the test is supported for driver
-func (n *netperf) IsTestSupported(test string) bool {
+func (n *netperf) IsTestSupported() bool {
 	return true
 }

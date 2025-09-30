@@ -37,17 +37,9 @@ type Result struct {
 	} `json:"end"`
 }
 
-var Uperf uperf
-
-func init() {
-	Uperf = uperf{
-		driverName: "uperf",
-	}
-}
-
 // TestSupported Determine if the test is supported for driver
-func (u *uperf) IsTestSupported(test string) bool {
-	return !strings.Contains(test, "TCP_CRR")
+func (u *uperf) IsTestSupported() bool {
+	return !strings.Contains(u.testConfig.Profile, "TCP_CRR")
 }
 
 // uperf needs "rr" or "stream" profiles which are config files passed to uperf command through -m option
@@ -260,10 +252,12 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
 func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
+	var prevTimestamp, normLtcy float64
+	var prevBytes, prevOps, normOps float64
+	var byteSummary, latSummary, opSummary []float64
+	var tputUnit string
 	sample := sample.Sample{}
 	sample.Driver = u.driverName
-	sample.Metric = "Mb/s"
-
 	transactions := regexp.MustCompile(`timestamp_ms:(.*) name:Txn2 nr_bytes:(.*) nr_ops:(.*)\r`).FindAllStringSubmatch(stdout.String(), -1)
 
 	// VM output does not have the \r.
@@ -271,17 +265,17 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 		transactions = regexp.MustCompile(`timestamp_ms:(.*) name:Txn2 nr_bytes:(.*) nr_ops:(.*)`).FindAllStringSubmatch(stdout.String(), -1)
 	}
 
-	var prevTimestamp, normLtcy float64
-	var prevBytes, prevOps, normOps float64
-	var byteSummary, latSummary, opSummary []float64
-
 	for _, transaction := range transactions {
 
 		timestamp, _ := strconv.ParseFloat(transaction[1], 64)
 		bytes, _ := strconv.ParseFloat(transaction[2], 64)
 		ops, _ := strconv.ParseFloat(transaction[3], 64)
 
+		// A RR transaction has 2 ops
 		normOps = ops - prevOps
+		if strings.Contains(u.testConfig.Profile, "RR") {
+			normOps = normOps / 2
+		}
 		if normOps != 0 && prevTimestamp != 0.0 {
 			normLtcy = ((timestamp - prevTimestamp) / float64(normOps)) * 1000
 			byteSummary = append(byteSummary, bytes-prevBytes)
@@ -289,13 +283,17 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 			opSummary = append(opSummary, normOps)
 		}
 		prevTimestamp, prevBytes, prevOps = timestamp, bytes, ops
-
 	}
-	averageByte, _ := stats.Mean(byteSummary)
-	averageOps, _ := stats.Mean(opSummary)
-	sample.Throughput = float64(averageByte*8) / 1000000
+	if strings.Contains(u.testConfig.Profile, "RR") {
+		sample.Throughput, _ = stats.Mean(opSummary)
+		tputUnit = "OP/s"
+	} else {
+		tputBytes, _ := stats.Mean(byteSummary)
+		sample.Throughput = tputBytes * 8 / 1000000
+		tputUnit = "Mbps"
+	}
 	sample.Latency99ptile, _ = stats.Percentile(latSummary, 99)
-	log.Debugf("Storing uperf sample throughput: %f Mbps, P99 Latency %f, Average ops: %f ", sample.Throughput, sample.Latency99ptile, averageOps)
+	log.Debugf("Storing uperf sample throughput: P99 Latency %f, Throughput: %f %s", sample.Latency99ptile, sample.Throughput, tputUnit)
 
 	return sample, nil
 
