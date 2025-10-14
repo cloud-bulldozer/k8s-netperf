@@ -1,10 +1,10 @@
 module github.com/cloud-bulldozer/k8s-netperf
 
-go 1.19
+go 1.22
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
-	github.com/cloud-bulldozer/go-commons v1.0.16
+	github.com/cloud-bulldozer/go-commons v1.0.19
 	github.com/google/uuid v1.3.0
 	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.6.6
