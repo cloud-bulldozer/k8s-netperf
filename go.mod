@@ -10,7 +10,7 @@ require (
 	github.com/montanaflynn/stats v0.6.6
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/prometheus/common v0.44.0
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.6.1
 	golang.org/x/crypto v0.14.0
 	golang.org/x/text v0.13.0
