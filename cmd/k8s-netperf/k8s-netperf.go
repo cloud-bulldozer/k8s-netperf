@@ -89,6 +89,11 @@ var rootCmd = &cobra.Command{
 		if !(uperf || netperf || iperf3) {
 			log.Fatalf("😭 At least one driver needs to be enabled")
 		}
+
+		// Validate mutually exclusive UDN flags
+		if udnl2 && udnl3 {
+			log.Fatal("flags --udnl2 and --udnl3 are mutually exclusive; please set only one")
+		}
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -643,7 +648,6 @@ func main() {
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
 	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
-	rootCmd.MarkFlagsMutuallyExclusive("udnl2", "udnl3")
 	rootCmd.MarkFlagsMutuallyExclusive("all", "hostNet")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
