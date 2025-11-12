@@ -1,11 +1,7 @@
 
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/logo-light.png">
-    <source media="(prefers-color-scheme: light)" srcset="images/logo-dark.png">
-    <img src="images/logo-light.png" alt="k8s-netperf Logo" width="300">
-  </picture>
-</div>
+<p align="center">
+    <img src="images/logo-light.jpg" alt="k8s-netperf Logo" width="300">
+</p>
 
 # k8s-netperf - Kubernetes Network Performance
 
