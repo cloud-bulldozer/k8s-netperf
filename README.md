@@ -1,3 +1,12 @@
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/logo-light.png">
+    <source media="(prefers-color-scheme: light)" srcset="images/logo-dark.png">
+    <img src="images/logo-light.png" alt="k8s-netperf Logo" width="300">
+  </picture>
+</div>
+
 # k8s-netperf - Kubernetes Network Performance
 
 A tool to run network performance tests in Kubernetes clusters.
