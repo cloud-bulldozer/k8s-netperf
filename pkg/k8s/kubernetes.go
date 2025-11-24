@@ -549,7 +549,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get client node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
@@ -557,7 +557,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		}
-		
+
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
 			if !s.VM {
@@ -684,7 +684,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get server node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
@@ -1027,14 +1027,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			Command:         dp.Commands[i],
 			ImagePullPolicy: corev1.PullAlways,
 		}
-		
+
 		// Add privileged security context if requested
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
 				Privileged: pointer.Bool(true),
 			}
 		}
-		
+
 		cmdContainers = append(cmdContainers, container)
 	}
 

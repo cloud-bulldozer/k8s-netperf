@@ -1,0 +1,53 @@
+version: 2
+
+run:
+  timeout: 5m
+  go: '1.19'
+  skip-dirs:
+    - vendor
+    - pkg/kubevirt
+  skip-files:
+    - ".*\\.pb\\.go$"
+  modules-download-mode: vendor
+
+formatters:
+  disable-all: true
+  enable:
+    - gofmt
+    - goimports
+
+linters:
+  disable-all: true
+  disable:
+    - errcheck  # Disabled due to too many false positives on cleanup code
+    - staticcheck  # Disabled due to too many stylistic suggestions
+  enable:
+    - misspell
+    - ineffassign
+    - govet
+    - unused
+
+formatters-settings:
+  gofmt:
+    simplify: true
+
+linters-settings: {}
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - vendor
+    - pkg/kubevirt
+  exclude-rules:
+    - path: pkg/kubevirt/
+      linters:
+        - all
+    - path: vendor/
+      linters:
+        - all
+    # Exclude stylistic staticcheck rules
+    - linters:
+        - staticcheck
+      text: "^(ST1005|QF1001|QF1003|QF1008):"

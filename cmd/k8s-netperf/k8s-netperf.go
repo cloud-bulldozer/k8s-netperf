@@ -539,14 +539,6 @@ func executePairWorkloads(nc config.Config, s config.PerfScenarios, hostNet bool
 	mu.Unlock()
 }
 
-// executeWorkload executes the workload and returns the result data.
-func executeWorkload(nc config.Config,
-	s config.PerfScenarios,
-	hostNet bool,
-	driverName string, virt bool) result.Data {
-	return executeWorkloadWithPair(nc, s, hostNet, driverName, virt, 0)
-}
-
 // executeWorkloadWithPair executes the workload for a specific pair index and returns the result data.
 func executeWorkloadWithPair(nc config.Config,
 	s config.PerfScenarios,

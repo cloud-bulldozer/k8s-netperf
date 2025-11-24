@@ -71,14 +71,14 @@ type PerfScenarios struct {
 	IperfService      *apiv1.Service
 	UperfService      *apiv1.Service
 	// Arrays to hold services for multiple pairs
-	NetperfServices   []*apiv1.Service
-	IperfServices     []*apiv1.Service
-	UperfServices     []*apiv1.Service
-	RestConfig        rest.Config
-	ClientSet         *kubernetes.Clientset
-	KClient           *kubevirtv1.KubevirtV1Client
-	DClient           *dynamic.DynamicClient
-	SSHClient         *goph.Client
+	NetperfServices []*apiv1.Service
+	IperfServices   []*apiv1.Service
+	UperfServices   []*apiv1.Service
+	RestConfig      rest.Config
+	ClientSet       *kubernetes.Clientset
+	KClient         *kubevirtv1.KubevirtV1Client
+	DClient         *dynamic.DynamicClient
+	SSHClient       *goph.Client
 }
 
 // struct for bridge options
