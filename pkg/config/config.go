@@ -51,6 +51,7 @@ type PerfScenarios struct {
 	Sockets             uint32
 	Cores               uint32
 	Threads             uint32
+	PairCount           int
 	ServerNodeInfo      metrics.NodeInfo
 	ClientNodeInfo      metrics.NodeInfo
 	Client              apiv1.PodList
@@ -58,14 +59,26 @@ type PerfScenarios struct {
 	ClientAcross        apiv1.PodList
 	ClientHost          apiv1.PodList
 	ServerHost          apiv1.PodList
-	NetperfService      *apiv1.Service
-	IperfService        *apiv1.Service
-	UperfService        *apiv1.Service
-	RestConfig          rest.Config
-	ClientSet           *kubernetes.Clientset
-	KClient             *kubevirtv1.KubevirtV1Client
-	DClient             *dynamic.DynamicClient
-	SSHClient           *goph.Client
+	// Arrays to hold multiple pairs
+	ClientPairs       []apiv1.PodList
+	ServerPairs       []apiv1.PodList
+	ClientAcrossPairs []apiv1.PodList
+	ClientHostPairs   []apiv1.PodList
+	ServerHostPairs   []apiv1.PodList
+	ServerNodeInfos   []metrics.NodeInfo
+	ClientNodeInfos   []metrics.NodeInfo
+	NetperfService    *apiv1.Service
+	IperfService      *apiv1.Service
+	UperfService      *apiv1.Service
+	// Arrays to hold services for multiple pairs
+	NetperfServices   []*apiv1.Service
+	IperfServices     []*apiv1.Service
+	UperfServices     []*apiv1.Service
+	RestConfig        rest.Config
+	ClientSet         *kubernetes.Clientset
+	KClient           *kubevirtv1.KubevirtV1Client
+	DClient           *dynamic.DynamicClient
+	SSHClient         *goph.Client
 }
 
 // struct for bridge options

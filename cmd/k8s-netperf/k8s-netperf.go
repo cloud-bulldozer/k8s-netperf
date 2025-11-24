@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloud-bulldozer/go-commons/indexers"
@@ -25,6 +26,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -67,6 +69,7 @@ var (
 	cores            uint32
 	threads          uint32
 	privileged       bool
+	pairs            int
 )
 
 var rootCmd = &cobra.Command{
@@ -147,6 +150,7 @@ var rootCmd = &cobra.Command{
 			Cores:           cores,
 			Threads:         threads,
 			Privileged:      privileged,
+			PairCount:       pairs,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -289,20 +293,13 @@ var rootCmd = &cobra.Command{
 				nc.Metric = metric
 				nc.AcrossAZ = acrossAZ
 				// No need to run hostNetwork through Service.
-				var pr result.Data
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
-						pr = executeWorkload(nc, s, true, driver, false)
-						if len(pr.Profile) > 1 {
-							sr.Results = append(sr.Results, pr)
-						}
+						executePairWorkloads(nc, s, true, driver, false, &sr)
 					}
 					// Skip podNetwork tests if hostNetOnly is enabled
 					if !hostNetOnly {
-						pr = executeWorkload(nc, s, false, driver, false)
-						if len(pr.Profile) > 1 {
-							sr.Results = append(sr.Results, pr)
-						}
+						executePairWorkloads(nc, s, false, driver, false, &sr)
 					}
 				}
 			}
@@ -323,20 +320,13 @@ var rootCmd = &cobra.Command{
 				nc.Metric = metric
 				nc.AcrossAZ = acrossAZ
 				// No need to run hostNetwork through Service.
-				var pr result.Data
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
-						pr = executeWorkload(nc, s, true, driver, true)
-						if len(pr.Profile) > 1 {
-							sr.Results = append(sr.Results, pr)
-						}
+						executePairWorkloads(nc, s, true, driver, true, &sr)
 					}
 					// Skip podNetwork tests if hostNetOnly is enabled
 					if !hostNetOnly {
-						pr = executeWorkload(nc, s, false, driver, true)
-						if len(pr.Profile) > 1 {
-							sr.Results = append(sr.Results, pr)
-						}
+						executePairWorkloads(nc, s, false, driver, true, &sr)
 					}
 				}
 			}
@@ -499,29 +489,129 @@ func parseNetworkConfig(jsonFile string) (string, string, error) {
 	return serverIP, clientIP, nil
 }
 
+// executePairWorkloads executes workloads across all pairs concurrently (if multiple pairs)
+// and aggregates the results
+func executePairWorkloads(nc config.Config, s config.PerfScenarios, hostNet bool,
+	driverName string, virt bool, sr *result.ScenarioResults) {
+
+	pairCount := s.PairCount
+	if pairCount < 1 {
+		pairCount = 1
+	}
+
+	if pairCount == 1 {
+		// Single pair - execute normally
+		pr := executeWorkloadWithPair(nc, s, hostNet, driverName, virt, 0)
+		if len(pr.Profile) > 1 {
+			sr.Results = append(sr.Results, pr)
+		}
+		return
+	}
+
+	// Multiple pairs - execute concurrently
+	log.Infof("🚀 Executing workload across %d pairs concurrently", pairCount)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	results := make([]result.Data, pairCount)
+
+	for i := 0; i < pairCount; i++ {
+		wg.Add(1)
+		go func(pairIndex int) {
+			defer wg.Done()
+			log.Infof("▶️  Starting workload for pair %d/%d", pairIndex+1, pairCount)
+			results[pairIndex] = executeWorkloadWithPair(nc, s, hostNet, driverName, virt, pairIndex)
+			log.Infof("✅ Completed workload for pair %d/%d", pairIndex+1, pairCount)
+		}(i)
+	}
+
+	wg.Wait()
+	log.Infof("✅ All %d pairs completed", pairCount)
+
+	// Store individual results
+	mu.Lock()
+	for i, pr := range results {
+		if len(pr.Profile) > 1 {
+			// Add pair identifier to result metadata
+			pr.PairIndex = i
+			sr.Results = append(sr.Results, pr)
+		}
+	}
+	mu.Unlock()
+}
+
 // executeWorkload executes the workload and returns the result data.
 func executeWorkload(nc config.Config,
 	s config.PerfScenarios,
 	hostNet bool,
 	driverName string, virt bool) result.Data {
+	return executeWorkloadWithPair(nc, s, hostNet, driverName, virt, 0)
+}
+
+// executeWorkloadWithPair executes the workload for a specific pair index and returns the result data.
+func executeWorkloadWithPair(nc config.Config,
+	s config.PerfScenarios,
+	hostNet bool,
+	driverName string, virt bool, pairIndex int) result.Data {
 	serverIP := ""
 	var err error
-	Client := s.Client
+	var Client apiv1.PodList
+	var clientNodeInfo, serverNodeInfo metrics.NodeInfo
+
+	// Select the appropriate client and server based on pair count
+	if s.PairCount > 1 {
+		if hostNet {
+			Client = s.ClientHostPairs[pairIndex]
+		} else if !s.NodeLocal && !s.ExternalServer {
+			Client = s.ClientAcrossPairs[pairIndex]
+		} else {
+			Client = s.ClientPairs[pairIndex]
+		}
+		clientNodeInfo = s.ClientNodeInfos[pairIndex]
+		serverNodeInfo = s.ServerNodeInfos[pairIndex]
+	} else {
+		Client = s.Client
+		if !s.NodeLocal && !s.ExternalServer {
+			Client = s.ClientAcross
+		}
+		if hostNet {
+			Client = s.ClientHost
+		}
+		clientNodeInfo = s.ClientNodeInfo
+		serverNodeInfo = s.ServerNodeInfo
+	}
+
 	var driver drivers.Driver
 	npr := result.Data{}
 	if serverIPAddr != "" {
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
 	} else if nc.Service {
-		if driverName == "iperf3" {
-			serverIP = s.IperfService.Spec.ClusterIP
-		} else if driverName == "uperf" {
-			serverIP = s.UperfService.Spec.ClusterIP
+		// Select the appropriate service based on pair count
+		if s.PairCount > 1 {
+			if driverName == "iperf3" {
+				serverIP = s.IperfServices[pairIndex].Spec.ClusterIP
+			} else if driverName == "uperf" {
+				serverIP = s.UperfServices[pairIndex].Spec.ClusterIP
+			} else {
+				serverIP = s.NetperfServices[pairIndex].Spec.ClusterIP
+			}
 		} else {
-			serverIP = s.NetperfService.Spec.ClusterIP
+			if driverName == "iperf3" {
+				serverIP = s.IperfService.Spec.ClusterIP
+			} else if driverName == "uperf" {
+				serverIP = s.UperfService.Spec.ClusterIP
+			} else {
+				serverIP = s.NetperfService.Spec.ClusterIP
+			}
 		}
 	} else if s.Udn {
-		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0])
+		var serverPod apiv1.Pod
+		if s.PairCount > 1 {
+			serverPod = s.ServerPairs[pairIndex].Items[0]
+		} else {
+			serverPod = s.Server.Items[0]
+		}
+		serverIP, err = k8s.ExtractUdnIp(serverPod)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -535,12 +625,18 @@ func executeWorkload(nc config.Config,
 			npr.UdnInfo = npr.UdnInfo + " - " + s.UdnPluginBinding
 		}
 	} else if s.BridgeNetwork != "" {
+		var serverPod apiv1.Pod
+		if s.PairCount > 1 {
+			serverPod = s.ServerPairs[pairIndex].Items[0]
+		} else {
+			serverPod = s.Server.Items[0]
+		}
 		// For regular pods, extract bridge IP from network status
-		serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
+		serverIP, err = k8s.ExtractBridgeIp(serverPod, s.BridgeNetwork, s.BridgeNamespace)
 		if err != nil {
 			log.Errorf("Failed to extract bridge IP: %v", err)
 			// Fall back to default IP
-			serverIP = s.Server.Items[0].Status.PodIP
+			serverIP = serverPod.Status.PodIP
 		}
 		log.Debugf("Using bridge network IP: %s (interface: net1)", serverIP)
 
@@ -551,18 +647,23 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
-		if hostNet {
-			serverIP = s.ServerHost.Items[0].Status.PodIP
+		var serverPod apiv1.Pod
+		if s.PairCount > 1 {
+			if hostNet {
+				serverPod = s.ServerHostPairs[pairIndex].Items[0]
+			} else {
+				serverPod = s.ServerPairs[pairIndex].Items[0]
+			}
 		} else {
-			serverIP = s.Server.Items[0].Status.PodIP
+			if hostNet {
+				serverPod = s.ServerHost.Items[0]
+			} else {
+				serverPod = s.Server.Items[0]
+			}
 		}
+		serverIP = serverPod.Status.PodIP
 	}
-	if !s.NodeLocal && !s.ExternalServer {
-		Client = s.ClientAcross
-	}
-	if hostNet {
-		Client = s.ClientHost
-	}
+
 	npr.Config = nc
 	npr.Metric = nc.Metric
 	npr.Service = nc.Service
@@ -574,7 +675,7 @@ func executeWorkload(nc config.Config,
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t", hostNet, nc.Service, npr.ExternalServer)
+	log.Debugf("Executing workloads for pair %d. hostNetwork is %t, service is %t, externalServer is %t", pairIndex, hostNet, nc.Service, npr.ExternalServer)
 	driver, err = drivers.NewDriver(driverName, nc)
 	if err != nil {
 		log.Fatal(err)
@@ -623,8 +724,8 @@ func executeWorkload(nc config.Config,
 		npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 	}
 	npr.EndTime = time.Now()
-	npr.ClientNodeInfo = s.ClientNodeInfo
-	npr.ServerNodeInfo = s.ServerNodeInfo
+	npr.ClientNodeInfo = clientNodeInfo
+	npr.ServerNodeInfo = serverNodeInfo
 
 	return npr
 }
@@ -663,6 +764,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
 	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context")
+	rootCmd.Flags().IntVar(&pairs, "pairs", 1, "Number of concurrent client-server pairs to run")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)

@@ -295,6 +295,20 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
 	var err error
 
+	// Initialize pair arrays if using multiple pairs
+	if s.PairCount > 1 {
+		s.ClientPairs = make([]corev1.PodList, s.PairCount)
+		s.ServerPairs = make([]corev1.PodList, s.PairCount)
+		s.ClientAcrossPairs = make([]corev1.PodList, s.PairCount)
+		s.ClientHostPairs = make([]corev1.PodList, s.PairCount)
+		s.ServerHostPairs = make([]corev1.PodList, s.PairCount)
+		s.ClientNodeInfos = make([]metrics.NodeInfo, s.PairCount)
+		s.ServerNodeInfos = make([]metrics.NodeInfo, s.PairCount)
+		s.NetperfServices = make([]*corev1.Service, s.PairCount)
+		s.IperfServices = make([]*corev1.Service, s.PairCount)
+		s.UperfServices = make([]*corev1.Service, s.PairCount)
+	}
+
 	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
 	workerNodeSelectorExpression := &corev1.NodeSelector{
 		NodeSelectorTerms: []corev1.NodeSelectorTerm{
@@ -700,6 +714,35 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 			if err != nil {
 				return err
+			}
+		}
+	}
+
+	// If using multiple pairs, create additional pairs
+	if s.PairCount > 1 {
+		log.Infof("🔨 Creating %d client-server pairs", s.PairCount)
+
+		// Copy pair 0 data from legacy fields to arrays
+		if !s.HostNetworkOnly {
+			s.ClientAcrossPairs[0] = s.ClientAcross
+			s.ServerPairs[0] = s.Server
+		}
+		if s.HostNetwork {
+			s.ClientHostPairs[0] = s.ClientHost
+			s.ServerHostPairs[0] = s.ServerHost
+		}
+		s.ClientNodeInfos[0] = s.ClientNodeInfo
+		s.ServerNodeInfos[0] = s.ServerNodeInfo
+		s.NetperfServices[0] = s.NetperfService
+		s.IperfServices[0] = s.IperfService
+		s.UperfServices[0] = s.UperfService
+
+		// Create additional pairs (1 through PairCount-1)
+		for i := 1; i < s.PairCount; i++ {
+			log.Infof("🔨 Creating pair %d of %d", i+1, s.PairCount)
+			err = deployPair(client, i, s, z, numNodes, zones, acrossZone, workerNodeSelectorExpression)
+			if err != nil {
+				return fmt.Errorf("failed to create pair %d: %v", i, err)
 			}
 		}
 	}
@@ -1172,4 +1215,295 @@ func DestroyDeployment(client *kubernetes.Clientset, dp appsv1.Deployment) error
 		PropagationPolicy:  &deletePolicy,
 		GracePeriodSeconds: &gracePeriod,
 	})
+}
+
+// deployPair creates client and server deployments for a specific pair index
+func deployPair(client *kubernetes.Clientset, pairIndex int, s *config.PerfScenarios,
+	z string, numNodes int, zones map[string]int, acrossZone string,
+	workerNodeSelectorExpression *corev1.NodeSelector) error {
+
+	pairSuffix := fmt.Sprintf("-%d", pairIndex)
+	pairLabel := fmt.Sprintf("%d", pairIndex)
+
+	// Create services for this pair
+	var netperfDataPorts []int32
+	for i := 0; i < 16; i++ {
+		netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+	}
+
+	serverRoleLabel := serverRole + pairSuffix
+
+	// Create iperf service for this pair
+	iperfSVC := ServiceParams{
+		Name:      "iperf-service" + pairSuffix,
+		Namespace: "netperf",
+		Labels:    map[string]string{"role": serverRoleLabel, "pair": pairLabel},
+		CtlPort:   IperfServerCtlPort,
+		DataPorts: []int32{IperfServerDataPort},
+	}
+	iperfService, err := CreateService(iperfSVC, client)
+	if err != nil {
+		return fmt.Errorf("unable to create iperf service for pair %d: %v", pairIndex, err)
+	}
+	s.IperfServices[pairIndex] = iperfService
+
+	// Create uperf service for this pair
+	uperfSVC := ServiceParams{
+		Name:      "uperf-service" + pairSuffix,
+		Namespace: "netperf",
+		Labels:    map[string]string{"role": serverRoleLabel, "pair": pairLabel},
+		CtlPort:   UperfServerCtlPort,
+		DataPorts: []int32{UperfServerDataPort},
+	}
+	uperfService, err := CreateService(uperfSVC, client)
+	if err != nil {
+		return fmt.Errorf("unable to create uperf service for pair %d: %v", pairIndex, err)
+	}
+	s.UperfServices[pairIndex] = uperfService
+
+	// Create netperf service for this pair
+	netperfSVC := ServiceParams{
+		Name:      "netperf-service" + pairSuffix,
+		Namespace: "netperf",
+		Labels:    map[string]string{"role": serverRoleLabel, "pair": pairLabel},
+		CtlPort:   NetperfServerCtlPort,
+		DataPorts: netperfDataPorts,
+	}
+	netperfService, err := CreateService(netperfSVC, client)
+	if err != nil {
+		return fmt.Errorf("unable to create netperf service for pair %d: %v", pairIndex, err)
+	}
+	s.NetperfServices[pairIndex] = netperfService
+
+	// Use separate containers for servers
+	dpCommands := [][]string{{"/bin/bash", "-c", "netserver && sleep 10000000"},
+		{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
+		{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)}}
+
+	// Create anti-affinity rules specific to this pair
+	clientRoleAffinity := []corev1.PodAffinityTerm{
+		{
+			LabelSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientRole}},
+					{Key: "pair", Operator: metav1.LabelSelectorOpIn, Values: []string{pairLabel}},
+				},
+			},
+			TopologyKey: "kubernetes.io/hostname",
+		},
+	}
+
+	clientAcrossRoleLabel := clientAcrossRole + pairSuffix
+	hostNetClientRoleLabel := hostNetClientRole + pairSuffix
+
+	// Create client-across deployment
+	cdpAcross := DeploymentParams{
+		Name:               "client-across" + pairSuffix,
+		Namespace:          "netperf",
+		Replicas:           1,
+		Image:              k8sNetperfImage,
+		Labels:             map[string]string{"role": clientAcrossRoleLabel, "pair": pairLabel},
+		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+		Port:               NetperfServerCtlPort,
+		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
+	}
+
+	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
+	}
+
+	if z != "" && numNodes > 1 {
+		cdpAcross.NodeAffinity = corev1.NodeAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
+			RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
+		}
+	} else {
+		cdpAcross.NodeAffinity = corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+		}
+	}
+
+	if !s.HostNetworkOnly {
+		if !s.VM {
+			s.ClientAcrossPairs[pairIndex], err = deployDeployment(client, cdpAcross)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Declare cdpHostAcross outside the if block so it's accessible later
+	var cdpHostAcross DeploymentParams
+
+	// Create host network client if needed
+	if s.HostNetwork {
+		cdpHostAcross = DeploymentParams{
+			Name:        "client-host" + pairSuffix,
+			Namespace:   "netperf",
+			Replicas:    1,
+			HostNetwork: true,
+			Image:       k8sNetperfImage,
+			Labels:      map[string]string{"role": hostNetClientRoleLabel, "pair": pairLabel},
+			Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+			Port:        NetperfServerCtlPort,
+			Privileged:  s.Privileged,
+		}
+
+		if z != "" && numNodes > 1 {
+			cdpHostAcross.NodeAffinity = corev1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
+			}
+		}
+
+		cdpHostAcross.PodAntiAffinity = corev1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
+		}
+
+		if !s.VM {
+			s.ClientHostPairs[pairIndex], err = deployDeployment(client, cdpHostAcross)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// serverRoleLabel already declared above for services
+	hostNetServerRoleLabel := hostNetServerRole + pairSuffix
+
+	sdp := DeploymentParams{
+		Name:               "server" + pairSuffix,
+		Namespace:          "netperf",
+		Replicas:           1,
+		Image:              k8sNetperfImage,
+		Labels:             map[string]string{"role": serverRoleLabel, "pair": pairLabel},
+		Commands:           dpCommands,
+		Port:               NetperfServerCtlPort,
+		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		Privileged:         s.Privileged,
+	}
+
+	// Anti-affinity: server should not be on same node as its pair's client-across
+	serverAntiAffinity := []corev1.PodAffinityTerm{
+		{
+			LabelSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRoleLabel}},
+					{Key: "pair", Operator: metav1.LabelSelectorOpIn, Values: []string{pairLabel}},
+				},
+			},
+			TopologyKey: "kubernetes.io/hostname",
+		},
+	}
+
+	sdp.PodAntiAffinity = corev1.PodAntiAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: serverAntiAffinity,
+	}
+
+	if z != "" {
+		var affinity corev1.NodeAffinity
+		if numNodes > 1 {
+			nodeZone := zoneNodeSelectorExpression(*client, z, "server")
+			if s.AcrossAZ {
+				nodeZone = zoneNodeSelectorExpression(*client, acrossZone, "server")
+			}
+			affinity = corev1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: nodeZone,
+				RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
+			}
+		} else {
+			affinity = corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+			}
+		}
+		sdp.NodeAffinity = affinity
+	}
+
+	if !s.HostNetworkOnly {
+		if !s.VM {
+			s.ServerPairs[pairIndex], err = deployDeployment(client, sdp)
+			if err != nil {
+				return err
+			}
+			s.ServerNodeInfos[pairIndex], err = GetPodNodeInfo(client, labels.Set(sdp.Labels).String())
+			if err != nil {
+				return err
+			}
+			s.ClientNodeInfos[pairIndex], err = GetPodNodeInfo(client, labels.Set(cdpAcross.Labels).String())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Create host network server if needed
+	if s.HostNetwork {
+		sdpHost := DeploymentParams{
+			Name:        "server-host" + pairSuffix,
+			Namespace:   "netperf",
+			Replicas:    1,
+			HostNetwork: true,
+			Image:       k8sNetperfImage,
+			Labels:      map[string]string{"role": hostNetServerRoleLabel, "pair": pairLabel},
+			Commands:    dpCommands,
+			Port:        NetperfServerCtlPort,
+			Privileged:  s.Privileged,
+		}
+
+		hostServerAntiAffinity := []corev1.PodAffinityTerm{
+			{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRoleLabel}},
+						{Key: "pair", Operator: metav1.LabelSelectorOpIn, Values: []string{pairLabel}},
+					},
+				},
+				TopologyKey: "kubernetes.io/hostname",
+			},
+		}
+
+		sdpHost.PodAntiAffinity = corev1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: hostServerAntiAffinity,
+		}
+
+		if z != "" {
+			var affinity corev1.NodeAffinity
+			if numNodes > 1 {
+				nodeZone := zoneNodeSelectorExpression(*client, z, "server")
+				if s.AcrossAZ {
+					nodeZone = zoneNodeSelectorExpression(*client, acrossZone, "server")
+				}
+				affinity = corev1.NodeAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: nodeZone,
+					RequiredDuringSchedulingIgnoredDuringExecution:  workerNodeSelectorExpression,
+				}
+			} else {
+				affinity = corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
+				}
+			}
+			sdpHost.NodeAffinity = affinity
+		}
+
+		if !s.VM {
+			s.ServerHostPairs[pairIndex], err = deployDeployment(client, sdpHost)
+			if err != nil {
+				return err
+			}
+		}
+
+		if s.HostNetworkOnly {
+			s.ClientNodeInfos[pairIndex], err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
+			if err != nil {
+				return err
+			}
+			s.ServerNodeInfos[pairIndex], err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
