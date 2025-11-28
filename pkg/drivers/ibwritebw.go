@@ -172,12 +172,12 @@ func (i *ibWriteBw) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.
 	// We want the 4th column which is "BW average[MiB/sec]"
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip header lines and empty lines
 		if strings.Contains(line, "#bytes") || strings.Contains(line, "---") || line == "" {
 			continue
 		}
-		
+
 		// Look for data lines with numeric values
 		fields := strings.Fields(line)
 		if len(fields) >= 4 {
