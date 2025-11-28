@@ -110,7 +110,7 @@ var rootCmd = &cobra.Command{
 		if ibWriteBwEnabled && (!privileged || !hostNetOnly) {
 			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
 		}
-		
+
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
 			netperf = false
@@ -302,7 +302,7 @@ var rootCmd = &cobra.Command{
 
 		// Set requested drivers BEFORE BuildSUT
 		s.RequestedDrivers = requestedDrivers
-		
+
 		// Debug: Print requested drivers
 		log.Debugf("🔥 Requested drivers: %v", requestedDrivers)
 		log.Debugf("🔥 netperf=%v, iperf3=%v, uperf=%v, ibWriteBw=%v", netperf, iperf3, uperf, ibWriteBwEnabled)
