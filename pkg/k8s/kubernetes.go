@@ -701,7 +701,15 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
 		}
 		if containsDriver(s.RequestedDrivers, "ib_write_bw") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "stdbuf -oL -eL ib_write_bw -d mlx5_0 -x 3 -F"})
+			// Parse nic:gid parameters for ib_write_bw server
+			parts := strings.Split(s.IbWriteBwParams, ":")
+			if len(parts) != 2 {
+				log.Fatalf("Invalid ib-write-bw server config: %s", s.IbWriteBwParams)
+			}
+			device := strings.TrimSpace(parts[0])
+			gid := strings.TrimSpace(parts[1])
+			ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F", device, gid)
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
 		}
 	}
 

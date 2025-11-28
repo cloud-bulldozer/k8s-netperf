@@ -38,6 +38,28 @@ func (i *ibWriteBw) IsTestSupported() bool {
 	return strings.ToUpper(i.testConfig.Profile) == "UDP_STREAM"
 }
 
+// parseNicGid parses the nic:gid parameter and returns the device and GID index
+func parseNicGid(nicGidParam string) (string, string, error) {
+	// Parameter is now mandatory
+	if strings.TrimSpace(nicGidParam) == "" {
+		return "", "", fmt.Errorf("ib-write-bw requires nic:gid parameter (e.g., mlx5_0:0)")
+	}
+
+	parts := strings.Split(nicGidParam, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid nic:gid format '%s', expected format: 'device:gid_index'", nicGidParam)
+	}
+
+	device := strings.TrimSpace(parts[0])
+	gid := strings.TrimSpace(parts[1])
+
+	if device == "" || gid == "" {
+		return "", "", fmt.Errorf("nic and gid cannot be empty in '%s'", nicGidParam)
+	}
+
+	return device, gid, nil
+}
+
 // Run will invoke ib_write_bw in a client container
 func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	rc rest.Config,
@@ -49,8 +71,14 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	log.Debugf("Client (%s,%s) starting ib_write_bw against server: %s", pod.Name, pod.Status.PodIP, serverIP)
 	config.Show(nc, i.driverName)
 
-	// ib_write_bw client command: "ib_write_bw -d mlx5_0 -x 3 -F $server_ip"
-	cmd := []string{"stdbuf", "-oL", "-eL", "ib_write_bw", "-d", "mlx5_0", "-x", "3", "-F", serverIP}
+	// Parse the nic:gid parameter
+	device, gidIndex, err := parseNicGid(perf.IbWriteBwParams)
+	if err != nil {
+		return stdout, fmt.Errorf("failed to parse ib-write-bw parameter: %v", err)
+	}
+
+	// ib_write_bw client command: "ib_write_bw -d {device} -x {gid} -F $server_ip"
+	cmd := []string{"stdbuf", "-oL", "-eL", "ib_write_bw", "-d", device, "-x", gidIndex, "-F", serverIP}
 
 	// Add duration if specified (ib_write_bw uses -D for duration in seconds)
 	if nc.Duration > 0 {
