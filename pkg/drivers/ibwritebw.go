@@ -32,9 +32,9 @@ type ibWriteBw struct {
 }
 
 // IsTestSupported determines if the test is supported for ib_write_bw driver
-func (i *ibWriteBw) IsTestSupported(test string) bool {
-	// ib_write_bw only supports UDP_STREAM profile
-	return strings.ToUpper(test) == "UDP_STREAM"
+func (i *ibWriteBw) IsTestSupported() bool {
+	// ib_write_bw driver is supported
+	return true
 }
 
 // parseNicGid parses the nic:gid parameter and returns the device and GID index
