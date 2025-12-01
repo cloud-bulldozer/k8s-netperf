@@ -77,6 +77,44 @@ By default, it will read the `bridgeNetwork.json` file from the git repository. 
 k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
 ```
 
+## Running Multiple Concurrent Pairs
+
+To test with multiple concurrent client-server pairs, use the `--pairs` flag. This feature allows you to increase the load on your cluster and better utilize available resources by running multiple independent tests simultaneously.
+
+```
+$ k8s-netperf --pairs 4
+```
+
+This will create 4 independent client-server pairs that run concurrently. Each pair:
+- Has its own dedicated client and server pods/VMs
+- Runs the test workload independently 
+- Is scheduled with anti-affinity rules to avoid resource conflicts
+- Has separate services (when using `--service`)
+- Reports results with a pair index identifier for tracking
+
+### Key Benefits
+- **Increased Load**: Multiple pairs provide higher aggregate throughput testing
+- **Resource Utilization**: Better utilization of multi-node clusters
+- **Parallel Execution**: Concurrent execution reduces overall test time
+- **Individual Tracking**: Each pair's results are tracked separately for analysis
+
+### Compatibility
+The multi-pairs feature works with:
+- All network drivers (iperf3, uperf, netperf)
+- Host network and pod network modes
+- Virtual Machines (`--vm`)
+- User Defined Networks (UDN) 
+- Bridge networks
+- External servers (with `--serverIP`)
+
+### Example with VMs
+```
+$ k8s-netperf --vm --pairs 3 --iperf
+```
+
+### Output Format
+Results include a `PairIndex` field (starting from 0) to identify which pair generated each result. This allows for analysis of individual pair performance and aggregate statistics.
+
 ## Privileged pods
 
 If your use case requires running pods with privileged security context, use the `--privileged` flag:

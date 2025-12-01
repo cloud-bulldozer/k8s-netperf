@@ -821,28 +821,28 @@ func ExtractUdnIp(pod corev1.Pod) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding,
+	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding,
 		perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
 	}
-	err = WaitForVMI(perf.KClient, serverRole)
+	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
 	}
 
 	if strings.Contains(name, "host") {
-		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.Server, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.Server, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	}
-	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
 
@@ -1330,6 +1330,15 @@ func deployPair(client *kubernetes.Clientset, pairIndex int, s *config.PerfScena
 			if err != nil {
 				return err
 			}
+		} else {
+			err = launchClientVM(s, clientAcrossRoleLabel, &cdpAcross.PodAntiAffinity, &cdpAcross.NodeAffinity)
+			if err != nil {
+				return err
+			}
+			s.ClientAcrossPairs[pairIndex], err = GetPods(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRoleLabel))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1363,6 +1372,15 @@ func deployPair(client *kubernetes.Clientset, pairIndex int, s *config.PerfScena
 
 		if !s.VM {
 			s.ClientHostPairs[pairIndex], err = deployDeployment(client, cdpHostAcross)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = launchClientVM(s, hostNetClientRoleLabel, &cdpHostAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+			if err != nil {
+				return err
+			}
+			s.ClientHostPairs[pairIndex], err = GetPods(s.ClientSet, fmt.Sprintf("app=%s", hostNetClientRoleLabel))
 			if err != nil {
 				return err
 			}
@@ -1434,6 +1452,23 @@ func deployPair(client *kubernetes.Clientset, pairIndex int, s *config.PerfScena
 			if err != nil {
 				return err
 			}
+		} else {
+			err = launchServerVM(s, serverRoleLabel, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+			if err != nil {
+				return err
+			}
+			s.ServerPairs[pairIndex], err = GetPods(s.ClientSet, fmt.Sprintf("app=%s", serverRoleLabel))
+			if err != nil {
+				return err
+			}
+			s.ServerNodeInfos[pairIndex], err = GetPodNodeInfo(s.ClientSet, fmt.Sprintf("app=%s", serverRoleLabel))
+			if err != nil {
+				return err
+			}
+			s.ClientNodeInfos[pairIndex], err = GetPodNodeInfo(s.ClientSet, fmt.Sprintf("app=%s", clientAcrossRoleLabel))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1488,6 +1523,15 @@ func deployPair(client *kubernetes.Clientset, pairIndex int, s *config.PerfScena
 
 		if !s.VM {
 			s.ServerHostPairs[pairIndex], err = deployDeployment(client, sdpHost)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = launchServerVM(s, hostNetServerRoleLabel, &sdpHost.PodAntiAffinity, &sdpHost.NodeAffinity)
+			if err != nil {
+				return err
+			}
+			s.ServerHostPairs[pairIndex], err = GetPods(s.ClientSet, fmt.Sprintf("app=%s", hostNetServerRoleLabel))
 			if err != nil {
 				return err
 			}

@@ -91,6 +91,7 @@ Flags:
       --index string          OpenSearch Index to save the results to, defaults to k8s-netperf
       --metrics               Show all system metrics retrieved from prom
       --tcp-tolerance float   Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1. (default 10)
+      --pairs int             Number of concurrent client-server pairs to run (default 1)
       --version               k8s-netperf version
       --csv                   Archive results, cluster and benchmark metrics in CSV files (default true)
   -h, --help                  help for k8s-netperf
@@ -107,5 +108,6 @@ Flags:
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
+- `--pairs` allows testing with multiple concurrent client-server pairs. Each pair runs independently and concurrently, providing increased load and better utilization of cluster resources. Results are tracked individually with a pair index identifier.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
