@@ -131,16 +131,24 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		var cmd []string
 		uperfCmd := "echo '" + fileContent + "' > " + filePath
 		cmd = []string{uperfCmd}
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return filePath, err
+		
+		var vmClient config.VMExecutor
+		if perf.VMClient != nil {
+			vmClient = perf.VMClient
+		} else {
+			sshclient, err := k8s.SSHConnect(perf)
+			if err != nil {
+				return filePath, err
+			}
+			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
+		
 		log.Debug(strings.Join(cmd[:], " "))
-		_, err = sshclient.Run(strings.Join(cmd[:], " "))
+		_, err := vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
 			return filePath, err
 		}
-		sshclient.Close()
+		vmClient.Close()
 	}
 	return filePath, nil
 }
@@ -211,13 +219,22 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	} else {
 		retry := 3
 		present := false
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
+		
+		var vmClient config.VMExecutor
+		if perf.VMClient != nil {
+			vmClient = perf.VMClient
+		} else {
+			sshclient, err := k8s.SSHConnect(perf)
+			if err != nil {
+				return stdout, err
+			}
+			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
+		
+		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for uperf to be present on VM")
-			_, err = sshclient.Run("until uperf -h; do sleep 30; done")
+			_, err = vmClient.Run("until uperf -h; do sleep 30; done")
 			if err == nil {
 				present = true
 				break
@@ -225,13 +242,13 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			sshclient.Close()
+			vmClient.Close()
 			return stdout, fmt.Errorf("uperf binary is not present on the VM")
 		}
 		var stdout []byte
 		ran := false
 		for i := 0; i <= retry; i++ {
-			stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+			stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
 			if err == nil {
 				ran = true
 				break
@@ -240,7 +257,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			log.Debugf("⏰ Retrying uperf command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		sshclient.Close()
+		vmClient.Close()
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run uperf")
 		} else {

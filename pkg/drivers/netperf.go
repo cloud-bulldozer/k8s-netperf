@@ -104,13 +104,22 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	} else {
 		retry := 3
 		present := false
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
+		
+		var vmClient config.VMExecutor
+		if perf.VMClient != nil {
+			vmClient = perf.VMClient
+		} else {
+			sshclient, err := k8s.SSHConnect(perf)
+			if err != nil {
+				return stdout, err
+			}
+			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
+		
+		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for netperf to be present on VM")
-			_, err = sshclient.Run("until which netperf; do sleep 30; done")
+			_, err = vmClient.Run("until which netperf; do sleep 30; done")
 			if err == nil {
 				present = true
 				break
@@ -118,13 +127,13 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			sshclient.Close()
+			vmClient.Close()
 			return stdout, fmt.Errorf("netperf binary is not present on the VM")
 		}
 		var stdout []byte
 		ran := false
 		for i := 0; i <= retry; i++ {
-			_, err = sshclient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
+			_, err = vmClient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
 			if err == nil {
 				ran = true
 				break
@@ -133,11 +142,11 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+		stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("Failed running command %s", err)
 		}
-		sshclient.Close()
+		vmClient.Close()
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run iperf3")
 		} else {

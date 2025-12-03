@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	b64 "encoding/base64"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
 	"github.com/melbahja/goph"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
@@ -155,6 +157,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 	}
 	return host, nil
 }
+
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
@@ -473,4 +476,64 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 		}
 	}
 	return nil
+}
+
+// VirtctlClient implements VMExecutor interface using virtctl ssh
+type VirtctlClient struct {
+	vmName    string
+	namespace string
+}
+
+// SSHClientWrapper wraps the existing goph.Client to implement VMExecutor interface
+type SSHClientWrapper struct {
+	Client *goph.Client
+}
+
+// Run executes a command using the wrapped SSH client
+func (s *SSHClientWrapper) Run(command string) ([]byte, error) {
+	return s.Client.Run(command)
+}
+
+// Close closes the SSH connection
+func (s *SSHClientWrapper) Close() error {
+	return s.Client.Close()
+}
+
+// NewVirtctlClient creates a new virtctl client for VM access
+func NewVirtctlClient(vmName, namespace string) *VirtctlClient {
+	return &VirtctlClient{
+		vmName:    vmName,
+		namespace: namespace,
+	}
+}
+
+// Run executes a command on the VM using virtctl ssh
+func (v *VirtctlClient) Run(command string) ([]byte, error) {
+	virtctlPath, err := virtctl.GetVirtctlPath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get virtctl binary: %v", err)
+	}
+	
+	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "-c", command, fmt.Sprintf("fedora@%s", v.vmName))
+	return cmd.Output()
+}
+
+// Close is a no-op for compatibility with VMExecutor interface
+func (v *VirtctlClient) Close() error {
+	return nil
+}
+
+// ConnectToVM creates either SSH or virtctl connection based on configuration
+func ConnectToVM(conf *config.PerfScenarios) (config.VMExecutor, error) {
+	if conf.UseVirtctl && conf.VMName != "" {
+		log.Debugf("Connecting to VM %s using virtctl", conf.VMName)
+		return NewVirtctlClient(conf.VMName, namespace), nil
+	} else {
+		log.Debugf("Connecting to VM %s using SSH", conf.VMHost)
+		sshClient, err := SSHConnect(conf)
+		if err != nil {
+			return nil, err
+		}
+		return &SSHClientWrapper{Client: sshClient}, nil
+	}
 }

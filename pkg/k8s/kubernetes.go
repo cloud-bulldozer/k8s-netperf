@@ -811,6 +811,7 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	perf.VMHost = host
+	perf.VMName = name  // Set VM name for virtctl usage
 	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
