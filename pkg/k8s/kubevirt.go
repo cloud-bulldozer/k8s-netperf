@@ -412,7 +412,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 				Devices: v1.Devices{
 					NetworkInterfaceMultiQueue: &mutliQ,
 					Disks: []v1.Disk{
-						v1.Disk{
+						{
 							Name: "disk0",
 							DiskDevice: v1.DiskDevice{
 								Disk: &v1.DiskTarget{
@@ -426,7 +426,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			},
 			Networks: networks,
 			Volumes: []v1.Volume{
-				v1.Volume{
+				{
 					Name: "disk0",
 					VolumeSource: v1.VolumeSource{
 						ContainerDisk: &v1.ContainerDiskSource{
@@ -434,7 +434,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 						},
 					},
 				},
-				v1.Volume{
+				{
 					Name: "cloudinit",
 					VolumeSource: v1.VolumeSource{
 						CloudInitNoCloud: &v1.CloudInitNoCloudSource{

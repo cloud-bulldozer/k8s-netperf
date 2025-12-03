@@ -1,0 +1,25 @@
+version: "2"
+
+run:
+  timeout: 5m
+  go: '1.19'
+  modules-download-mode: vendor
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+linters:
+  disable:
+    - errcheck
+    - staticcheck
+  enable:
+    - misspell
+    - ineffassign
+    - govet
+    - unused
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

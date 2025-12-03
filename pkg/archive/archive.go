@@ -21,6 +21,7 @@ const ltcyMetric = "usec"
 type Doc struct {
 	UUID              string           `json:"uuid"`
 	Timestamp         time.Time        `json:"timestamp"`
+	PairIndex         int              `json:"pairIndex"`
 	HostNetwork       bool             `json:"hostNetwork"`
 	Driver            string           `json:"driver"`
 	Parallelism       int              `json:"parallelism"`
@@ -100,6 +101,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		d := Doc{
 			UUID:              uuid,
 			Timestamp:         time,
+			PairIndex:         r.PairIndex,
 			ToolVersion:       sr.Version,
 			ToolGitCommit:     sr.GitCommit,
 			Driver:            r.Driver,
@@ -169,6 +171,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 // Common csv header fields.
 func commonCsvHeaderFields() []string {
 	return []string{
+		"Pair",
 		"Driver",
 		"Profile",
 		"Same node",
@@ -194,6 +197,7 @@ func commonCsvDataFields(row result.Data) []string {
 		_, lo, hi = result.ConfidenceInterval(row.ThroughputSummary, 0.95)
 	}
 	return []string{
+		strconv.Itoa(row.PairIndex),
 		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
 		fmt.Sprint(row.SameNode),
