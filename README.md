@@ -29,13 +29,21 @@ A tool to run network performance tests in Kubernetes clusters.
 
 ## Quick Start
 
+Install latest stable version with:
+
 ```shell
-$ git clone http://github.com/cloud-bulldozer/k8s-netperf
-$ cd k8s-netperf
-$ make build
+curl -Ls https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/refs/heads/main/hack/install.sh | sh
+```
+
+> [!NOTE]
+> Default installation path is `${HOME}/.local/bin/`, you can change it by setting the `INSTALL_DIR` environment variable to the desired path.
+> before running the script
+
+Then create the required resources:
+```shell
 $ kubectl create ns netperf
 $ kubectl create sa netperf -n netperf
-$ ./bin/amd64/k8s-netperf --config netperf.yml
+$ k8s-netperf --config netperf.yml
 ```
 
 ## Documentation
