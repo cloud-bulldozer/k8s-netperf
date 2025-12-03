@@ -34,7 +34,7 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Clone Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Golang
         uses: actions/setup-go@v6
