@@ -48,9 +48,11 @@ type PerfScenarios struct {
 	BridgeNamespace     string
 	BridgeServerNetwork string
 	BridgeClientNetwork string
+	IbWriteBwParams     string
 	Sockets             uint32
 	Cores               uint32
 	Threads             uint32
+	RequestedDrivers    []string
 	ServerNodeInfo      metrics.NodeInfo
 	ClientNodeInfo      metrics.NodeInfo
 	Client              apiv1.PodList
