@@ -102,9 +102,9 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
 	} else {
-		retry := 3
+		retry := 10
 		present := false
-		
+
 		var vmClient config.VMExecutor
 		if perf.VMClient != nil {
 			vmClient = perf.VMClient
@@ -115,7 +115,7 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			}
 			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
-		
+
 		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for netperf to be present on VM")
@@ -123,8 +123,10 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			if err == nil {
 				present = true
 				break
+			} else {
+				log.Debugf("Failed running command %s", err)
 			}
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 		if !present {
 			vmClient.Close()

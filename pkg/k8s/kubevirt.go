@@ -158,7 +158,6 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 	return host, nil
 }
 
-
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
@@ -513,9 +512,15 @@ func (v *VirtctlClient) Run(command string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get virtctl binary: %v", err)
 	}
-	
-	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "-c", command, fmt.Sprintf("fedora@%s", v.vmName))
-	return cmd.Output()
+	log.Debugf("Running command %s against %s", command, v.vmName)
+	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
+	log.Debugf("Command: %s", cmd.String())
+	stdout, err := cmd.Output()
+	if err != nil {
+		return stdout, fmt.Errorf("failed to run command: %v", err)
+	}
+	log.Debugf("Output: %s", string(stdout))
+	return stdout, nil
 }
 
 // Close is a no-op for compatibility with VMExecutor interface
