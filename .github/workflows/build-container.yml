@@ -13,7 +13,7 @@ on:
 
 env:
   CONTAINER_REGISTRY: ${{ 'quay.io' }}
-  GO_VER: 1.19
+  GO_VER: 1.23
   RHEL_VERSION: ubi9
 
 jobs:
