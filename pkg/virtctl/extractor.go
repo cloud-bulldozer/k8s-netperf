@@ -64,17 +64,25 @@ func extractEmbeddedVirtctl() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %v", err)
 	}
-	defer tmpFile.Close()
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			log.Warnf("Error closing temp file: %v", err)
+		}
+	}()
 	
 	// Write binary data
 	if _, err := tmpFile.Write(binaryData); err != nil {
-		os.Remove(tmpFile.Name())
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			log.Warnf("Error removing temp file: %v", err)
+		}
 		return "", fmt.Errorf("failed to write virtctl binary: %v", err)
 	}
 	
 	// Make executable
 	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
-		os.Remove(tmpFile.Name())
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			log.Warnf("Error removing temp file: %v", err)
+		}
 		return "", fmt.Errorf("failed to make virtctl executable: %v", err)
 	}
 	

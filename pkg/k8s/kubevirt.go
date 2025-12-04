@@ -16,7 +16,6 @@ import (
 	"github.com/melbahja/goph"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
-	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,23 +44,23 @@ func connect(config *goph.Config) (*goph.Client, error) {
 			return client, nil
 		}
 	}
-	return nil, fmt.Errorf("Unable to connect via ssh after %d attempts", retry)
+	return nil, fmt.Errorf("unable to connect via ssh after %d attempts", retry)
 }
 
 // SSHConnect sets up the ssh config, then attempts to connect to the VM.
 func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	dir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve users homedir. %s", err)
+		return nil, fmt.Errorf("unable to retrieve users homedir. %s", err)
 	}
 	key := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	keyd, err := os.ReadFile(key)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read key. Error : %s", err)
+		return nil, fmt.Errorf("unable to read key. Error : %s", err)
 	}
 	auth, err := goph.RawKey(string(keyd), "")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
+		return nil, fmt.Errorf("unable to retrieve sshkey. Error : %s", err)
 	}
 	user := "fedora"
 	addr := conf.VMHost
@@ -77,7 +76,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 
 	client, err := connect(&config)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to connect via ssh. Error: %s", err)
+		return nil, fmt.Errorf("unable to connect via ssh. Error: %s", err)
 	}
 
 	return client, nil
@@ -394,16 +393,16 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			Labels:    label,
 		},
 		Spec: v1.VirtualMachineInstanceSpec{
-			Affinity: &k8sv1.Affinity{
+			Affinity: &corev1.Affinity{
 				PodAntiAffinity: &podAff,
 				NodeAffinity:    &nodeAff,
 			},
 			TerminationGracePeriodSeconds: &delSeconds,
 			Domain: v1.DomainSpec{
 				Resources: v1.ResourceRequirements{
-					Requests: k8sv1.ResourceList{
-						k8sv1.ResourceMemory: resource.MustParse("4096Mi"),
-						k8sv1.ResourceCPU:    resource.MustParse("500m"),
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("4096Mi"),
+						corev1.ResourceCPU:    resource.MustParse("500m"),
 					},
 				},
 				CPU: &v1.CPU{
@@ -465,7 +464,7 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 	for event := range vmw.ResultChan() {
 		d, ok := event.Object.(*v1.VirtualMachineInstance)
 		if !ok {
-			return fmt.Errorf("Unable to watch VMI %s", name)
+			return fmt.Errorf("unable to watch VMI %s", name)
 		}
 		if d.Name == name {
 			log.Debugf("Found in state (%s)", d.Status.Phase)

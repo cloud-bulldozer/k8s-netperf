@@ -129,7 +129,9 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			time.Sleep(30 * time.Second)
 		}
 		if !present {
-			vmClient.Close()
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 			return stdout, fmt.Errorf("netperf binary is not present on the VM")
 		}
 		var stdout []byte
@@ -146,11 +148,13 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		}
 		stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Failed running command %s", err)
+			return *bytes.NewBuffer(stdout), fmt.Errorf("failed running command %s", err)
 		}
-		vmClient.Close()
+		if err := vmClient.Close(); err != nil {
+			log.Warnf("Error closing VM client: %v", err)
+		}
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run iperf3")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		} else {
 			log.Debug(bytes.NewBuffer(stdout))
 			return *bytes.NewBuffer(stdout), nil
@@ -166,7 +170,7 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 	send := 0.0
 	recv := 0.0
 	if len(strings.Split(stdout.String(), "\n")) < 5 {
-		return sample, fmt.Errorf("Length of output from netperf was too short.")
+		return sample, fmt.Errorf("length of output from netperf was too short")
 	}
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
@@ -177,12 +181,12 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 			sample.Metric = l[1]
 		} else if strings.Contains(l[0], "THROUGHPUT") {
 			if len(strings.TrimSpace(l[1])) < 1 {
-				return sample, fmt.Errorf("Throughput was empty.")
+				return sample, fmt.Errorf("throughput was empty")
 			}
 			sample.Throughput, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "P99_LATENCY") {
 			if len(strings.TrimSpace(l[1])) < 1 {
-				return sample, fmt.Errorf("P99_Latency was empty.")
+				return sample, fmt.Errorf("p99_Latency was empty")
 			}
 			sample.Latency99ptile, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "RT_LATENCY") {
@@ -196,10 +200,10 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 		}
 	}
 	if math.IsNaN(sample.Throughput) {
-		return sample, fmt.Errorf("Throughput value is NaN")
+		return sample, fmt.Errorf("throughput value is NaN")
 	}
 	if math.IsNaN(sample.Latency99ptile) {
-		return sample, fmt.Errorf("Latency value is NaN")
+		return sample, fmt.Errorf("latency value is NaN")
 	}
 	// Negative values will mean UDP_STREAM
 	if sample.Retransmits < 0.0 {

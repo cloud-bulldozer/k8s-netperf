@@ -148,7 +148,9 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		if err != nil {
 			return filePath, err
 		}
-		vmClient.Close()
+		if err := vmClient.Close(); err != nil {
+			log.Warnf("Error closing VM client: %v", err)
+		}
 	}
 	return filePath, nil
 }
@@ -242,7 +244,9 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			vmClient.Close()
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 			return stdout, fmt.Errorf("uperf binary is not present on the VM")
 		}
 		var stdout []byte
@@ -257,9 +261,11 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			log.Debugf("⏰ Retrying uperf command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		vmClient.Close()
+		if err := vmClient.Close(); err != nil {
+			log.Warnf("Error closing VM client: %v", err)
+		}
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run uperf")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run uperf")
 		} else {
 			return *bytes.NewBuffer(stdout), nil
 		}

@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-		if !(uperf || netperf || iperf3) {
+		if !uperf && !netperf && !iperf3 {
 			log.Fatalf("😭 At least one driver needs to be enabled")
 		}
 
@@ -382,20 +382,20 @@ var rootCmd = &cobra.Command{
 		if err == nil {
 			metadata, err := meta.GetClusterMetadata()
 			if err == nil {
-				sr.Metadata.ClusterMetadata = metadata
+				sr.ClusterMetadata = metadata
 			} else {
 				log.Error("Issue getting common metadata using go-commons")
 			}
 		}
 
 		node := metrics.NodeDetails(pcon)
-		sr.Metadata.Kernel = node.Metric.Kernel
+		sr.Kernel = node.Metric.Kernel
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
-		short := shortReg.FindString(sr.Metadata.OCPVersion)
-		sr.Metadata.OCPShortVersion = short
+		short := shortReg.FindString(sr.OCPVersion)
+		sr.OCPShortVersion = short
 		mtu, err := metrics.NodeMTU(pcon)
 		if err == nil {
-			sr.Metadata.MTU = mtu
+			sr.MTU = mtu
 		}
 
 		if len(searchURL) > 1 {
@@ -495,7 +495,11 @@ func parseNetworkConfig(jsonFile string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("error opening file: %v", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Warnf("Error closing file: %v", err)
+		}
+	}()
 
 	// Read the file contents
 	log.Debugf("Reading BridgeNetwork configuration from JSON file: %s ", jsonFile)
@@ -535,11 +539,12 @@ func executeWorkload(nc config.Config,
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
 	} else if nc.Service {
-		if driverName == "iperf3" {
+		switch driverName {
+		case "iperf3":
 			serverIP = s.IperfService.Spec.ClusterIP
-		} else if driverName == "uperf" {
+		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
-		} else {
+		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else if s.Udn {
