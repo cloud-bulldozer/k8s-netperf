@@ -102,29 +102,42 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
 	} else {
-		retry := 3
+		retry := 10
 		present := false
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
+
+		var vmClient config.VMExecutor
+		if perf.VMClient != nil {
+			vmClient = perf.VMClient
+		} else {
+			sshclient, err := k8s.SSHConnect(perf)
+			if err != nil {
+				return stdout, err
+			}
+			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
+
+		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for netperf to be present on VM")
-			_, err = sshclient.Run("until which netperf; do sleep 30; done")
+			_, err = vmClient.Run("until which netperf; do sleep 30; done")
 			if err == nil {
 				present = true
 				break
+			} else {
+				log.Debugf("Failed running command %s", err)
 			}
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 		if !present {
-			sshclient.Close()
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 			return stdout, fmt.Errorf("netperf binary is not present on the VM")
 		}
 		var stdout []byte
 		ran := false
 		for i := 0; i <= retry; i++ {
-			_, err = sshclient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
+			_, err = vmClient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
 			if err == nil {
 				ran = true
 				break
@@ -133,13 +146,15 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+		stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Failed running command %s", err)
+			return *bytes.NewBuffer(stdout), fmt.Errorf("failed running command %s", err)
 		}
-		sshclient.Close()
+		if err := vmClient.Close(); err != nil {
+			log.Warnf("Error closing VM client: %v", err)
+		}
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run iperf3")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		} else {
 			log.Debug(bytes.NewBuffer(stdout))
 			return *bytes.NewBuffer(stdout), nil
@@ -155,7 +170,7 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 	send := 0.0
 	recv := 0.0
 	if len(strings.Split(stdout.String(), "\n")) < 5 {
-		return sample, fmt.Errorf("Length of output from netperf was too short.")
+		return sample, fmt.Errorf("length of output from netperf was too short")
 	}
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		l := strings.Split(line, "=")
@@ -166,12 +181,12 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 			sample.Metric = l[1]
 		} else if strings.Contains(l[0], "THROUGHPUT") {
 			if len(strings.TrimSpace(l[1])) < 1 {
-				return sample, fmt.Errorf("Throughput was empty.")
+				return sample, fmt.Errorf("throughput was empty")
 			}
 			sample.Throughput, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "P99_LATENCY") {
 			if len(strings.TrimSpace(l[1])) < 1 {
-				return sample, fmt.Errorf("P99_Latency was empty.")
+				return sample, fmt.Errorf("p99_Latency was empty")
 			}
 			sample.Latency99ptile, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "RT_LATENCY") {
@@ -185,10 +200,10 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 		}
 	}
 	if math.IsNaN(sample.Throughput) {
-		return sample, fmt.Errorf("Throughput value is NaN")
+		return sample, fmt.Errorf("throughput value is NaN")
 	}
 	if math.IsNaN(sample.Latency99ptile) {
-		return sample, fmt.Errorf("Latency value is NaN")
+		return sample, fmt.Errorf("latency value is NaN")
 	}
 	// Negative values will mean UDP_STREAM
 	if sample.Retransmits < 0.0 {

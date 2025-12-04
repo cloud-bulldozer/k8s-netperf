@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	b64 "encoding/base64"
@@ -11,10 +12,10 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
 	"github.com/melbahja/goph"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
-	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,23 +44,23 @@ func connect(config *goph.Config) (*goph.Client, error) {
 			return client, nil
 		}
 	}
-	return nil, fmt.Errorf("Unable to connect via ssh after %d attempts", retry)
+	return nil, fmt.Errorf("unable to connect via ssh after %d attempts", retry)
 }
 
 // SSHConnect sets up the ssh config, then attempts to connect to the VM.
 func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	dir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve users homedir. %s", err)
+		return nil, fmt.Errorf("unable to retrieve users homedir. %s", err)
 	}
 	key := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	keyd, err := os.ReadFile(key)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read key. Error : %s", err)
+		return nil, fmt.Errorf("unable to read key. Error : %s", err)
 	}
 	auth, err := goph.RawKey(string(keyd), "")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve sshkey. Error : %s", err)
+		return nil, fmt.Errorf("unable to retrieve sshkey. Error : %s", err)
 	}
 	user := "fedora"
 	addr := conf.VMHost
@@ -75,7 +76,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 
 	client, err := connect(&config)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to connect via ssh. Error: %s", err)
+		return nil, fmt.Errorf("unable to connect via ssh. Error: %s", err)
 	}
 
 	return client, nil
@@ -392,16 +393,16 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			Labels:    label,
 		},
 		Spec: v1.VirtualMachineInstanceSpec{
-			Affinity: &k8sv1.Affinity{
+			Affinity: &corev1.Affinity{
 				PodAntiAffinity: &podAff,
 				NodeAffinity:    &nodeAff,
 			},
 			TerminationGracePeriodSeconds: &delSeconds,
 			Domain: v1.DomainSpec{
 				Resources: v1.ResourceRequirements{
-					Requests: k8sv1.ResourceList{
-						k8sv1.ResourceMemory: resource.MustParse("4096Mi"),
-						k8sv1.ResourceCPU:    resource.MustParse("500m"),
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("4096Mi"),
+						corev1.ResourceCPU:    resource.MustParse("500m"),
 					},
 				},
 				CPU: &v1.CPU{
@@ -463,7 +464,7 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 	for event := range vmw.ResultChan() {
 		d, ok := event.Object.(*v1.VirtualMachineInstance)
 		if !ok {
-			return fmt.Errorf("Unable to watch VMI %s", name)
+			return fmt.Errorf("unable to watch VMI %s", name)
 		}
 		if d.Name == name {
 			log.Debugf("Found in state (%s)", d.Status.Phase)
@@ -473,4 +474,70 @@ func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
 		}
 	}
 	return nil
+}
+
+// VirtctlClient implements VMExecutor interface using virtctl ssh
+type VirtctlClient struct {
+	vmName    string
+	namespace string
+}
+
+// SSHClientWrapper wraps the existing goph.Client to implement VMExecutor interface
+type SSHClientWrapper struct {
+	Client *goph.Client
+}
+
+// Run executes a command using the wrapped SSH client
+func (s *SSHClientWrapper) Run(command string) ([]byte, error) {
+	return s.Client.Run(command)
+}
+
+// Close closes the SSH connection
+func (s *SSHClientWrapper) Close() error {
+	return s.Client.Close()
+}
+
+// NewVirtctlClient creates a new virtctl client for VM access
+func NewVirtctlClient(vmName, namespace string) *VirtctlClient {
+	return &VirtctlClient{
+		vmName:    vmName,
+		namespace: namespace,
+	}
+}
+
+// Run executes a command on the VM using virtctl ssh
+func (v *VirtctlClient) Run(command string) ([]byte, error) {
+	virtctlPath, err := virtctl.GetVirtctlPath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get virtctl binary: %v", err)
+	}
+	log.Debugf("Running command %s against %s", command, v.vmName)
+	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
+	log.Debugf("Command: %s", cmd.String())
+	stdout, err := cmd.Output()
+	if err != nil {
+		return stdout, fmt.Errorf("failed to run command: %v", err)
+	}
+	log.Debugf("Output: %s", string(stdout))
+	return stdout, nil
+}
+
+// Close is a no-op for compatibility with VMExecutor interface
+func (v *VirtctlClient) Close() error {
+	return nil
+}
+
+// ConnectToVM creates either SSH or virtctl connection based on configuration
+func ConnectToVM(conf *config.PerfScenarios) (config.VMExecutor, error) {
+	if conf.UseVirtctl && conf.VMName != "" {
+		log.Debugf("Connecting to VM %s using virtctl", conf.VMName)
+		return NewVirtctlClient(conf.VMName, namespace), nil
+	} else {
+		log.Debugf("Connecting to VM %s using SSH", conf.VMHost)
+		sshClient, err := SSHConnect(conf)
+		if err != nil {
+			return nil, err
+		}
+		return &SSHClientWrapper{Client: sshClient}, nil
+	}
 }

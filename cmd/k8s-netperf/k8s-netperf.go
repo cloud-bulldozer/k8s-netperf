@@ -23,6 +23,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
+	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,6 +50,7 @@ var (
 	hostNetOnly      bool
 	vm               bool
 	vmimage          string
+	useVirtctl       bool
 	debug            bool
 	bridge           string
 	bridgeNetwork    string
@@ -86,7 +88,7 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-		if !(uperf || netperf || iperf3) {
+		if !uperf && !netperf && !iperf3 {
 			log.Fatalf("😭 At least one driver needs to be enabled")
 		}
 
@@ -203,6 +205,7 @@ var rootCmd = &cobra.Command{
 		if vm {
 			s.VM = true
 			s.VMImage = vmimage
+			s.UseVirtctl = useVirtctl
 			// Create a dynamic client
 			if s.DClient == nil {
 				dynClient, err := dynamic.NewForConfig(rconfig)
@@ -308,12 +311,27 @@ var rootCmd = &cobra.Command{
 			}
 		} else {
 			sr.Virt = true
-			log.Info("Connecting via ssh to the VMI")
-			client, err := k8s.SSHConnect(&s)
+			if s.UseVirtctl {
+				log.Info("Connecting to VMI using virtctl")
+			} else {
+				log.Info("Connecting via ssh to the VMI")
+			}
+			
+			// Use the new unified connection method
+			vmClient, err := k8s.ConnectToVM(&s)
 			if err != nil {
 				log.Fatal(err)
 			}
-			s.SSHClient = client
+			s.VMClient = vmClient
+			
+			// Also set SSHClient for backward compatibility if using SSH
+			if !s.UseVirtctl {
+				sshClient, err := k8s.SSHConnect(&s)
+				if err != nil {
+					log.Fatal(err)
+				}
+				s.SSHClient = sshClient
+			}
 			for _, nc := range s.Configs {
 				// Determine the metric for the test
 				metric := string("OP/s")
@@ -364,20 +382,20 @@ var rootCmd = &cobra.Command{
 		if err == nil {
 			metadata, err := meta.GetClusterMetadata()
 			if err == nil {
-				sr.Metadata.ClusterMetadata = metadata
+				sr.ClusterMetadata = metadata
 			} else {
 				log.Error("Issue getting common metadata using go-commons")
 			}
 		}
 
 		node := metrics.NodeDetails(pcon)
-		sr.Metadata.Kernel = node.Metric.Kernel
+		sr.Kernel = node.Metric.Kernel
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
-		short := shortReg.FindString(sr.Metadata.OCPVersion)
-		sr.Metadata.OCPShortVersion = short
+		short := shortReg.FindString(sr.OCPVersion)
+		sr.OCPShortVersion = short
 		mtu, err := metrics.NodeMTU(pcon)
 		if err == nil {
-			sr.Metadata.MTU = mtu
+			sr.MTU = mtu
 		}
 
 		if len(searchURL) > 1 {
@@ -453,6 +471,10 @@ var rootCmd = &cobra.Command{
 		if clean {
 			cleanup(client)
 		}
+		// Cleanup extracted virtctl binary if any
+		if err := virtctl.CleanupExtractedBinary(); err != nil {
+			log.Debugf("Failed to cleanup extracted virtctl binary: %v", err)
+		}
 		os.Exit(retCode)
 	},
 }
@@ -473,7 +495,11 @@ func parseNetworkConfig(jsonFile string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("error opening file: %v", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Warnf("Error closing file: %v", err)
+		}
+	}()
 
 	// Read the file contents
 	log.Debugf("Reading BridgeNetwork configuration from JSON file: %s ", jsonFile)
@@ -513,11 +539,12 @@ func executeWorkload(nc config.Config,
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
 	} else if nc.Service {
-		if driverName == "iperf3" {
+		switch driverName {
+		case "iperf3":
 			serverIP = s.IperfService.Spec.ClusterIP
-		} else if driverName == "uperf" {
+		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
-		} else {
+		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else if s.Udn {
@@ -639,6 +666,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Launch Virtual Machines instead of pods for client/servers")
 	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image")
+	rootCmd.Flags().BoolVar(&useVirtctl, "use-virtctl", false, "Use virtctl ssh for VM connections instead of traditional SSH")
 	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM")
 	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM")
 	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM")
