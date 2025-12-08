@@ -122,7 +122,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			return stdout, err
 		}
 	} else {
-		retry := 3
+		retry := 10
 		present := false
 		sshclient, err := k8s.SSHConnect(perf)
 		if err != nil {

@@ -131,7 +131,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		var cmd []string
 		uperfCmd := "echo '" + fileContent + "' > " + filePath
 		cmd = []string{uperfCmd}
-		
+
 		var vmClient config.VMExecutor
 		if perf.VMClient != nil {
 			vmClient = perf.VMClient
@@ -142,7 +142,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 			}
 			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
-		
+
 		log.Debug(strings.Join(cmd[:], " "))
 		_, err := vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
@@ -219,9 +219,9 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 		}
 		return stdout, nil
 	} else {
-		retry := 3
+		retry := 10
 		present := false
-		
+
 		var vmClient config.VMExecutor
 		if perf.VMClient != nil {
 			vmClient = perf.VMClient
@@ -232,7 +232,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			}
 			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
 		}
-		
+
 		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for uperf to be present on VM")
@@ -241,7 +241,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 				present = true
 				break
 			}
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 		if !present {
 			if err := vmClient.Close(); err != nil {
