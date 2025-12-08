@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -44,6 +45,7 @@ var (
 	uperf            bool
 	udnl2            bool
 	udnl3            bool
+	cudn             string
 	udnPluginBinding string
 	acrossAZ         bool
 	full             bool
@@ -96,6 +98,9 @@ var rootCmd = &cobra.Command{
 		if udnl2 && udnl3 {
 			log.Fatal("flags --udnl2 and --udnl3 are mutually exclusive; please set only one")
 		}
+		if cudn != "" && (udnl2 || udnl3) {
+			log.Fatal("flags --cudn and --udnl2/--udnl3 are mutually exclusive; please set only one")
+		}
 		uid := ""
 		if len(id) > 0 {
 			uid = id
@@ -133,7 +138,7 @@ var rootCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		if clean {
-			cleanup(client)
+			cleanup(client, rconfig)
 		}
 		s := config.PerfScenarios{
 			HostNetwork:     full || hostNetOnly,
@@ -145,6 +150,7 @@ var rootCmd = &cobra.Command{
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
+			Cudn:            cudn != "",
 			Sockets:         sockets,
 			Cores:           cores,
 			Threads:         threads,
@@ -196,6 +202,14 @@ var rootCmd = &cobra.Command{
 			} else if udnl3 {
 				err = k8s.DeployL3Udn(dynClient)
 			}
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+		} else if cudn != "" {
+			s.Cudn = true
+			dynClient, err := dynamic.NewForConfig(rconfig)
+			err = k8s.DeployCUDN(dynClient, cudn)
 			if err != nil {
 				log.Error(err)
 				os.Exit(1)
@@ -469,7 +483,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		if clean {
-			cleanup(client)
+			cleanup(client, rconfig)
 		}
 		// Cleanup extracted virtctl binary if any
 		if err := virtctl.CleanupExtractedBinary(); err != nil {
@@ -479,7 +493,17 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func cleanup(client *kubernetes.Clientset) {
+func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
+	if cudn != "" {
+		dynClient, err := dynamic.NewForConfig(rconfig)
+		if err != nil {
+			log.Error(err)
+		}
+		err = k8s.DestroyCUdn(dynClient, k8s.CudnName)
+		if err != nil {
+			log.Debugf("CUdn is not deleted: %v", err)
+		}
+	}
 	err := k8s.DestroyNamespace(client)
 	if err != nil {
 		log.Error(err)
@@ -548,7 +572,7 @@ func executeWorkload(nc config.Config,
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
 	} else if s.Udn {
-		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0])
+		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0], k8s.UdnName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -561,6 +585,12 @@ func executeWorkload(nc config.Config,
 		if s.VM {
 			npr.UdnInfo = npr.UdnInfo + " - " + s.UdnPluginBinding
 		}
+	} else if s.Cudn {
+		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0], k8s.CudnName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		npr.UdnInfo = "Cudn -" + cudn
 	} else if s.BridgeNetwork != "" {
 		// For regular pods, extract bridge IP from network status
 		serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
@@ -676,6 +706,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
 	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
 	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
+	rootCmd.Flags().StringVar(&cudn, "cudn", "", "Create and use a Cluster UDN that would be used as a secondary network.")
 	rootCmd.MarkFlagsMutuallyExclusive("all", "hostNet")
 	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
