@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkoput OVN-kubernetes repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: 'ovn-org/ovn-kubernetes'
           fetch-depth: 1
@@ -41,7 +41,7 @@ jobs:
           kubectl get node -o wide
 
       - name: Checkout k8s-netperf
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build k8s-netperf
         run: |
