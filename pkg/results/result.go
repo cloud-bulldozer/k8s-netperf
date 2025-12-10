@@ -148,8 +148,8 @@ func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 	for _, msg := range s.Results {
 		if !msg.Service && msg.Parallelism == 1 && msg.HostNetwork && msg.Profile == "TCP_STREAM" {
 			r := Diff{
-				Result:      doPerfDiff(&diffRes, msg.Config.MessageSize, 1),
-				MessageSize: msg.Config.MessageSize,
+				Result:      doPerfDiff(&diffRes, msg.MessageSize, 1),
+				MessageSize: msg.MessageSize,
 				Streams:     msg.Parallelism,
 			}
 			res = append(res, r)

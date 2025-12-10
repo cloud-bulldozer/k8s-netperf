@@ -122,7 +122,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			return stdout, err
 		}
 	} else {
-		retry := 3
+		retry := 10
 		present := false
 		sshclient, err := k8s.SSHConnect(perf)
 		if err != nil {
@@ -138,7 +138,9 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			sshclient.Close()
+			if err := sshclient.Close(); err != nil {
+				log.Warnf("Error closing SSH client: %v", err)
+			}
 			return stdout, fmt.Errorf("iperf3 binary is not present on the VM")
 		}
 		var stdout []byte
@@ -153,9 +155,11 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			log.Debugf("⏰ Retrying iperf3 command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		sshclient.Close()
+		if err := sshclient.Close(); err != nil {
+			log.Warnf("Error closing SSH client: %v", err)
+		}
 		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("Unable to run iperf3")
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		}
 	}
 
@@ -200,11 +204,15 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 		stdout, err := sshclient.Run(fmt.Sprintf("cat %s", file))
 		if err != nil {
-			sshclient.Close()
+			if closeErr := sshclient.Close(); closeErr != nil {
+				log.Warnf("Error closing SSH client: %v", closeErr)
+			}
 			return *bytes.NewBuffer(stdout), err
 		}
 		log.Debug(strings.TrimSpace(bytes.NewBuffer(stdout).String()))
-		sshclient.Close()
+		if err := sshclient.Close(); err != nil {
+			log.Warnf("Error closing SSH client: %v", err)
+		}
 		return *bytes.NewBuffer(stdout), nil
 	}
 }

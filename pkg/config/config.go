@@ -17,6 +17,12 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// VMExecutor interface for both SSH and virtctl clients
+type VMExecutor interface {
+	Run(command string) ([]byte, error)
+	Close() error
+}
+
 // Config describes the netperf tests
 type Config struct {
 	Parallelism int    `default:"1" yaml:"parallelism,omitempty"`
@@ -42,6 +48,8 @@ type PerfScenarios struct {
 	VM                  bool
 	VMImage             string
 	VMHost              string
+	VMName              string
+	UseVirtctl          bool
 	Udn                 bool
 	UdnPluginBinding    string
 	BridgeNetwork       string
@@ -66,6 +74,7 @@ type PerfScenarios struct {
 	KClient             *kubevirtv1.KubevirtV1Client
 	DClient             *dynamic.DynamicClient
 	SSHClient           *goph.Client
+	VMClient            VMExecutor
 }
 
 // struct for bridge options

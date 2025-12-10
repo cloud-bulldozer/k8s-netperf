@@ -124,7 +124,7 @@ func NodeMTU(conn PromConnect) (int, error) {
 	query := `node_network_mtu_bytes`
 	value, err := conn.Client.QueryRange(query, time.Now().Add(-time.Minute*1), time.Now(), time.Minute)
 	if err != nil {
-		return 0, fmt.Errorf("Issue querying openshift mtu info from prometheus")
+		return 0, fmt.Errorf("issue querying openshift mtu info from prometheus")
 	}
 	mtu := int(value.(model.Matrix)[0].Values[0].Value)
 	return mtu, nil

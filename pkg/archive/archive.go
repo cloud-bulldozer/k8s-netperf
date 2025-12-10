@@ -74,7 +74,7 @@ func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 	indexer, err = indexers.NewIndexer(indexerConfig)
 	if err != nil {
 		logging.Errorf("%v indexer: %v", indexerConfig.Type, err.Error())
-		return nil, fmt.Errorf("Failure while connnecting to Opensearch")
+		return nil, fmt.Errorf("failure while connecting to Opensearch")
 	}
 	logging.Infof("Connected to : %s ", url)
 	return indexer, nil
@@ -267,22 +267,38 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	if err != nil {
 		return fmt.Errorf("failed to open vswitch archive file")
 	}
-	defer vswitchfp.Close()
+	defer func() {
+		if err := vswitchfp.Close(); err != nil {
+			logging.Warnf("Error closing vswitch file: %v", err)
+		}
+	}()
 	podmemfp, err := os.Create(fmt.Sprintf("podmem-result-%d.csv", d))
 	if err != nil {
 		return fmt.Errorf("failed to open pod mem archive file")
 	}
-	defer podmemfp.Close()
+	defer func() {
+		if err := podmemfp.Close(); err != nil {
+			logging.Warnf("Error closing podmem file: %v", err)
+		}
+	}()
 	podfp, err := os.Create(fmt.Sprintf("podcpu-result-%d.csv", d))
 	if err != nil {
 		return fmt.Errorf("failed to open pod cpu archive file")
 	}
-	defer podfp.Close()
+	defer func() {
+		if err := podfp.Close(); err != nil {
+			logging.Warnf("Error closing pod file: %v", err)
+		}
+	}()
 	cpufp, err := os.Create(fmt.Sprintf("cpu-result-%d.csv", d))
 	if err != nil {
 		return fmt.Errorf("failed to open cpu archive file")
 	}
-	defer cpufp.Close()
+	defer func() {
+		if err := cpufp.Close(); err != nil {
+			logging.Warnf("Error closing cpu file: %v", err)
+		}
+	}()
 	vswitch := csv.NewWriter(vswitchfp)
 	defer vswitch.Flush()
 	cpuarchive := csv.NewWriter(cpufp)
@@ -344,7 +360,11 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 	if err != nil {
 		return fmt.Errorf("failed to open archive file")
 	}
-	defer fp.Close()
+	defer func() {
+		if err := fp.Close(); err != nil {
+			logging.Warnf("Error closing archive file: %v", err)
+		}
+	}()
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()
 	iperfdata := append(append([]string{"Type"}, commonCsvHeaderFields()...), "Value")
@@ -395,7 +415,11 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	if err != nil {
 		return fmt.Errorf("failed to open archive file")
 	}
-	defer fp.Close()
+	defer func() {
+		if err := fp.Close(); err != nil {
+			logging.Warnf("Error closing archive file: %v", err)
+		}
+	}()
 	archive := csv.NewWriter(fp)
 	defer archive.Flush()
 

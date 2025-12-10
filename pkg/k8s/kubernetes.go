@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 // DeploymentParams describes the deployment
@@ -350,7 +350,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		log.Warn("⚠️  Single node per zone and/or no zone labels")
 	}
 	if len(zones) < 2 && s.AcrossAZ {
-		return fmt.Errorf("Unable to run AcrossAZ since there is < 2 zones")
+		return fmt.Errorf("unable to run AcrossAZ since there is < 2 zones")
 	}
 	acrossZone := ""
 	if s.AcrossAZ {
@@ -371,7 +371,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 	if (s.HostNetwork || !s.NodeLocal) && ncount < 2 {
-		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
+		return fmt.Errorf("not enough nodes with label worker= to execute test (current number of nodes: %d)", ncount)
 	}
 
 	clientRoleAffinity := []corev1.PodAffinityTerm{
@@ -811,6 +811,7 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	perf.VMHost = host
+	perf.VMName = name  // Set VM name for virtctl usage
 	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
@@ -988,7 +989,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 		// Add privileged security context if requested
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
-				Privileged: pointer.Bool(true),
+				Privileged: ptr.To(true),
 			}
 		}
 		
@@ -1018,7 +1019,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					TerminationGracePeriodSeconds: pointer.Int64(1),
+					TerminationGracePeriodSeconds: ptr.To(int64(1)),
 					ServiceAccountName:            sa,
 					HostNetwork:                   dp.HostNetwork,
 					Containers:                    cmdContainers,

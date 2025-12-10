@@ -7,7 +7,7 @@ on:
 
 env:
   CONTAINER_REGISTRY: ${{ github.repository_owner == 'cloud-bulldozer' && 'quay.io' }}
-  GO_VER: 1.19
+  GO_VER: 1.23
 
 jobs:
   build-binaries:
