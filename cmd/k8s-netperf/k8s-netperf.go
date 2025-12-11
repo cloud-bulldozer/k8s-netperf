@@ -209,6 +209,9 @@ var rootCmd = &cobra.Command{
 		} else if cudn != "" {
 			s.Cudn = true
 			dynClient, err := dynamic.NewForConfig(rconfig)
+			if err != nil {
+				log.Error(err)
+			}
 			err = k8s.DeployCUDN(dynClient, cudn)
 			if err != nil {
 				log.Error(err)
@@ -330,14 +333,14 @@ var rootCmd = &cobra.Command{
 			} else {
 				log.Info("Connecting via ssh to the VMI")
 			}
-			
+
 			// Use the new unified connection method
 			vmClient, err := k8s.ConnectToVM(&s)
 			if err != nil {
 				log.Fatal(err)
 			}
 			s.VMClient = vmClient
-			
+
 			// Also set SSHClient for backward compatibility if using SSH
 			if !s.UseVirtctl {
 				sshClient, err := k8s.SSHConnect(&s)

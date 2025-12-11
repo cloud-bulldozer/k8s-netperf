@@ -298,13 +298,14 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 						cudnMap := map[string]interface{}{
 							"role": "Secondary",
 						}
-						if topology == "Layer3" {
+						switch topology {
+						case "Layer3":
 							cudnMap["subnets"] = []interface{}{
 								map[string]interface{}{
 									"cidr": "20.0.0.0/16",
 								},
 							}
-						} else if topology == "Layer2" {
+						case "Layer2":
 							cudnMap["ipam"] = map[string]interface{}{
 								"lifecycle": "Persistent",
 							}
@@ -901,7 +902,7 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	perf.VMHost = host
-	perf.VMName = name  // Set VM name for virtctl usage
+	perf.VMName = name // Set VM name for virtctl usage
 	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
