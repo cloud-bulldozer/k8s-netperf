@@ -51,6 +51,7 @@ type PerfScenarios struct {
 	VMName              string
 	UseVirtctl          bool
 	Udn                 bool
+	Cudn                bool
 	UdnPluginBinding    string
 	BridgeNetwork       string
 	BridgeNamespace     string

@@ -40,6 +40,21 @@ $ k8s-netperf --udnl2 --vm --udnPluginBinding=l2bridge
 
 > Warning! Support of k8s Services with UDN is not fully supported yet, you may faced inconsistent results when using a service in your tests. 
 
+## Cluster User Defined Network - C-UDN
+k8s-netperf is able to deploy a C-UDN and then attach network interfaces to the pods (or VMs) that allow use the C-UDN as a secondary network.
+The subnet of the C-UDN is `20.0.0.0/16` and the driver will use this secondary interface for the test. C-UDN is automatically cleanup at the end of the execution.
+```
+# For a layer2 C-UDN:
+$ k8s-netperf --cudn layer2
+
+# For a layer3 C-UDN:
+$ k8s-netperf --cudn layer3
+
+# Both of the setup works with VMs too:
+$ k8s-netperf --cudn layer2 --vm
+# or
+$ k8s-netperf --cudn layer3 --vm
+```
 ## Using a Linux Bridge Interface
 When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required. 
 

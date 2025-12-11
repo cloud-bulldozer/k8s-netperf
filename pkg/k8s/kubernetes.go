@@ -54,8 +54,8 @@ type ServiceParams struct {
 type PodNetworksData struct {
 	IPAddresses []string `json:"ip_addresses"`
 	MacAddress  string   `json:"mac_address"`
-	GatewayIPs  []string `json:"gateway_ips"`
-	Role        string   `json:"role"`
+	GatewayIPs  []string `json:"gateway_ips,omitempty"`
+	Role        string   `json:"role,omitempty"`
 }
 
 const sa string = "netperf"
@@ -86,7 +86,8 @@ const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
-const udnName = "udn-primary-netperf"
+const UdnName = "udn-primary-netperf"
+const CudnName = "cudn-secondary-netperf"
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
@@ -116,14 +117,23 @@ func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, 
 	return nil
 }
 
-// buildNetworkAnnotations creates the network annotations for Multus CNI bridge networks
-func buildNetworkAnnotations(bridgeNetwork, bridgeNamespace string) map[string]string {
+// buildBridgeNetworkAnnotations creates the network annotations for Multus CNI bridge networks
+func buildBridgeNetworkAnnotations(bridgeNetwork, bridgeNamespace string) map[string]string {
 	annotations := make(map[string]string)
 	if bridgeNetwork != "" && bridgeNamespace != "" {
 		// Use cross-namespace format: namespace/network-name
 		networkRef := fmt.Sprintf("%s/%s", bridgeNamespace, bridgeNetwork)
 		annotations["k8s.v1.cni.cncf.io/networks"] = networkRef
-		log.Infof("🌉 Configuring bridge network: %s", networkRef)
+	}
+	return annotations
+}
+
+// buildCUdnNetworkAnnotations creates the network annotations for Multus CNI CUdn networks
+func buildCUdnNetworkAnnotations(cudn string) map[string]string {
+	annotations := make(map[string]string)
+	if cudn != "" {
+		annotations["k8s.v1.cni.cncf.io/networks"] = namespace + "/" + cudn
+		log.Infof("🌉 Configuring CUdn network: %s", namespace+"/"+cudn)
 	}
 	return annotations
 }
@@ -139,7 +149,8 @@ func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
 				Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
 		} else {
-			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
+			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
+				Labels: map[string]string{"netperf": "test-namespace"}}}, metav1.CreateOptions{})
 		}
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create namespace: %v", err)
@@ -192,7 +203,7 @@ func DeployL2Udn(dynamicClient *dynamic.DynamicClient) error {
 			"apiVersion": "k8s.ovn.org/v1",
 			"kind":       "UserDefinedNetwork",
 			"metadata": map[string]interface{}{
-				"name":      udnName,
+				"name":      UdnName,
 				"namespace": namespace,
 			},
 			"spec": map[string]interface{}{
@@ -229,7 +240,7 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 			"apiVersion": "k8s.ovn.org/v1",
 			"kind":       "UserDefinedNetwork",
 			"metadata": map[string]interface{}{
-				"name":      udnName,
+				"name":      UdnName,
 				"namespace": namespace,
 			},
 			"spec": map[string]interface{}{
@@ -238,8 +249,7 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 					"role": "Primary",
 					"subnets": []interface{}{
 						map[string]interface{}{
-							"cidr":       "10.0.0.0/16",
-							"hostSubnet": 24,
+							"cidr": "10.0.0.0/16",
 						},
 					},
 				},
@@ -254,6 +264,67 @@ func DeployL3Udn(dynamicClient *dynamic.DynamicClient) error {
 		Resource: "userdefinednetworks",
 	}
 	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(context.TODO(), udn, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Create a Cluster User Defined Network as a secondary network
+func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
+	log.Infof("Deploying CUDN, %s, in the NS : %s", cudn, namespace)
+	if len(cudn) == 0 {
+		return fmt.Errorf("cudn cannot be empty")
+	}
+	cudn = strings.ToLower(cudn)
+	topology := strings.ToUpper(string(cudn[0])) + cudn[1:]
+	cudnObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.ovn.org/v1",
+			"kind":       "ClusterUserDefinedNetwork",
+			"metadata": map[string]interface{}{
+				"name":      CudnName,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				"namespaceSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"netperf": "test-namespace",
+					},
+				},
+				"network": map[string]interface{}{
+					"topology": topology,
+					cudn: func() map[string]interface{} {
+						cudnMap := map[string]interface{}{
+							"role": "Secondary",
+						}
+						switch topology {
+						case "Layer3":
+							cudnMap["subnets"] = []interface{}{
+								map[string]interface{}{
+									"cidr": "20.0.0.0/16",
+								},
+							}
+						case "Layer2":
+							cudnMap["ipam"] = map[string]interface{}{
+								"lifecycle": "Persistent",
+							}
+							cudnMap["subnets"] = []string{"20.0.0.0/16"}
+						}
+						return cudnMap
+					}(),
+				},
+			},
+		},
+	}
+
+	// Specify the GVR for CUDN (cluster-scoped resource)
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "clusteruserdefinednetworks",
+	}
+	_, err := dynamicClient.Resource(gvr).Create(context.TODO(), cudnObj, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -309,7 +380,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	if s.ExternalServer {
+		networkAnnotations := make(map[string]string)
 		//  Create Netperf client on any worker node. No service or server pod required in this scenario.
+		if s.BridgeNetwork != "" {
+			networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
+		} else if s.Cudn {
+			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+		}
 		cdp := DeploymentParams{
 			Name:               "client",
 			Namespace:          "netperf",
@@ -318,7 +395,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
-			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			NetworkAnnotations: networkAnnotations,
 			Privileged:         s.Privileged,
 		}
 
@@ -387,6 +464,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	if s.NodeLocal {
 		//  Create Netperf client on the same node as the server.
+		networkAnnotations := make(map[string]string)
+		//  Create Netperf client on any worker node. No service or server pod required in this scenario.
+		if s.BridgeNetwork != "" {
+			networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
+		} else if s.Cudn {
+			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+		}
 		cdp := DeploymentParams{
 			Name:               "client",
 			Namespace:          "netperf",
@@ -395,7 +479,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
-			NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+			NetworkAnnotations: networkAnnotations,
 			Privileged:         s.Privileged,
 		}
 		if z != "" && numNodes > 1 {
@@ -460,6 +544,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if err != nil {
 		return fmt.Errorf("😥 Unable to create netperf service: %v", err)
 	}
+	networkAnnotations := make(map[string]string)
+	if s.BridgeNetwork != "" {
+		networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
+	} else if s.Cudn {
+		networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+	}
 	cdpAcross := DeploymentParams{
 		Name:               "client-across",
 		Namespace:          "netperf",
@@ -468,7 +558,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:             map[string]string{"role": clientAcrossRole},
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
-		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		NetworkAnnotations: networkAnnotations,
 		Privileged:         s.Privileged,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
@@ -535,7 +625,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get client node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ClientNodeInfo, err = GetPodNodeInfo(client, labels.Set(cdpHostAcross.Labels).String())
@@ -543,7 +633,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				return err
 			}
 		}
-		
+
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
 			if !s.VM {
@@ -586,7 +676,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:             map[string]string{"role": serverRole},
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
-		NetworkAnnotations: buildNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace),
+		NetworkAnnotations: networkAnnotations,
 		Privileged:         s.Privileged,
 	}
 	if s.NodeLocal {
@@ -670,7 +760,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 		}
-		
+
 		// If HostNetworkOnly mode, get server node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
@@ -744,7 +834,7 @@ func ExtractBridgeIp(pod corev1.Pod, bridgeNetworkName, bridgeNamespace string) 
 }
 
 // Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
-func ExtractUdnIp(pod corev1.Pod) (string, error) {
+func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 	for key, value := range pod.Annotations {
 		log.Debugf("Pod Annotation key: %s, value: %s", key, value)
 	}
@@ -757,8 +847,9 @@ func ExtractUdnIp(pod corev1.Pod) (string, error) {
 	}
 	//
 	var udnData PodNetworksData
-	err = json.Unmarshal(root[namespace+"/"+udnName], &udnData)
+	err = json.Unmarshal(root[namespace+"/"+networkName], &udnData)
 	if err != nil {
+		log.Error("UDN pod annotations does not match PodNetworksData structure:", err)
 		return "", err
 	}
 	// Extract the IPv4 address
@@ -778,7 +869,7 @@ func ExtractUdnIp(pod corev1.Pod) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding,
+	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
@@ -805,13 +896,13 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding,
+	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
 	}
 	perf.VMHost = host
-	perf.VMName = name  // Set VM name for virtctl usage
+	perf.VMName = name // Set VM name for virtctl usage
 	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
@@ -985,14 +1076,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			Command:         dp.Commands[i],
 			ImagePullPolicy: corev1.PullAlways,
 		}
-		
+
 		// Add privileged security context if requested
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
 				Privileged: ptr.To(true),
 			}
 		}
-		
+
 		cmdContainers = append(cmdContainers, container)
 	}
 
@@ -1170,6 +1261,20 @@ func DestroyDeployment(client *kubernetes.Clientset, dp appsv1.Deployment) error
 	deletePolicy := metav1.DeletePropagationForeground
 	gracePeriod := int64(0)
 	return client.AppsV1().Deployments(dp.Namespace).Delete(context.TODO(), dp.Name, metav1.DeleteOptions{
+		PropagationPolicy:  &deletePolicy,
+		GracePeriodSeconds: &gracePeriod,
+	})
+}
+
+func DestroyCUdn(dynamicClient *dynamic.DynamicClient, cudn string) error {
+	deletePolicy := metav1.DeletePropagationForeground
+	gracePeriod := int64(0)
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "clusteruserdefinednetworks",
+	}
+	return dynamicClient.Resource(gvr).Delete(context.TODO(), cudn, metav1.DeleteOptions{
 		PropagationPolicy:  &deletePolicy,
 		GracePeriodSeconds: &gracePeriod,
 	})

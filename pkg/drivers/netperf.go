@@ -35,7 +35,11 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	clientIp := pod.Status.PodIP
 
 	if perf.Udn {
-		if udnIp, _ := k8s.ExtractUdnIp(pod); udnIp != "" {
+		if udnIp, _ := k8s.ExtractUdnIp(pod, k8s.UdnName); udnIp != "" {
+			clientIp = udnIp
+		}
+	} else if perf.Cudn {
+		if udnIp, _ := k8s.ExtractUdnIp(pod, k8s.CudnName); udnIp != "" {
 			clientIp = udnIp
 		}
 	} else if perf.BridgeNetwork != "" {
