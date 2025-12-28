@@ -1,0 +1,2 @@
+Type,Driver,Profile,Same node,Host Network,Service,External Server,UDN Info,Bridge Info,Duration,Parallelism,# of Samples,Message Size,Burst,Confidence metric - low,Confidence metric - high,Value
+UDP Percent Loss,ib_write_bw,UDP_STREAM,false,true,false,false,,,5,1,1,1024,0,0,0,0.000000

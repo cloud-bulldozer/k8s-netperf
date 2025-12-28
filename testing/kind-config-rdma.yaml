@@ -1,0 +1,33 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /dev/infiniband
+        containerPath: /dev/infiniband
+      - hostPath: /sys/class/infiniband
+        containerPath: /sys/class/infiniband
+        readOnly: true
+      - hostPath: /sys/class/net
+        containerPath: /sys/class/net
+        readOnly: true
+  - role: worker
+    extraMounts:
+      - hostPath: /dev/infiniband
+        containerPath: /dev/infiniband
+      - hostPath: /sys/class/infiniband
+        containerPath: /sys/class/infiniband
+        readOnly: true
+      - hostPath: /sys/class/net
+        containerPath: /sys/class/net
+        readOnly: true
+  - role: worker
+    extraMounts:
+      - hostPath: /dev/infiniband
+        containerPath: /dev/infiniband
+      - hostPath: /sys/class/infiniband
+        containerPath: /sys/class/infiniband
+        readOnly: true
+      - hostPath: /sys/class/net
+        containerPath: /sys/class/net
+        readOnly: true

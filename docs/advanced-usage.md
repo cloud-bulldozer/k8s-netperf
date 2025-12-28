@@ -5,9 +5,11 @@ This enables k8s-netperf to use the IP address provided via the `--serverIP` opt
 
 > *Note: User has to create a server with the provided IP address and run the intented k8s-netperf driver (i.e uperf, iperf or netperf). User has to enable respective ports on this server to allow the traffic from the client*
 
-Once the external server is ready to accept the traffic, users can orhestrate k8s-netperf by running
+Once the external server is ready to accept the traffic, users can orhestrate k8s-netperf by running:
 
-`k8s-netperf --serverIP=44.243.95.221`
+```bash
+k8s-netperf --serverIP=44.243.95.221
+```
 
 ## Running with VMs
 Running k8s-netperf against Virtual Machines (OpenShift CNV) requires
@@ -16,9 +18,11 @@ Running k8s-netperf against Virtual Machines (OpenShift CNV) requires
 - SSH keys to be present in the home directory `(~/.ssh/id_rsa.pub)`
 - OpenShift Routes - k8s-netperf uses this to reach the VMs (k8s-netperf will create the route for the user, but we need Routes)
 
-If the two above are in place, users can orhestrate k8s-netperf to launch VMs by running
+If the two above are in place, users can orhestrate k8s-netperf to launch VMs by running:
 
-`k8s-netperf --vm`
+```bash
+k8s-netperf --vm
+```
 
 ## Using User Defined Network - UDN (only on OCP 4.18 and above)
 To run k8s-netperf using a UDN primary network for the test instead of the default network of OVN-k:
@@ -83,12 +87,12 @@ spec:
 ```
 
 Then you can launch a test using the bridge interface:
-```
+```bash
 ./bin/amd64/k8s-netperf --vm --bridge br0
 ```
 
 By default, it will read the `bridgeNetwork.json` file from the git repository. If the default IP addresses (10.10.10.12/24 and 10.10.10.14/24) are not available for your setup, it is possible to change it by passing a JSON file as a parameter with `--bridgeNetwork`, like follow:
-```
+```bash
 k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
 ```
 
@@ -103,5 +107,23 @@ $ k8s-netperf --privileged
 
 Using the `ib_write_bw` driver, your hardware should include RDMA devices:
 ```
-$ k8s-netperf --ib-write-bw --privileged --hostNet
+$ k8s-netperf --ib-write-bw nic:gid --privileged --hostNet
+```
+
+### RoCEv2 local testing
+
+On Fedora systems:
+```bash
+sudo modprobe rdma_rxe
+sudo rdma link add rxe0 type rxe netdev eth0  # Name of your active interface
+kind create cluster --config testing/kind-config-rdma.yaml
+kubectl label node kind-worker  node-role.kubernetes.io/worker=""
+kubectl label node kind-worker2 node-role.kubernetes.io/worker=""
+k8s-netperf --config config.yaml --hostNet --privileged --ib-write-bw rxe0:1
+```
+
+Cleanup:
+```bash
+kind delete cluster
+sudo rdma link delete rxe0
 ```
