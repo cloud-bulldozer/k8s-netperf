@@ -97,7 +97,7 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("😭 --ib-write-bw requires nic:gid parameter (e.g., --ib-write-bw=mlx5_0:0)")
 		}
 
-		if !(uperf || netperf || iperf3 || ibWriteBwEnabled) {
+		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
 			log.Fatalf("😭 At least one driver needs to be enabled")
 		}
 		// Validate mutually exclusive UDN flags
