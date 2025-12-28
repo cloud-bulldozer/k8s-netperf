@@ -47,6 +47,10 @@ func NewDriver(driverName string, cfg config.Config) (Driver, error) {
 			driverName: driverName,
 			testConfig: cfg,
 		}, nil
+	case "ib_write_bw":
+		return &ibWriteBw{
+			driverName: driverName,
+		}, nil
 	case "netperf":
 		return &netperf{
 			driverName: driverName,
