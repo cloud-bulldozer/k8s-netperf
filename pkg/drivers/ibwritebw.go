@@ -131,7 +131,9 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			sshclient.Close()
+			if err := sshclient.Close(); err != nil {
+				log.Debugf("Failed to close SSH client: %v", err)
+			}
 			return stdout, fmt.Errorf("ib_write_bw binary is not present on the VM")
 		}
 		var stdoutBytes []byte
@@ -146,9 +148,11 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 			log.Debugf("⏰ Retrying ib_write_bw command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		sshclient.Close()
+		if err := sshclient.Close(); err != nil {
+			log.Debugf("Failed to close SSH client: %v", err)
+		}
 		if !ran {
-			return *bytes.NewBuffer(stdoutBytes), fmt.Errorf("Unable to run ib_write_bw")
+			return *bytes.NewBuffer(stdoutBytes), fmt.Errorf("unable to run ib_write_bw")
 		}
 		stdout = *bytes.NewBuffer(stdoutBytes)
 	}

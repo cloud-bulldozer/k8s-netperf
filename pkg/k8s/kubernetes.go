@@ -448,7 +448,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	ncount := len(nodes.Items)
 	log.Debugf("Number of nodes with role worker: %d", ncount)
 	if !s.NodeLocal && ncount < 2 {
-		return fmt.Errorf(" not enough nodes with label worker= to execute test (current number of nodes: %d).", ncount)
+		return fmt.Errorf("not enough nodes with label worker= to execute test (current number of nodes: %d)", ncount)
 	}
 
 	clientRoleAffinity := []corev1.PodAffinityTerm{
