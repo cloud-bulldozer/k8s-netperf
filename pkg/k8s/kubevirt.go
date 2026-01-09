@@ -160,7 +160,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
-	sockets uint32, cores uint32, threads uint32) (string, error) {
+	cudn bool, sockets uint32, cores uint32, threads uint32) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -256,6 +256,25 @@ ethernets:
   eth0:
     dhcp4: true`
 		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
+	} else if cudn {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "secondary",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "secondary",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + CudnName,
+				},
+			},
+		})
+		netData = `version: 2
+ethernets:
+  eth1:
+    dhcp4: true`
 	}
 	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
 	if err != nil {
@@ -274,7 +293,7 @@ ethernets:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
+	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
 	sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
@@ -372,6 +391,25 @@ ethernets:
   eth0:
     dhcp4: true`
 		label["kubevirt.io/udn-binding-method"] = udnPluginBinding
+	} else if cudn {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "secondary",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "secondary",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + CudnName,
+				},
+			},
+		})
+		netData = `version: 2
+ethernets:
+  eth1:
+    dhcp4: true`
 	}
 	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
 }
