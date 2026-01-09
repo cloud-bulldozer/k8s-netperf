@@ -504,7 +504,7 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 		}
 		err = k8s.DestroyCUdn(dynClient, k8s.CudnName)
 		if err != nil {
-			log.Debugf("CUdn is not deleted: %v", err)
+			log.Error(err)
 		}
 	}
 	err := k8s.DestroyNamespace(client)
