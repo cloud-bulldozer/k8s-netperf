@@ -605,7 +605,11 @@ func executeWorkload(nc config.Config,
 		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
 		case "ib_write_bw":
-			serverIP = s.ServerHost.Items[0].Status.PodIP
+			if s.NodeLocal {
+				serverIP = s.Server.Items[0].Status.PodIP
+			} else {
+				serverIP = s.ServerHost.Items[0].Status.PodIP
+			}
 		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
@@ -646,7 +650,7 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
-		if hostNet {
+		if hostNet && !s.NodeLocal {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
 		} else {
 			serverIP = s.Server.Items[0].Status.PodIP
@@ -655,7 +659,7 @@ func executeWorkload(nc config.Config,
 	if !s.NodeLocal && !s.ExternalServer {
 		Client = s.ClientAcross
 	}
-	if hostNet {
+	if hostNet && !s.NodeLocal {
 		Client = s.ClientHost
 	}
 	npr.Config = nc
