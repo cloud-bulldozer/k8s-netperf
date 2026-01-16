@@ -1,0 +1,8 @@
+ ---
+ tests:
+ - UDPStream:
+   parallelism: 1
+   profile: "UDP_STREAM"
+   duration: 5
+   samples: 1
+   messagesize: 1024

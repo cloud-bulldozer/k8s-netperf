@@ -391,6 +391,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Name:               "client",
 			Namespace:          "netperf",
 			Replicas:           1,
+			HostNetwork:        s.HostNetwork,
 			Image:              k8sNetperfImage,
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
@@ -654,6 +655,10 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		sdp.PodAffinity = corev1.PodAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 		}
+		// For local mode with hostNet, use host network on the regular server
+		if s.HostNetwork {
+			sdp.HostNetwork = true
+		}
 	}
 	if z != "" {
 		var affinity corev1.NodeAffinity
@@ -740,8 +745,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 		}
 	}
-	// Only create regular server pods if not in HostNetworkOnly mode
-	if !s.HostNetworkOnly {
+	// Only create regular server pods if not in HostNetworkOnly mode (unless NodeLocal where we use regular pods with hostNetwork)
+	if !s.HostNetworkOnly || s.NodeLocal {
 		if !s.VM {
 			s.Server, err = deployDeployment(client, sdp)
 			if err != nil {
