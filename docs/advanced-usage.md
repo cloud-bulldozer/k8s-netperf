@@ -117,9 +117,8 @@ On Fedora systems:
 sudo modprobe rdma_rxe
 sudo rdma link add rxe0 type rxe netdev eth0  # Name of your active interface
 kind create cluster --config testing/kind-config-rdma.yaml
-kubectl label node kind-worker  node-role.kubernetes.io/worker=""
-kubectl label node kind-worker2 node-role.kubernetes.io/worker=""
-k8s-netperf --config config.yaml --hostNet --privileged --ib-write-bw rxe0:1
+kubectl label node kind-control-plane node-role.kubernetes.io/worker=""
+k8s-netperf --config config.yaml --hostNet --privileged --ib-write-bw rxe0:1 --local
 ```
 
 Cleanup:

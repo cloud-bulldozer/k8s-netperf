@@ -11,23 +11,3 @@ nodes:
       - hostPath: /sys/class/net
         containerPath: /sys/class/net
         readOnly: true
-  - role: worker
-    extraMounts:
-      - hostPath: /dev/infiniband
-        containerPath: /dev/infiniband
-      - hostPath: /sys/class/infiniband
-        containerPath: /sys/class/infiniband
-        readOnly: true
-      - hostPath: /sys/class/net
-        containerPath: /sys/class/net
-        readOnly: true
-  - role: worker
-    extraMounts:
-      - hostPath: /dev/infiniband
-        containerPath: /dev/infiniband
-      - hostPath: /sys/class/infiniband
-        containerPath: /sys/class/infiniband
-        readOnly: true
-      - hostPath: /sys/class/net
-        containerPath: /sys/class/net
-        readOnly: true
