@@ -1,0 +1,257 @@
+name: roce
+
+on:
+  pull_request:
+    branches: [ "*" ]
+    paths-ignore:
+    - '**.md'
+    - '**.sh'
+
+jobs:
+  qemu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout k8s-netperf
+        uses: actions/checkout@v4
+
+      - name: Build k8s-netperf
+        run: |
+          make build
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-system-x86 \
+            qemu-utils \
+            genisoimage
+
+      - name: Boot Fedora Cloud Image with QEMU and install Podman + RDMA + Kind
+        run: |
+          echo "=== QEMU RDMA Testing with Fedora Cloud Image ==="
+          echo "Using Fedora 43 Cloud Image for ultra-fast execution"
+
+          # Download Fedora 43 Cloud Image (latest with faster boot)
+          cd /tmp
+          echo "Downloading Fedora 43 Cloud Image..."
+          FEDORA_CLOUD_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images"
+          FEDORA_IMAGE="Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2"
+
+          if wget --timeout=60 -q "$FEDORA_CLOUD_URL/$FEDORA_IMAGE" -O fedora-cloud.qcow2; then
+            echo "✅ Fedora Cloud image downloaded successfully"
+            ls -lh fedora-cloud.qcow2
+          else
+            echo "❌ Failed to download Fedora Cloud image"
+            exit 1
+          fi
+
+          # Resize the qcow2 image to 10GB (default 5GB is too small for packages + Kind)
+          echo "Resizing disk image to 10GB..."
+          qemu-img resize fedora-cloud.qcow2 10G
+          echo "✅ Disk image resized to 10GB"
+
+          # Create cloud-init configuration for automated setup
+          echo "Creating cloud-init configuration..."
+          mkdir -p /tmp/cloud-init
+
+          # Copy Kind config from repository
+          echo "Copying Kind configuration file..."
+          cp $GITHUB_WORKSPACE/testing/kind-config-rdma.yaml /tmp/cloud-init/kind-config.yaml
+
+          # Copy k8s-netperf binary and config
+          echo "Copying k8s-netperf binary and config..."
+          cp $GITHUB_WORKSPACE/bin/amd64/k8s-netperf /tmp/cloud-init/
+          cp $GITHUB_WORKSPACE/examples/roce.yaml /tmp/cloud-init/
+
+          # Create user-data for cloud-init - back to printf approach but simplified
+          printf '%s\n' \
+            '#cloud-config' \
+            'users:' \
+            '  - default' \
+            '  - name: fedora' \
+            '    sudo: ALL=(ALL) NOPASSWD:ALL' \
+            '    shell: /bin/bash' \
+            '' \
+            'chpasswd:' \
+            '  list: |' \
+            '    fedora:fedora' \
+            '  expire: false' \
+            '' \
+            'packages:' \
+            '  - podman' \
+            '  - rdma-core' \
+            '' \
+            'runcmd:' \
+            '  - set -ex' \
+            '  - trap "echo CLOUD_INIT_FAILED; sync; poweroff" ERR' \
+            '  - dnf install -y kernel-modules-extra-$(uname -r)' \
+            '  - mkdir -p /mnt/cdrom' \
+            '  - mount /dev/sr0 /mnt/cdrom || mount /dev/sr1 /mnt/cdrom || mount /dev/sdb /mnt/cdrom || { echo "❌ Failed to mount cloud-init ISO"; echo "FAST_FAIL_MOUNT_ERROR"; poweroff; exit 1; }' \
+            '  - cp /mnt/cdrom/kind-config.yaml /tmp/' \
+            '  - cp /mnt/cdrom/k8s-netperf /usr/local/bin/' \
+            '  - chmod +x /usr/local/bin/k8s-netperf' \
+            '  - cp /mnt/cdrom/k8s-netperf-config.yaml /tmp/' \
+            '  - umount /mnt/cdrom' \
+            '  - modprobe ib_core || { echo "❌ Failed to load ib_core module"; exit 1; }' \
+            '  - modprobe ib_uverbs || { echo "❌ Failed to load ib_uverbs module"; exit 1; }' \
+            '  - modprobe rdma_rxe || { echo "❌ Failed to load rdma_rxe module"; exit 1; }' \
+            '  - rdma link add rxe0 type rxe netdev ens3 || { echo "❌ Failed to create RXE device"; exit 1; }' \
+            '  - rdma link show' \
+            '  - sysctl -w kernel.keys.maxkeys=5000' \
+            '  - sysctl -w fs.inotify.max_user_watches=2099999999' \
+            '  - sysctl -w fs.inotify.max_user_instances=2099999999' \
+            '  - sysctl -w fs.inotify.max_queued_events=2099999999' \
+            '  - curl -Lo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64' \
+            '  - chmod +x /usr/local/bin/kind' \
+            '  - KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --config=/tmp/kind-config.yaml' \
+            '  - kind get clusters' \
+            '  - curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"' \
+            '  - chmod +x /usr/local/bin/kubectl' \
+            '  - kubectl label node kind-control-plane node-role.kubernetes.io/worker=""' \
+            '  - k8s-netperf --config /tmp/roce.yaml --privileged --ib-write-bw rxe0:1 --hostNet --local' \
+            '  - echo "=== RDMA + Podman + Kind + k8s-netperf completed successfully! ==="' \
+            '  - echo "✅ RDMA device created"' \
+            '  - echo "✅ Podman available"' \
+            '  - echo "✅ Kind cluster created"' \
+            '  - echo "✅ k8s-netperf executed"' \
+            '  - sync' \
+            '  - poweroff' \
+            > /tmp/cloud-init/user-data
+
+          # Create meta-data using printf
+          printf '%s\n' \
+            'instance-id: rdma-test-vm' \
+            'local-hostname: rdma-test' \
+            > /tmp/cloud-init/meta-data
+
+          # Create cloud-init ISO
+          echo "Creating cloud-init ISO..."
+          genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/k8s-netperf-config.yaml
+          echo "✅ Cloud-init ISO created"
+
+          # Boot QEMU VM with Fedora Cloud Image and cloud-init
+          echo ""
+          echo "🚀 Booting Fedora Cloud VM with automated RDMA + Podman + Kind setup..."
+          echo "VM will automatically install packages, setup RDMA, Podman, and create Kind cluster"
+
+          # Boot QEMU with cloud image in background
+          echo "Starting QEMU VM..."
+          touch /tmp/vm-output.log
+          qemu-system-x86_64 \
+            -machine accel=tcg \
+            -cpu max \
+            -m 7168 \
+            -smp 2 \
+            -drive file=/tmp/fedora-cloud.qcow2,format=qcow2 \
+            -drive file=/tmp/cloud-init.iso,format=raw \
+            -netdev user,id=net0,dns=8.8.8.8 \
+            -device e1000,netdev=net0 \
+            -nographic \
+            -serial mon:stdio > /tmp/vm-output.log 2>&1 &
+          QEMU_PID=$!
+          echo "QEMU started with PID $QEMU_PID"
+
+          # Stream logs in real-time
+          tail -f /tmp/vm-output.log &
+          TAIL_PID=$!
+
+          # Monitor for success or failure (max 40 minutes)
+          for i in $(seq 1 240); do
+            if ! kill -0 $QEMU_PID 2>/dev/null; then
+              echo "QEMU process exited"
+              break
+            fi
+            if grep -q "RDMA + Podman + Kind + k8s-netperf completed successfully" /tmp/vm-output.log 2>/dev/null; then
+              echo "✅ Success detected!"
+              break
+            fi
+            if grep -v "trap" /tmp/vm-output.log 2>/dev/null | grep -q "CLOUD_INIT_FAILED\|FAST_FAIL"; then
+              echo "❌ Cloud-init failure detected - stopping VM"
+              break
+            fi
+            if grep -q "You are in emergency mode" /tmp/vm-output.log 2>/dev/null; then
+              echo "❌ VM entered emergency mode - stopping VM"
+              break
+            fi
+            if grep -q "Kernel panic" /tmp/vm-output.log 2>/dev/null; then
+              echo "❌ Kernel panic detected - stopping VM"
+              break
+            fi
+            sleep 10
+          done
+
+          # Cleanup
+          kill $TAIL_PID 2>/dev/null || true
+          kill $QEMU_PID 2>/dev/null || true
+          sleep 2
+
+          VM_OUTPUT=$(cat /tmp/vm-output.log)
+
+          # Always display VM output for debugging
+          echo "=== FULL VM OUTPUT ==="
+          echo "$VM_OUTPUT"
+          echo "=== END VM OUTPUT ==="
+
+          # Check if the cloud-init automation completed successfully
+          echo ""
+          echo "== QEMU Cloud VM RDMA + Podman Testing Summary =="
+          if echo "$VM_OUTPUT" | grep -q "RDMA + Podman + Kind + k8s-netperf completed successfully"; then
+            echo "🏆 SUCCESS: Cloud VM automation completed! 🏆"
+            echo ""
+
+            # Check individual components
+            if echo "$VM_OUTPUT" | grep -q "RDMA device created"; then
+              echo "✓ RDMA setup successful"
+            else
+              echo "⚠️ RDMA setup unclear"
+            fi
+
+            if echo "$VM_OUTPUT" | grep -q "Podman available"; then
+              echo "✓ Podman available"
+            else
+              echo "⚠️ Podman status unclear"
+            fi
+
+            echo ""
+            echo "🎉🎉🎉 COMPLETE SUCCESS: RDMA + Podman + Kind + k8s-netperf! 🎉🎉🎉"
+            echo ""
+            echo "What was achieved:"
+            echo "- ✅ Downloaded and booted Fedora 43 Cloud image"
+            echo "- ✅ Automated package installation (RDMA-core)"
+            echo "- ✅ RDMA soft-RoCE setup with rxe0 device"
+            echo "- ✅ Podman container runtime ready"
+            echo "- ✅ Kind cluster created"
+            echo "- ✅ k8s-netperf RDMA benchmark executed"
+            echo ""
+            echo "This demonstrates working RDMA + Podman + Kind + k8s-netperf!"
+          else
+            echo "❌ Cloud VM automation did not complete successfully"
+            echo ""
+            echo "Checking for specific failures in VM output..."
+
+            # Check for package installation issues
+            if echo "$VM_OUTPUT" | grep -q -i "package.*failed\|dnf.*error\|yum.*error"; then
+              echo "- Package installation may have failed"
+            fi
+
+            # Check for RDMA issues
+            if echo "$VM_OUTPUT" | grep -q -i "rdma.*failed\|modprobe.*failed"; then
+              echo "- RDMA module loading may have failed"
+            fi
+
+            # Check for Podman issues
+            if echo "$VM_OUTPUT" | grep -q -i "podman.*failed\|podman.*error"; then
+              echo "- Podman may have failed"
+            fi
+
+            # Check for network/download issues
+            if echo "$VM_OUTPUT" | grep -q -i "curl.*failed\|wget.*failed\|network.*failed"; then
+              echo "- Network connectivity or download issues"
+            fi
+
+            echo ""
+            echo "Full VM output provided above for debugging"
+            exit 1
+          fi
