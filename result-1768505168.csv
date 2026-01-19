@@ -1,2 +1,0 @@
-Driver,Profile,Same node,Host Network,Service,External Server,UDN Info,Bridge Info,Duration,Parallelism,# of Samples,Message Size,Burst,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
-ib_write_bw,UDP_STREAM,true,true,false,false,,,5,1,1,1024,0,0,0,1013.650000,Mb/s,0,usec
