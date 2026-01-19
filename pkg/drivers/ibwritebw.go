@@ -70,7 +70,11 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	clientIp := pod.Status.PodIP
 
 	if perf.Udn {
-		if udnIp, _ := k8s.ExtractUdnIp(pod); udnIp != "" {
+		if udnIp, _ := k8s.ExtractUdnIp(pod, k8s.UdnName); udnIp != "" {
+			clientIp = udnIp
+		}
+	} else if perf.Cudn {
+		if udnIp, _ := k8s.ExtractUdnIp(pod, k8s.CudnName); udnIp != "" {
 			clientIp = udnIp
 		}
 	} else if perf.BridgeNetwork != "" {
