@@ -63,7 +63,7 @@ jobs:
           # Copy k8s-netperf binary and config
           echo "Copying k8s-netperf binary and config..."
           cp $GITHUB_WORKSPACE/bin/amd64/k8s-netperf /tmp/cloud-init/
-          cp $GITHUB_WORKSPACE/examples/roce.yaml /tmp/cloud-init/
+          cp $GITHUB_WORKSPACE/examples/roce.yml /tmp/cloud-init/
 
           # Create user-data for cloud-init - back to printf approach but simplified
           printf '%s\n' \
@@ -92,7 +92,7 @@ jobs:
             '  - cp /mnt/cdrom/kind-config.yaml /tmp/' \
             '  - cp /mnt/cdrom/k8s-netperf /usr/local/bin/' \
             '  - chmod +x /usr/local/bin/k8s-netperf' \
-            '  - cp /mnt/cdrom/k8s-netperf-config.yaml /tmp/' \
+            '  - cp /mnt/cdrom/roce.yml /tmp/' \
             '  - umount /mnt/cdrom' \
             '  - modprobe ib_core || { echo "❌ Failed to load ib_core module"; exit 1; }' \
             '  - modprobe ib_uverbs || { echo "❌ Failed to load ib_uverbs module"; exit 1; }' \
@@ -110,7 +110,7 @@ jobs:
             '  - curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"' \
             '  - chmod +x /usr/local/bin/kubectl' \
             '  - kubectl label node kind-control-plane node-role.kubernetes.io/worker=""' \
-            '  - k8s-netperf --config /tmp/roce.yaml --privileged --ib-write-bw rxe0:1 --hostNet --local' \
+            '  - k8s-netperf --config /tmp/roce.yml --privileged --ib-write-bw rxe0:1 --hostNet --local' \
             '  - echo "=== RDMA + Podman + Kind + k8s-netperf completed successfully! ==="' \
             '  - echo "✅ RDMA device created"' \
             '  - echo "✅ Podman available"' \
@@ -128,7 +128,7 @@ jobs:
 
           # Create cloud-init ISO
           echo "Creating cloud-init ISO..."
-          genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/roce.yaml
+          genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/roce.yml
           echo "✅ Cloud-init ISO created"
 
           # Boot QEMU VM with Fedora Cloud Image and cloud-init
