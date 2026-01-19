@@ -128,7 +128,7 @@ jobs:
 
           # Create cloud-init ISO
           echo "Creating cloud-init ISO..."
-          genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/k8s-netperf-config.yaml
+          genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/roce.yaml
           echo "✅ Cloud-init ISO created"
 
           # Boot QEMU VM with Fedora Cloud Image and cloud-init
