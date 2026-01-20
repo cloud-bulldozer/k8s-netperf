@@ -81,10 +81,8 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	// ib_write_bw client command: "ib_write_bw -d {device} -x {gid} -F $server_ip"
 	cmd := []string{"stdbuf", "-oL", "-eL", "ib_write_bw", "-d", device, "-x", gidIndex, "-F", serverIP}
 
-	// Add duration if specified (ib_write_bw uses -D for duration in seconds)
-	if nc.Duration > 0 {
-		cmd = append(cmd, "-D", fmt.Sprint(nc.Duration))
-	}
+	// Add duration (ib_write_bw uses -D for duration in seconds)
+	cmd = append(cmd, "-D", fmt.Sprint(nc.Duration))
 
 	log.Debug(cmd)
 	if !perf.VM {
