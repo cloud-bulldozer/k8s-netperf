@@ -68,7 +68,8 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
-	log.Debugf("Client (%s,%s) starting ib_write_bw against server: %s", pod.Name, pod.Status.PodIP, serverIP)
+	clientIp := pod.Status.PodIP
+	log.Debugf("Client (%s,%s) starting ib_write_bw against server: %s", pod.Name, clientIp, serverIP)
 	config.Show(nc, i.driverName)
 
 	// Parse the nic:gid parameter

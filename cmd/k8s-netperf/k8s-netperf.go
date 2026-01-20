@@ -111,6 +111,9 @@ var rootCmd = &cobra.Command{
 		if ibWriteBwEnabled && (!privileged || !hostNetOnly) {
 			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
 		}
+		if ibWriteBwEnabled && (udnl2 || udnl3 || cudn != "") {
+			log.Fatalf("😭 ib_write_bw driver cannot be used with UDN flags (--udnl2, --udnl3, --cudn)")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
