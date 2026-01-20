@@ -1,4 +1,4 @@
-name: roce
+name: RoCE
 
 on:
   pull_request:
@@ -31,16 +31,13 @@ jobs:
       - name: Boot Fedora Cloud Image with QEMU and install Podman + RDMA + Kind
         run: |
           echo "=== QEMU RDMA Testing with Fedora Cloud Image ==="
-          echo "Using Fedora 43 Cloud Image for ultra-fast execution"
 
-          # Download Fedora 43 Cloud Image (latest with faster boot)
+          # Download Fedora 43 Cloud Image
           cd /tmp
-          echo "Downloading Fedora 43 Cloud Image..."
           FEDORA_CLOUD_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images"
           FEDORA_IMAGE="Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2"
 
           if wget --timeout=60 -q "$FEDORA_CLOUD_URL/$FEDORA_IMAGE" -O fedora-cloud.qcow2; then
-            echo "✅ Fedora Cloud image downloaded successfully"
             ls -lh fedora-cloud.qcow2
           else
             echo "❌ Failed to download Fedora Cloud image"
@@ -50,22 +47,18 @@ jobs:
           # Resize the qcow2 image to 10GB (default 5GB is too small for packages + Kind)
           echo "Resizing disk image to 10GB..."
           qemu-img resize fedora-cloud.qcow2 10G
-          echo "✅ Disk image resized to 10GB"
 
           # Create cloud-init configuration for automated setup
-          echo "Creating cloud-init configuration..."
           mkdir -p /tmp/cloud-init
 
           # Copy Kind config from repository
-          echo "Copying Kind configuration file..."
           cp $GITHUB_WORKSPACE/testing/kind-config-rdma.yaml /tmp/cloud-init/kind-config.yaml
 
           # Copy k8s-netperf binary and config
-          echo "Copying k8s-netperf binary and config..."
           cp $GITHUB_WORKSPACE/bin/amd64/k8s-netperf /tmp/cloud-init/
           cp $GITHUB_WORKSPACE/examples/roce.yml /tmp/cloud-init/
 
-          # Create user-data for cloud-init - back to printf approach but simplified
+          # Create user-data for cloud-init
           printf '%s\n' \
             '#cloud-config' \
             'users:' \
@@ -129,12 +122,6 @@ jobs:
           # Create cloud-init ISO
           echo "Creating cloud-init ISO..."
           genisoimage -output /tmp/cloud-init.iso -volid cidata -joliet -rock /tmp/cloud-init/user-data /tmp/cloud-init/meta-data /tmp/cloud-init/kind-config.yaml /tmp/cloud-init/k8s-netperf /tmp/cloud-init/roce.yml
-          echo "✅ Cloud-init ISO created"
-
-          # Boot QEMU VM with Fedora Cloud Image and cloud-init
-          echo ""
-          echo "🚀 Booting Fedora Cloud VM with automated RDMA + Podman + Kind setup..."
-          echo "VM will automatically install packages, setup RDMA, Podman, and create Kind cluster"
 
           # Boot QEMU with cloud image in background
           echo "Starting QEMU VM..."
@@ -198,7 +185,7 @@ jobs:
           echo ""
           echo "== QEMU Cloud VM RDMA + Podman Testing Summary =="
           if echo "$VM_OUTPUT" | grep -q "RDMA + Podman + Kind + k8s-netperf completed successfully"; then
-            echo "🏆 SUCCESS: Cloud VM automation completed! 🏆"
+            echo "✓ SUCCESS: Cloud VM automation completed!"
             echo ""
 
             # Check individual components
@@ -215,17 +202,8 @@ jobs:
             fi
 
             echo ""
-            echo "🎉🎉🎉 COMPLETE SUCCESS: RDMA + Podman + Kind + k8s-netperf! 🎉🎉🎉"
-            echo ""
-            echo "What was achieved:"
-            echo "- ✅ Downloaded and booted Fedora 43 Cloud image"
-            echo "- ✅ Automated package installation (RDMA-core)"
-            echo "- ✅ RDMA soft-RoCE setup with rxe0 device"
-            echo "- ✅ Podman container runtime ready"
-            echo "- ✅ Kind cluster created"
-            echo "- ✅ k8s-netperf RDMA benchmark executed"
-            echo ""
-            echo "This demonstrates working RDMA + Podman + Kind + k8s-netperf!"
+            echo "SUCCESS: RDMA + Podman + Kind + k8s-netperf"
+
           else
             echo "❌ Cloud VM automation did not complete successfully"
             echo ""
