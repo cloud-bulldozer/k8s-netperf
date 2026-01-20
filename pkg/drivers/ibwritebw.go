@@ -115,25 +115,9 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 		}
 	} else {
 		retry := 3
-		present := false
 		sshclient, err := k8s.SSHConnect(perf)
 		if err != nil {
 			return stdout, err
-		}
-		for i := 0; i <= retry; i++ {
-			log.Debug("⏰ Waiting for ib_write_bw to be present on VM")
-			_, err = sshclient.Run("until ib_write_bw -h; do sleep 30; done")
-			if err == nil {
-				present = true
-				break
-			}
-			time.Sleep(10 * time.Second)
-		}
-		if !present {
-			if err := sshclient.Close(); err != nil {
-				log.Debugf("Failed to close SSH client: %v", err)
-			}
-			return stdout, fmt.Errorf("ib_write_bw binary is not present on the VM")
 		}
 		var stdoutBytes []byte
 		ran := false
