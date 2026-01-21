@@ -43,6 +43,7 @@ var (
 	netperf          bool
 	iperf3           bool
 	uperf            bool
+	ibWriteBw        string
 	udnl2            bool
 	udnl3            bool
 	cudn             string
@@ -90,16 +91,32 @@ var rootCmd = &cobra.Command{
 			fmt.Println("OS/Arch:", cmdVersion.OsArch)
 			os.Exit(0)
 		}
-		if !uperf && !netperf && !iperf3 {
-			log.Fatalf("😭 At least one driver needs to be enabled")
+		// Check if ibWriteBw flag was set and has a valid value
+		ibWriteBwEnabled := cmd.Flags().Changed("ib-write-bw")
+		if ibWriteBwEnabled && strings.TrimSpace(ibWriteBw) == "" {
+			log.Fatalf("😭 --ib-write-bw requires nic:gid parameter (e.g., --ib-write-bw=mlx5_0:0)")
 		}
 
+		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
+			log.Fatalf("😭 At least one driver needs to be enabled")
+		}
 		// Validate mutually exclusive UDN flags
 		if udnl2 && udnl3 {
 			log.Fatal("flags --udnl2 and --udnl3 are mutually exclusive; please set only one")
 		}
 		if cudn != "" && (udnl2 || udnl3) {
 			log.Fatal("flags --cudn and --udnl2/--udnl3 are mutually exclusive; please set only one")
+		}
+		if ibWriteBwEnabled && (!privileged || !hostNetOnly) {
+			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
+		}
+		if ibWriteBwEnabled && (udnl2 || udnl3 || cudn != "") {
+			log.Fatalf("😭 ib_write_bw driver cannot be used with UDN flags (--udnl2, --udnl3, --cudn)")
+		}
+
+		// If a specific driver is explicitly requested, disable the default netperf driver
+		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
+			netperf = false
 		}
 		uid := ""
 		if len(id) > 0 {
@@ -151,6 +168,7 @@ var rootCmd = &cobra.Command{
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
 			Cudn:            cudn != "",
+			IbWriteBwParams: ibWriteBw,
 			Sockets:         sockets,
 			Cores:           cores,
 			Threads:         threads,
@@ -270,6 +288,28 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// Determine requested drivers BEFORE building SUT
+		var requestedDrivers []string
+		if netperf {
+			requestedDrivers = append(requestedDrivers, "netperf")
+		}
+		if uperf {
+			requestedDrivers = append(requestedDrivers, "uperf")
+		}
+		if iperf3 {
+			requestedDrivers = append(requestedDrivers, "iperf3")
+		}
+		if ibWriteBwEnabled {
+			requestedDrivers = append(requestedDrivers, "ib_write_bw")
+		}
+
+		// Set requested drivers BEFORE BuildSUT
+		s.RequestedDrivers = requestedDrivers
+
+		// Debug: Print requested drivers
+		log.Debugf("🔥 Requested drivers: %v", requestedDrivers)
+		log.Debugf("🔥 netperf=%v, iperf3=%v, uperf=%v, ibWriteBw=%v", netperf, iperf3, uperf, ibWriteBwEnabled)
+
 		// Build the SUT (Deployments)
 		err = k8s.BuildSUT(client, &s)
 		if err != nil {
@@ -287,16 +327,6 @@ var rootCmd = &cobra.Command{
 			acrossAZ = true
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
-		var requestedDrivers []string
-		if netperf {
-			requestedDrivers = append(requestedDrivers, "netperf")
-		}
-		if uperf {
-			requestedDrivers = append(requestedDrivers, "uperf")
-		}
-		if iperf3 {
-			requestedDrivers = append(requestedDrivers, "iperf3")
-		}
 
 		// Run through each test
 		if !s.VM {
@@ -571,6 +601,12 @@ func executeWorkload(nc config.Config,
 			serverIP = s.IperfService.Spec.ClusterIP
 		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
+		case "ib_write_bw":
+			if s.NodeLocal {
+				serverIP = s.Server.Items[0].Status.PodIP
+			} else {
+				serverIP = s.ServerHost.Items[0].Status.PodIP
+			}
 		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
@@ -611,7 +647,7 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
-		if hostNet {
+		if hostNet && !s.NodeLocal {
 			serverIP = s.ServerHost.Items[0].Status.PodIP
 		} else {
 			serverIP = s.Server.Items[0].Status.PodIP
@@ -620,7 +656,7 @@ func executeWorkload(nc config.Config,
 	if !s.NodeLocal && !s.ExternalServer {
 		Client = s.ClientAcross
 	}
-	if hostNet {
+	if hostNet && !s.NodeLocal {
 		Client = s.ClientHost
 	}
 	npr.Config = nc
@@ -694,6 +730,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver")
 	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver")
+	rootCmd.Flags().StringVar(&ibWriteBw, "ib-write-bw", "", "Use ib_write_bw as load driver, requires nic:gid format (e.g., mlx5_0:0, requires --privileged and --hostNet)")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
