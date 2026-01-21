@@ -518,8 +518,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	log.Debugf("🔥 BuildSUT: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
 
 	// Create services only for requested drivers
-	// If no specific drivers are requested (default behavior), include all standard drivers
-	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "iperf3") {
+	if containsDriver(s.RequestedDrivers, "iperf3") {
 		// Create iperf service
 		iperfSVC := ServiceParams{
 			Name:      "iperf-service",
@@ -534,7 +533,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "uperf") {
+	if containsDriver(s.RequestedDrivers, "uperf") {
 		// Create uperf service
 		uperfSVC := ServiceParams{
 			Name:      "uperf-service",
@@ -549,7 +548,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	if len(s.RequestedDrivers) == 0 || containsDriver(s.RequestedDrivers, "netperf") {
+	if containsDriver(s.RequestedDrivers, "netperf") {
 		// Create netperf service
 		for i := 0; i < 16; i++ {
 			netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
@@ -683,35 +682,26 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Debug: Print requested drivers for server commands
 	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
 
-	// If no specific drivers are requested (default behavior), include all standard drivers
-	if len(s.RequestedDrivers) == 0 {
-		dpCommands = [][]string{
-			{"/bin/bash", "-c", "netserver && sleep 10000000"},
-			{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)},
-			{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)},
+	// Add server commands only for requested drivers
+	if containsDriver(s.RequestedDrivers, "netperf") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
+	}
+	if containsDriver(s.RequestedDrivers, "iperf3") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "uperf") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "ib_write_bw") {
+		// Parse nic:gid parameters for ib_write_bw server
+		parts := strings.Split(s.IbWriteBwParams, ":")
+		if len(parts) != 2 {
+			log.Fatalf("Invalid ib-write-bw server config: %s", s.IbWriteBwParams)
 		}
-	} else {
-		// Add server commands only for requested drivers
-		if containsDriver(s.RequestedDrivers, "netperf") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
-		}
-		if containsDriver(s.RequestedDrivers, "iperf3") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
-		}
-		if containsDriver(s.RequestedDrivers, "uperf") {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
-		}
-		if containsDriver(s.RequestedDrivers, "ib_write_bw") {
-			// Parse nic:gid parameters for ib_write_bw server
-			parts := strings.Split(s.IbWriteBwParams, ":")
-			if len(parts) != 2 {
-				log.Fatalf("Invalid ib-write-bw server config: %s", s.IbWriteBwParams)
-			}
-			device := strings.TrimSpace(parts[0])
-			gid := strings.TrimSpace(parts[1])
-			ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F", device, gid)
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
-		}
+		device := strings.TrimSpace(parts[0])
+		gid := strings.TrimSpace(parts[1])
+		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F", device, gid)
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
 	}
 
 	// Debug: Print final dpCommands
