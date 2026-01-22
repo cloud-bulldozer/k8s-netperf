@@ -256,6 +256,10 @@ func ShowSpecificResults(s ScenarioResults) {
 			loss, _ := Average(r.LossSummary)
 			table.Append([]string{"UDP Loss Percent", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), fmt.Sprintf("%t", r.ExternalServer), r.UdnInfo, r.BridgeInfo, strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (loss))})
 		}
+                if strings.Contains(r.Profile, "TCP_CRR") {
+                        rt, _ := Average(r.RetransmitSummary)
+                        table.Append([]string{"TCP Retransmissions", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Service), strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f", (rt))})
+                 }
 	}
 	table.Render()
 }

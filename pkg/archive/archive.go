@@ -390,6 +390,16 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 				return fmt.Errorf("failed to write result archive to file")
 			}
 		}
+                if strings.Contains(row.Profile, "TCP_CRR") {
+                        rt, _ := result.Average(row.RetransmitSummary)
+                        header := []string{"TCP Retransmissions"}
+                        data := append(header, commonCsvDataFields(row)...)
+                        iperfdata = append(data, fmt.Sprintf("%f", rt))
+                        if err := archive.Write(iperfdata); err != nil {
+				return fmt.Errorf("failed to write result archive to file")
+			}
+		}
+		
 	}
 	return nil
 }
