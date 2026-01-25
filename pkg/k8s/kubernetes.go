@@ -491,7 +491,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		cdp.NodeAffinity = corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 		}
-		if !s.VM {
+		if s.Pod {
 			s.Client, err = deployDeployment(client, cdp)
 			if err != nil {
 				return err
@@ -613,12 +613,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			cdpHostAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 			}
-			if !s.VM {
+			if s.Pod {
 				s.ClientHost, err = deployDeployment(client, cdpHostAcross)
 				if err != nil {
 					return err
 				}
-			} else {
+			}
+			if s.VM {
 				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
@@ -636,12 +637,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
-			if !s.VM {
+			if s.Pod {
 				s.ClientAcross, err = deployDeployment(client, cdpAcross)
 				if err != nil {
 					return err
 				}
-			} else {
+			}
+			if s.VM {
 				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
@@ -748,12 +750,13 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	if ncount > 1 {
 		if s.HostNetwork {
-			if !s.VM {
+			if s.Pod {
 				s.ServerHost, err = deployDeployment(client, sdpHost)
 				if err != nil {
 					return err
 				}
-			} else {
+			}
+			if s.VM {
 				err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 				if err != nil {
 					return err
@@ -771,7 +774,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	// Only create regular server pods if not in HostNetworkOnly mode
 	if !s.HostNetworkOnly {
-		if !s.VM {
+		if s.Pod {
 			s.Server, err = deployDeployment(client, sdp)
 			if err != nil {
 				return err
@@ -786,7 +789,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			if err != nil {
 				return err
 			}
-		} else {
+		}
+		if s.VM {
 			err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 			if err != nil {
 				return err

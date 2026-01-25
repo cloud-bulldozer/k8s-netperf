@@ -45,6 +45,7 @@ type PerfScenarios struct {
 	ExternalServer      bool
 	Privileged          bool
 	Configs             []Config
+	Pod                 bool
 	VM                  bool
 	VMImage             string
 	VMHost              string
