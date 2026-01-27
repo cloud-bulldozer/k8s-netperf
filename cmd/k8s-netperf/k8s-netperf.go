@@ -50,6 +50,7 @@ var (
 	acrossAZ         bool
 	full             bool
 	hostNetOnly      bool
+	pod              bool
 	vm               bool
 	vmimage          string
 	useVirtctl       bool
@@ -219,6 +220,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		s.Pod = pod
 		if vm {
 			s.VM = true
 			s.VMImage = vmimage
@@ -298,8 +300,8 @@ var rootCmd = &cobra.Command{
 			requestedDrivers = append(requestedDrivers, "iperf3")
 		}
 
-		// Run through each test
-		if !s.VM {
+		// Run pod tests if enabled
+		if s.Pod {
 			for _, nc := range s.Configs {
 				// Determine the metric for the test
 				metric := string("OP/s")
@@ -326,7 +328,10 @@ var rootCmd = &cobra.Command{
 					}
 				}
 			}
-		} else {
+		}
+
+		// Run VM tests if enabled
+		if s.VM {
 			sr.Virt = true
 			if s.UseVirtctl {
 				log.Info("Connecting to VMI using virtctl")
@@ -628,6 +633,7 @@ func executeWorkload(nc config.Config,
 	npr.Service = nc.Service
 	npr.SameNode = s.NodeLocal
 	npr.HostNetwork = hostNet
+	npr.Virt = virt
 	if s.AcrossAZ {
 		npr.AcrossAZ = true
 	} else {
@@ -691,40 +697,41 @@ func executeWorkload(nc config.Config,
 
 func main() {
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
-	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver")
-	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver")
-	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver")
-	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf")
-	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout")
-	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node")
-	rootCmd.Flags().BoolVar(&vm, "vm", false, "Launch Virtual Machines instead of pods for client/servers")
-	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image")
-	rootCmd.Flags().BoolVar(&useVirtctl, "use-virtctl", false, "Use virtctl ssh for VM connections instead of traditional SSH")
-	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM")
-	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM")
-	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM")
-	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones")
-	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible)")
-	rootCmd.Flags().BoolVar(&hostNetOnly, "hostNet", false, "Run only hostNetwork tests (no podNetwork tests)")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log")
-	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network.")
-	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network.")
-	rootCmd.Flags().StringVar(&cudn, "cudn", "", "Create and use a Cluster UDN that would be used as a secondary network.")
+	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver (default true)")
+	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (default false)")
+	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (default false)")
+	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf (default true)")
+	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout (default false)")
+	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")
+	rootCmd.Flags().BoolVar(&pod, "pod", true, "Run tests using pods (default true)")
+	rootCmd.Flags().BoolVar(&vm, "vm", false, "Run tests using Virtual Machines (default false)")
+	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image (default quay.io/containerdisks/fedora:39)")
+	rootCmd.Flags().BoolVar(&useVirtctl, "use-virtctl", false, "Use virtctl ssh for VM connections instead of traditional SSH (default false)")
+	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM (default 2)")
+	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM (default 2)")
+	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM (default 1)")
+	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones (default false)")
+	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible) (default false)")
+	rootCmd.Flags().BoolVar(&hostNetOnly, "hostNet", false, "Run only hostNetwork tests (no podNetwork tests) (default false)")
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug log (default false)")
+	rootCmd.Flags().BoolVar(&udnl2, "udnl2", false, "Create and use a layer2 UDN as a primary network (default false)")
+	rootCmd.Flags().BoolVar(&udnl3, "udnl3", false, "Create and use a layer3 UDN as a primary network (default false)")
+	rootCmd.Flags().StringVar(&cudn, "cudn", "", "Create and use a Cluster UDN that would be used as a secondary network")
 	rootCmd.MarkFlagsMutuallyExclusive("all", "hostNet")
-	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge'")
+	rootCmd.Flags().StringVar(&udnPluginBinding, "udnPluginBinding", "passt", "UDN with VMs only - the binding method of the UDN interface, select 'passt' or 'l2bridge' (default passt)")
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
-	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface")
-	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled")
+	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface (default default)")
+	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled (default bridgeNetwork.json)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
-	rootCmd.Flags().StringVar(&searchIndex, "index", "", "OpenSearch Index to save the results to, defaults to k8s-netperf")
-	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom")
-	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1.")
+	rootCmd.Flags().StringVar(&searchIndex, "index", "", "OpenSearch Index to save the results to (default k8s-netperf)")
+	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom (default false)")
+	rootCmd.Flags().Float64Var(&tcpt, "tcp-tolerance", 10, "Allowed %diff from hostNetwork to podNetwork, anything above tolerance will result in k8s-netperf exiting 1 (default 10)")
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
-	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files")
+	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files (default true)")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
-	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context")
+	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context (default false)")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)

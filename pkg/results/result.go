@@ -49,6 +49,7 @@ type Data struct {
 	ExternalServer    bool
 	UdnInfo           string
 	BridgeInfo        string
+	Virt              bool
 }
 
 // ScenarioResults each scenario could have multiple results
