@@ -653,10 +653,18 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
-		if hostNet && !s.NodeLocal {
-			serverIP = s.ServerHost.Items[0].Status.PodIP
+		if virt {
+			if hostNet && !s.NodeLocal {
+				serverIP = s.VMServerHost.Items[0].Status.PodIP
+			} else {
+				serverIP = s.VMServer.Items[0].Status.PodIP
+			}
 		} else {
-			serverIP = s.Server.Items[0].Status.PodIP
+			if hostNet && !s.NodeLocal {
+				serverIP = s.ServerHost.Items[0].Status.PodIP
+			} else {
+				serverIP = s.Server.Items[0].Status.PodIP
+			}
 		}
 	}
 	if !s.NodeLocal && !s.ExternalServer {
