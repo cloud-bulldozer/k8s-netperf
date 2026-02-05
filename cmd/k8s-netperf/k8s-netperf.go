@@ -567,6 +567,7 @@ func executeWorkload(nc config.Config,
 	Client := s.Client
 	var driver drivers.Driver
 	npr := result.Data{}
+	npr.Virt = virt
 	if serverIPAddr != "" {
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
