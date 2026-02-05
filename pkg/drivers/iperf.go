@@ -97,7 +97,8 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 	}
 	log.Debug(cmd)
-	if !perf.VM {
+	// Pod mode
+	if !strings.Contains(pod.Name, "virt") {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -125,6 +126,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		if err != nil {
 			return stdout, err
 		}
+		// VM mode
 	} else {
 		retry := 10
 		present := false
@@ -171,7 +173,8 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	stdout = bytes.Buffer{}
 	stderr = bytes.Buffer{}
 
-	if !perf.VM {
+	// Pod mode
+	if !strings.Contains(pod.Name, "virt") {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -201,6 +204,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
+		// VM mode
 	} else {
 		sshclient, err := k8s.SSHConnect(perf)
 		if err != nil {

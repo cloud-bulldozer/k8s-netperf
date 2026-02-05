@@ -92,7 +92,8 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 	//Empty buffer
 	stdout = bytes.Buffer{}
 
-	if !perf.VM {
+	// Pod mode
+	if !strings.Contains(pod.Name, "virt") {
 		var cmd []string
 		uperfCmd := "echo '" + fileContent + "' > " + filePath
 		cmd = []string{"bash", "-c", uperfCmd}
@@ -126,6 +127,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return filePath, nil
+		// VM mode
 	} else {
 
 		var cmd []string
@@ -133,8 +135,8 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		cmd = []string{uperfCmd}
 
 		var vmClient config.VMExecutor
-		if perf.VMClient != nil {
-			vmClient = perf.VMClient
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
 		} else {
 			sshclient, err := k8s.SSHConnect(perf)
 			if err != nil {
@@ -193,7 +195,8 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	cmd := []string{"uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(k8s.UperfServerCtlPort)}
 	log.Debug(cmd)
 
-	if !perf.VM {
+	// Pod mode
+	if !strings.Contains(pod.Name, "virt") {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -222,13 +225,14 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			return stdout, err
 		}
 		return stdout, nil
+		// VM mode
 	} else {
 		retry := 10
 		present := false
 
 		var vmClient config.VMExecutor
-		if perf.VMClient != nil {
-			vmClient = perf.VMClient
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
 		} else {
 			sshclient, err := k8s.SSHConnect(perf)
 			if err != nil {

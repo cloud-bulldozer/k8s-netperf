@@ -380,7 +380,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
-			s.VMClient = vmClient
+			s.VMClientExecutor = vmClient
 
 			// Also set SSHClient for backward compatibility if using SSH
 			if !s.UseVirtctl {
@@ -660,10 +660,18 @@ func executeWorkload(nc config.Config,
 		}
 	}
 	if !s.NodeLocal && !s.ExternalServer {
-		Client = s.ClientAcross
+		if virt {
+			Client = s.VMClientAcross
+		} else {
+			Client = s.ClientAcross
+		}
 	}
 	if hostNet && !s.NodeLocal {
-		Client = s.ClientHost
+		if virt {
+			Client = s.VMClientHost
+		} else {
+			Client = s.ClientHost
+		}
 	}
 	npr.Config = nc
 	npr.Metric = nc.Metric

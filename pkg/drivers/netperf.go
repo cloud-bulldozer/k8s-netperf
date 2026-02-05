@@ -75,7 +75,8 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	}
 	cmd = append(cmd, additionalOptions...)
 	log.Debug(cmd)
-	if !perf.VM {
+	// Pod mode
+	if !strings.Contains(pod.Name, "virt") {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -105,13 +106,14 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		}
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
+		// VM mode
 	} else {
 		retry := 10
 		present := false
 
 		var vmClient config.VMExecutor
-		if perf.VMClient != nil {
-			vmClient = perf.VMClient
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
 		} else {
 			sshclient, err := k8s.SSHConnect(perf)
 			if err != nil {
