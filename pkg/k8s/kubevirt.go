@@ -179,11 +179,13 @@ users:
   - name: fedora
     groups: sudo
     shell: /bin/bash
+    ssh_deletekeys: false
     ssh_authorized_keys:
       - %s
-ssh_deletekeys: false
-password: fedora
-chpasswd: { expire: False }
+chpasswd:
+  list: |
+    fedora:fedora
+  expire: False
 runcmd:
   - export HOME=/home/fedora
   - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
@@ -311,13 +313,15 @@ func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role strin
 	data := fmt.Sprintf(`#cloud-config
 users:
   - name: fedora
+    ssh_deletekeys: false
     groups: sudo
     shell: /bin/bash
     ssh_authorized_keys:
       - %s
-ssh_deletekeys: false
-password: fedora
-chpasswd: { expire: False }
+chpasswd:
+  list: |
+    fedora:fedora
+  expire: False
 runcmd:
   - dnf install -y --nodocs uperf iperf3 git ethtool
   - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
