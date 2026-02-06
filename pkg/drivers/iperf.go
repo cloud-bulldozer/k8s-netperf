@@ -98,7 +98,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	}
 	log.Debug(cmd)
 	// Pod mode
-	if !strings.Contains(pod.Name, "virt") {
+	if !perf.VM {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -174,7 +174,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	stderr = bytes.Buffer{}
 
 	// Pod mode
-	if !strings.Contains(pod.Name, "virt") {
+	if !perf.VM {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).

@@ -76,7 +76,7 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	cmd = append(cmd, additionalOptions...)
 	log.Debug(cmd)
 	// Pod mode
-	if !strings.Contains(pod.Name, "virt") {
+	if !perf.VM {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).

@@ -93,7 +93,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 	stdout = bytes.Buffer{}
 
 	// Pod mode
-	if !strings.Contains(pod.Name, "virt") {
+	if !perf.VM {
 		var cmd []string
 		uperfCmd := "echo '" + fileContent + "' > " + filePath
 		cmd = []string{"bash", "-c", uperfCmd}
@@ -196,7 +196,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	log.Debug(cmd)
 
 	// Pod mode
-	if !strings.Contains(pod.Name, "virt") {
+	if !perf.VM {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
