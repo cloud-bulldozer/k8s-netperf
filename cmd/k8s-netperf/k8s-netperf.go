@@ -114,6 +114,12 @@ var rootCmd = &cobra.Command{
 		if ibWriteBwEnabled && (udnl2 || udnl3 || cudn != "") {
 			log.Fatalf("😭 ib_write_bw driver cannot be used with UDN flags (--udnl2, --udnl3, --cudn)")
 		}
+		if ibWriteBwEnabled && vm {
+			log.Fatalf("😭 ib_write_bw driver cannot be used with --vm flag")
+		}
+		if ibWriteBwEnabled && bridge != "" {
+			log.Fatalf("😭 ib_write_bw driver cannot be used with --bridge flag")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -607,12 +613,6 @@ func executeWorkload(nc config.Config,
 			serverIP = s.IperfService.Spec.ClusterIP
 		case "uperf":
 			serverIP = s.UperfService.Spec.ClusterIP
-		case "ib_write_bw":
-			if s.NodeLocal {
-				serverIP = s.Server.Items[0].Status.PodIP
-			} else {
-				serverIP = s.ServerHost.Items[0].Status.PodIP
-			}
 		default:
 			serverIP = s.NetperfService.Spec.ClusterIP
 		}
