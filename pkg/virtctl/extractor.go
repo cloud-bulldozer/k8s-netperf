@@ -33,19 +33,19 @@ func getVirtctlPathInternal() (string, error) {
 	} else {
 		log.Debugf("Failed to extract embedded virtctl: %v", err)
 	}
-	
+
 	// Fallback to system PATH
 	if systemPath, err := exec.LookPath("virtctl"); err == nil {
 		log.Debugf("Using system virtctl binary: %s", systemPath)
 		return systemPath, nil
 	}
-	
+
 	return "", fmt.Errorf("virtctl not available: neither embedded nor system binary found")
 }
 
 func extractEmbeddedVirtctl() (string, error) {
 	var binaryData []byte
-	
+
 	// Select platform-specific binary
 	platform := runtime.GOOS + "/" + runtime.GOARCH
 	switch platform {
@@ -54,11 +54,11 @@ func extractEmbeddedVirtctl() (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported platform: %s (only linux/amd64 is currently embedded)", platform)
 	}
-	
+
 	if len(binaryData) == 0 {
 		return "", fmt.Errorf("embedded virtctl binary is empty for platform %s", platform)
 	}
-	
+
 	// Create temporary file in system temp directory
 	tmpFile, err := os.CreateTemp("", "k8s-netperf-virtctl-*")
 	if err != nil {
@@ -69,7 +69,7 @@ func extractEmbeddedVirtctl() (string, error) {
 			log.Warnf("Error closing temp file: %v", err)
 		}
 	}()
-	
+
 	// Write binary data
 	if _, err := tmpFile.Write(binaryData); err != nil {
 		if err := os.Remove(tmpFile.Name()); err != nil {
@@ -77,7 +77,7 @@ func extractEmbeddedVirtctl() (string, error) {
 		}
 		return "", fmt.Errorf("failed to write virtctl binary: %v", err)
 	}
-	
+
 	// Make executable
 	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
 		if err := os.Remove(tmpFile.Name()); err != nil {
@@ -85,7 +85,7 @@ func extractEmbeddedVirtctl() (string, error) {
 		}
 		return "", fmt.Errorf("failed to make virtctl executable: %v", err)
 	}
-	
+
 	log.Debugf("Extracted virtctl binary to: %s", tmpFile.Name())
 	return tmpFile.Name(), nil
 }

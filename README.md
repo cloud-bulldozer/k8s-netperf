@@ -9,23 +9,24 @@ A tool to run network performance tests in Kubernetes clusters.
 
 ## Overview
 
-`k8s-netperf` is a comprehensive network performance testing tool designed specifically for Kubernetes environments. It supports multiple benchmark tools (netperf, iperf3, uperf) and can test various network scenarios including pod-to-pod, host networking, and cross-availability zone communications.
+`k8s-netperf` is a comprehensive network performance testing tool designed specifically for Kubernetes environments. It supports multiple benchmark tools (netperf, iperf3, uperf and ib_write_bw) and can test various network scenarios including pod-to-pod, host networking, and cross-availability zone communications.
 
 ### Supported Benchmarks
 
-| Tool    | Test       | Status  |
-| ------- | ---------- | ------- |
-| netperf | TCP_STREAM | Working |
-| netperf | UDP_STREAM | Working |
-| netperf | TCP_RR     | Working |
-| netperf | UDP_RR     | Working |
-| netperf | TCP_CRR    | Working |
-| uperf   | TCP_STREAM | Working |
-| uperf   | UDP_STREAM | Working |
-| uperf   | TCP_RR     | Working |
-| uperf   | UDP_RR     | Working |
-| iperf3  | TCP_STREAM | Working |
-| iperf3  | UDP_STREAM | Working |
+| Tool        | Test       | Status  |
+| ----------- | ---------- | ------- |
+| netperf     | TCP_STREAM | Working |
+| netperf     | UDP_STREAM | Working |
+| netperf     | TCP_RR     | Working |
+| netperf     | UDP_RR     | Working |
+| netperf     | TCP_CRR    | Working |
+| uperf       | TCP_STREAM | Working |
+| uperf       | UDP_STREAM | Working |
+| uperf       | TCP_RR     | Working |
+| uperf       | UDP_RR     | Working |
+| iperf3      | TCP_STREAM | Working |
+| iperf3      | UDP_STREAM | Working |
+| ib_write_bw | UDP_STREAM | Working |
 
 ## Quick Start
 
@@ -57,7 +58,7 @@ For detailed documentation, please refer to the following guides:
 
 ## Features
 
-- **Multiple benchmark tools**: Support for netperf, iperf3, and uperf
+- **Multiple benchmark tools**: Support for netperf, iperf3, uperf and ib_write_bw
 - **Flexible test scenarios**: Pod-to-pod, host networking, cross-AZ testing
 - **Virtual Machine support**: Test with KubeVirt VMs
 - **Advanced networking**: User Defined Networks (UDN) and bridge interfaces
