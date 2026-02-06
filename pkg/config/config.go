@@ -66,10 +66,15 @@ type PerfScenarios struct {
 	ServerNodeInfo      metrics.NodeInfo
 	ClientNodeInfo      metrics.NodeInfo
 	Client              apiv1.PodList
+	VMClient            apiv1.PodList
 	Server              apiv1.PodList
+	VMServer            apiv1.PodList
 	ClientAcross        apiv1.PodList
+	VMClientAcross      apiv1.PodList
 	ClientHost          apiv1.PodList
+	VMClientHost        apiv1.PodList
 	ServerHost          apiv1.PodList
+	VMServerHost        apiv1.PodList
 	NetperfService      *apiv1.Service
 	IperfService        *apiv1.Service
 	UperfService        *apiv1.Service
@@ -78,7 +83,7 @@ type PerfScenarios struct {
 	KClient             *kubevirtv1.KubevirtV1Client
 	DClient             *dynamic.DynamicClient
 	SSHClient           *goph.Client
-	VMClient            VMExecutor
+	VMClientExecutor    VMExecutor
 }
 
 // struct for bridge options

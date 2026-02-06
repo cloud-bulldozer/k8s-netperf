@@ -380,7 +380,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
-			s.VMClient = vmClient
+			s.VMClientExecutor = vmClient
 
 			// Also set SSHClient for backward compatibility if using SSH
 			if !s.UseVirtctl {
@@ -653,17 +653,33 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
-		if hostNet && !s.NodeLocal {
-			serverIP = s.ServerHost.Items[0].Status.PodIP
+		if virt {
+			if hostNet && !s.NodeLocal {
+				serverIP = s.VMServerHost.Items[0].Status.PodIP
+			} else {
+				serverIP = s.VMServer.Items[0].Status.PodIP
+			}
 		} else {
-			serverIP = s.Server.Items[0].Status.PodIP
+			if hostNet && !s.NodeLocal {
+				serverIP = s.ServerHost.Items[0].Status.PodIP
+			} else {
+				serverIP = s.Server.Items[0].Status.PodIP
+			}
 		}
 	}
 	if !s.NodeLocal && !s.ExternalServer {
-		Client = s.ClientAcross
+		if virt {
+			Client = s.VMClientAcross
+		} else {
+			Client = s.ClientAcross
+		}
 	}
 	if hostNet && !s.NodeLocal {
-		Client = s.ClientHost
+		if virt {
+			Client = s.VMClientHost
+		} else {
+			Client = s.ClientHost
+		}
 	}
 	npr.Config = nc
 	npr.Metric = nc.Metric

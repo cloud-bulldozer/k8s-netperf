@@ -940,12 +940,12 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	}
 
 	if strings.Contains(name, "host") {
-		perf.ServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.VMServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.Server, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.VMServer, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
 		if err != nil {
 			return err
 		}
@@ -968,12 +968,12 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	if strings.Contains(name, "host") {
-		perf.ClientHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		perf.VMClientHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.ClientAcross, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+		perf.VMClientAcross, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
