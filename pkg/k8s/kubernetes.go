@@ -73,14 +73,24 @@ const UperfServerCtlPort = 30000
 // NetperfServerDataPort data port for the service
 const NetperfServerDataPort = 42424
 
+// NetperfServerDataPort data port for the service
+const NetperfVmServerDataPort = 42524
+
 // IperfServerDataPort data port for the service
 const IperfServerDataPort = 43433
+
+// IperfServerDataPort data port for the service
+const IperfVmServerDataPort = 43533
 
 // UperfServerDataPort data port for the service
 const UperfServerDataPort = 30001
 
+// UperfServerDataPort data port for the service
+const UperfVmServerDataPort = 30101
+
 // Labels we will apply to k8s assets.
 const serverRole = "server"
+const vmServerRole = "vm-server"
 const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
@@ -364,6 +374,7 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
+	var netperfVmDataPorts []int32
 	var err error
 
 	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
@@ -519,50 +530,100 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	// Create services only for requested drivers
 	if containsDriver(s.RequestedDrivers, "iperf3") {
-		// Create iperf service
-		iperfSVC := ServiceParams{
-			Name:      "iperf-service",
-			Namespace: "netperf",
-			Labels:    map[string]string{"role": serverRole},
-			CtlPort:   IperfServerCtlPort,
-			DataPorts: []int32{IperfServerDataPort},
+		if s.Pod {
+			// Create iperf service
+			iperfSVC := ServiceParams{
+				Name:      "iperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   IperfServerCtlPort,
+				DataPorts: []int32{IperfServerDataPort},
+			}
+			s.IperfService, err = CreateService(iperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+			}
 		}
-		s.IperfService, err = CreateService(iperfSVC, client)
-		if err != nil {
-			return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+		if s.VM {
+			// Create iperf VM service
+			iperfSVC := ServiceParams{
+				Name:      "iperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   IperfServerCtlPort,
+				DataPorts: []int32{IperfVmServerDataPort},
+			}
+			s.IperfService, err = CreateService(iperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+			}
 		}
 	}
 
 	if containsDriver(s.RequestedDrivers, "uperf") {
-		// Create uperf service
-		uperfSVC := ServiceParams{
-			Name:      "uperf-service",
-			Namespace: "netperf",
-			Labels:    map[string]string{"role": serverRole},
-			CtlPort:   UperfServerCtlPort,
-			DataPorts: []int32{UperfServerDataPort},
+		if s.Pod {
+			// Create uperf service
+			uperfSVC := ServiceParams{
+				Name:      "uperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   UperfServerCtlPort,
+				DataPorts: []int32{UperfServerDataPort},
+			}
+			s.UperfService, err = CreateService(uperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+			}
 		}
-		s.UperfService, err = CreateService(uperfSVC, client)
-		if err != nil {
-			return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+		if s.VM {
+			uperfSVC := ServiceParams{
+				Name:      "uperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   UperfServerCtlPort,
+				DataPorts: []int32{UperfVmServerDataPort},
+			}
+			s.UperfService, err = CreateService(uperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+			}
 		}
 	}
 
 	if containsDriver(s.RequestedDrivers, "netperf") {
-		// Create netperf service
-		for i := 0; i < 16; i++ {
-			netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+		if s.Pod {
+			// Create netperf service
+			for i := 0; i < 16; i++ {
+				netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+			}
+			netperfSVC := ServiceParams{
+				Name:      "netperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   NetperfServerCtlPort,
+				DataPorts: netperfDataPorts,
+			}
+			s.NetperfService, err = CreateService(netperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+			}
 		}
-		netperfSVC := ServiceParams{
-			Name:      "netperf-service",
-			Namespace: "netperf",
-			Labels:    map[string]string{"role": serverRole},
-			CtlPort:   NetperfServerCtlPort,
-			DataPorts: netperfDataPorts,
-		}
-		s.NetperfService, err = CreateService(netperfSVC, client)
-		if err != nil {
-			return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+		if s.VM {
+			// Create netperf VM service
+			for i := 0; i < 16; i++ {
+				netperfVmDataPorts = append(netperfVmDataPorts, NetperfServerDataPort+int32(i))
+			}
+			netperfSVC := ServiceParams{
+				Name:      "netperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   NetperfServerCtlPort,
+				DataPorts: netperfVmDataPorts,
+			}
+			s.NetperfService, err = CreateService(netperfSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+			}
 		}
 	}
 	// Note: ib_write_bw doesn't need a service since it uses direct pod IP communication
@@ -847,7 +908,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 		}
 		if s.VM {
-			err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+			err = launchServerVM(s, vmServerRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
 			if err != nil {
 				return err
 			}
@@ -929,7 +990,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, name, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
