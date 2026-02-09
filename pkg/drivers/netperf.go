@@ -28,7 +28,7 @@ const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_r
 
 // Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
-func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
+func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios, virt bool) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
 	log.Debugf("Server IP: %s", serverIP)
@@ -75,42 +75,10 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	}
 	cmd = append(cmd, additionalOptions...)
 	log.Debug(cmd)
-	// Pod mode
-	if !perf.VM {
-		req := c.CoreV1().RESTClient().
-			Post().
-			Namespace(pod.Namespace).
-			Resource("pods").
-			Name(pod.Name).
-			SubResource("exec").
-			VersionedParams(&apiv1.PodExecOptions{
-				Container: pod.Spec.Containers[0].Name,
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       true,
-			}, scheme.ParameterCodec)
-		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-		if err != nil {
-			return stdout, err
-		}
-		// Connect this process' std{in,out,err} to the remote shell process.
-		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-			Stdin:  nil,
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		if err != nil {
-			return stdout, err
-		}
-		log.Debug(strings.TrimSpace(stdout.String()))
-		return stdout, nil
-		// VM mode
-	} else {
+	// VM mode
+	if virt {
 		retry := 10
 		present := false
-
 		var vmClient config.VMExecutor
 		if perf.VMClientExecutor != nil {
 			vmClient = perf.VMClientExecutor
@@ -165,6 +133,37 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			log.Debug(bytes.NewBuffer(stdout))
 			return *bytes.NewBuffer(stdout), nil
 		}
+	} else {
+		//Mode pod
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+		log.Debug(strings.TrimSpace(stdout.String()))
+		return stdout, nil
 	}
 }
 

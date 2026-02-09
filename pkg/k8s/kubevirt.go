@@ -70,7 +70,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	if conf.HostNetwork {
 		sshPort = sshPortLocal
 	}
-	log.Debugf("Attempting to connect with : %s@%s on port %s", user, addr, sshPort)
+	log.Debugf("Attempting to connect with : %s@%s", user, addr)
 
 	config := goph.Config{
 		User:     user,

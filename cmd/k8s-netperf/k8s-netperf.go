@@ -693,7 +693,7 @@ func executeWorkload(nc config.Config,
 		npr.AcrossAZ = nc.AcrossAZ
 	}
 	npr.StartTime = time.Now()
-	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t", hostNet, nc.Service, npr.ExternalServer)
+	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t, VM mode is %t", hostNet, nc.Service, npr.ExternalServer, virt)
 	driver, err = drivers.NewDriver(driverName, nc)
 	if err != nil {
 		log.Fatal(err)
@@ -706,7 +706,7 @@ func executeWorkload(nc config.Config,
 	}
 	for i := 0; i < nc.Samples; i++ {
 		nr := sample.Sample{}
-		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s)
+		r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s, virt)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -718,7 +718,7 @@ func executeWorkload(nc config.Config,
 			// Retry the current test.
 			for try < retry {
 				log.Warn("Rerunning test.")
-				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s)
+				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s, virt)
 				if err != nil {
 					log.Error(err)
 					continue
