@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	b64 "encoding/base64"
@@ -27,8 +28,9 @@ import (
 )
 
 var (
-	sshPort = uint(32022)
-	retry   = 30
+	sshPortAcross = uint(32022)
+	sshPortLocal  = uint(32322)
+	retry         = 30
 )
 
 // connect will attempt to connect via ssh to the guest. The VM can take a while for sshkeys to be injected
@@ -64,7 +66,11 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	}
 	user := "fedora"
 	addr := conf.VMHost
-	log.Debugf("Attempting to connect with : %s@%s", user, addr)
+	sshPort := sshPortAcross
+	if conf.HostNetwork {
+		sshPort = sshPortLocal
+	}
+	log.Debugf("Attempting to connect with : %s@%s on port %s", user, addr, sshPort)
 
 	config := goph.Config{
 		User:     user,
@@ -83,7 +89,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 }
 
 // createCommService creates a SSH nodeport service using port 32022 -> 22
-func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
+func createCommService(client *kubernetes.Clientset, label map[string]string, name string, sshPort uint) error {
 	log.Infof("🚀 Creating service for %s in namespace %s", name, namespace)
 	sc := client.CoreV1().Services(namespace)
 	service := &corev1.Service{
@@ -282,7 +288,11 @@ ethernets:
 	if err != nil {
 		return "", err
 	}
-	err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
+	if strings.Contains(name, "host") {
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name), sshPortLocal)
+	} else {
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name), sshPortAcross)
+	}
 	if err != nil {
 		return "", err
 	}

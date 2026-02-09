@@ -643,7 +643,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 			if s.VM {
-				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				err = launchClientVM(s, hostNetClientRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
 				}
@@ -667,7 +667,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 			if s.VM {
-				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
+				err = launchClientVM(s, clientAcrossRole, &cdpAcross.PodAntiAffinity, &cdpAcross.NodeAffinity)
 				if err != nil {
 					return err
 				}
@@ -813,7 +813,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				}
 			}
 			if s.VM {
-				err = launchServerVM(s, serverRole, &sdp.PodAntiAffinity, &sdp.NodeAffinity)
+				err = launchServerVM(s, hostNetServerRole, &sdpHost.PodAntiAffinity, &sdpHost.NodeAffinity)
 				if err != nil {
 					return err
 				}
@@ -929,28 +929,28 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
-	_, err := CreateVMServer(perf.KClient, serverRole, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+	_, err := CreateVMServer(perf.KClient, name, serverRole, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
 	}
-	err = WaitForVMI(perf.KClient, serverRole)
+	err = WaitForVMI(perf.KClient, name)
 	if err != nil {
 		return err
 	}
 
 	if strings.Contains(name, "host") {
-		perf.VMServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.VMServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	} else {
-		perf.VMServer, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+		perf.VMServer, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
 		if err != nil {
 			return err
 		}
 	}
-	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", serverRole))
+	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
 
