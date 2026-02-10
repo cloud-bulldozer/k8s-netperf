@@ -5,12 +5,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
-	"github.com/cloud-bulldozer/k8s-netperf/pkg/k8s"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"k8s.io/client-go/kubernetes"
@@ -87,30 +85,7 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	log.Debug(cmd)
 	//
 	if virt {
-		retry := 3
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
-		}
-		var stdoutBytes []byte
-		ran := false
-		for i := 0; i <= retry; i++ {
-			stdoutBytes, err = sshclient.Run(strings.Join(cmd[:], " "))
-			if err == nil {
-				ran = true
-				break
-			}
-			log.Debugf("Failed running command %s", err)
-			log.Debugf("⏰ Retrying ib_write_bw command -- cloud-init still finishing up")
-			time.Sleep(60 * time.Second)
-		}
-		if err := sshclient.Close(); err != nil {
-			log.Debugf("Failed to close SSH client: %v", err)
-		}
-		if !ran {
-			return *bytes.NewBuffer(stdoutBytes), fmt.Errorf("unable to run ib_write_bw")
-		}
-		stdout = *bytes.NewBuffer(stdoutBytes)
+		log.Info("IB Write BW is not supported for VM mode... skipping")
 	} else {
 		//Pod mode
 		req := c.CoreV1().RESTClient().
