@@ -553,7 +553,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				CtlPort:   IperfServerCtlPort,
 				DataPorts: []int32{IperfVmServerDataPort},
 			}
-			s.IperfService, err = CreateService(iperfSVC, client)
+			s.IperfVmService, err = CreateService(iperfSVC, client)
 			if err != nil {
 				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
 			}
@@ -583,7 +583,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				CtlPort:   UperfServerCtlPort,
 				DataPorts: []int32{UperfVmServerDataPort},
 			}
-			s.UperfService, err = CreateService(uperfSVC, client)
+			s.UperfVmService, err = CreateService(uperfSVC, client)
 			if err != nil {
 				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
 			}
@@ -620,7 +620,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				CtlPort:   NetperfServerCtlPort,
 				DataPorts: netperfVmDataPorts,
 			}
-			s.NetperfService, err = CreateService(netperfSVC, client)
+			s.NetperfVmService, err = CreateService(netperfSVC, client)
 			if err != nil {
 				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
 			}
@@ -699,12 +699,6 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 			if s.Pod {
 				s.ClientHost, err = deployDeployment(client, cdpHostAcross)
-				if err != nil {
-					return err
-				}
-			}
-			if s.VM {
-				err = launchClientVM(s, hostNetClientRole, &cdpAcross.PodAntiAffinity, &cdpHostAcross.NodeAffinity)
 				if err != nil {
 					return err
 				}
@@ -866,21 +860,16 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		sdpHost.PodAntiAffinity = antiAffinity
 	}
 	if ncount > 1 {
-		if s.HostNetwork {
-			if s.Pod {
+		if s.Pod {
+			if s.HostNetwork {
 				s.ServerHost, err = deployDeployment(client, sdpHost)
 				if err != nil {
 					return err
 				}
-			}
-			if s.VM {
-				err = launchServerVM(s, hostNetServerRole, &sdpHost.PodAntiAffinity, &sdpHost.NodeAffinity)
-				if err != nil {
-					return err
-				}
+			} else {
+				log.Info("HostNetwork is not supported for server VM... skipping")
 			}
 		}
-
 		// If HostNetworkOnly mode, get server node info from host network pods
 		if s.HostNetworkOnly && s.HostNetwork {
 			s.ServerNodeInfo, err = GetPodNodeInfo(client, labels.Set(sdpHost.Labels).String())
@@ -1000,17 +989,11 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 
-	if strings.Contains(name, "host") {
-		perf.VMServerHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
-		if err != nil {
-			return err
-		}
-	} else {
-		perf.VMServer, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
-		if err != nil {
-			return err
-		}
+	perf.VMServer, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+	if err != nil {
+		return err
 	}
+
 	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil
 }
@@ -1028,16 +1011,9 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	if err != nil {
 		return err
 	}
-	if strings.Contains(name, "host") {
-		perf.VMClientHost, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
-		if err != nil {
-			return err
-		}
-	} else {
-		perf.VMClientAcross, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
-		if err != nil {
-			return err
-		}
+	perf.VMClientAcross, err = GetPods(perf.ClientSet, fmt.Sprintf("app=%s", name))
+	if err != nil {
+		return err
 	}
 	perf.ClientNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
 	return nil

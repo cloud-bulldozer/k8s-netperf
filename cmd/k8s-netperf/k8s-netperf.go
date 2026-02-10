@@ -402,10 +402,7 @@ var rootCmd = &cobra.Command{
 				var pr result.Data
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
-						pr = executeWorkload(nc, s, true, driver, true)
-						if len(pr.Profile) > 1 {
-							sr.Results = append(sr.Results, pr)
-						}
+						log.Info("VM does not support hostNetwork option... skiping")
 					}
 					// Skip podNetwork tests if hostNetOnly is enabled
 					if !hostNetOnly {
@@ -610,11 +607,23 @@ func executeWorkload(nc config.Config,
 	} else if nc.Service {
 		switch driverName {
 		case "iperf3":
-			serverIP = s.IperfService.Spec.ClusterIP
+			if virt {
+				serverIP = s.IperfVmService.Spec.ClusterIP
+			} else {
+				serverIP = s.IperfService.Spec.ClusterIP
+			}
 		case "uperf":
-			serverIP = s.UperfService.Spec.ClusterIP
+			if virt {
+				serverIP = s.UperfVmService.Spec.ClusterIP
+			} else {
+				serverIP = s.UperfService.Spec.ClusterIP
+			}
 		default:
-			serverIP = s.NetperfService.Spec.ClusterIP
+			if virt {
+				serverIP = s.NetperfVmService.Spec.ClusterIP
+			} else {
+				serverIP = s.NetperfService.Spec.ClusterIP
+			}
 		}
 	} else if s.Udn {
 		serverIP, err = k8s.ExtractUdnIp(s.Server.Items[0], k8s.UdnName)
@@ -654,11 +663,7 @@ func executeWorkload(nc config.Config,
 		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
 		if virt {
-			if hostNet && !s.NodeLocal {
-				serverIP = s.VMServerHost.Items[0].Status.PodIP
-			} else {
-				serverIP = s.VMServer.Items[0].Status.PodIP
-			}
+			serverIP = s.VMServer.Items[0].Status.PodIP
 		} else {
 			if hostNet && !s.NodeLocal {
 				serverIP = s.ServerHost.Items[0].Status.PodIP
@@ -675,11 +680,7 @@ func executeWorkload(nc config.Config,
 		}
 	}
 	if hostNet && !s.NodeLocal {
-		if virt {
-			Client = s.VMClientHost
-		} else {
-			Client = s.ClientHost
-		}
+		Client = s.ClientHost
 	}
 	npr.Config = nc
 	npr.Metric = nc.Metric

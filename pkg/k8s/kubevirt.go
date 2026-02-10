@@ -28,9 +28,8 @@ import (
 )
 
 var (
-	sshPortAcross = uint(32022)
-	sshPortLocal  = uint(32322)
-	retry         = 30
+	sshPort = uint(32022)
+	retry   = 30
 )
 
 // connect will attempt to connect via ssh to the guest. The VM can take a while for sshkeys to be injected
@@ -66,10 +65,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	}
 	user := "fedora"
 	addr := conf.VMHost
-	sshPort := sshPortAcross
-	if conf.HostNetwork {
-		sshPort = sshPortLocal
-	}
+	sshPort := sshPort
 	log.Debugf("Attempting to connect with : %s@%s", user, addr)
 
 	config := goph.Config{
@@ -89,7 +85,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 }
 
 // createCommService creates a SSH nodeport service using port 32022 -> 22
-func createCommService(client *kubernetes.Clientset, label map[string]string, name string, sshPort uint) error {
+func createCommService(client *kubernetes.Clientset, label map[string]string, name string) error {
 	log.Infof("🚀 Creating service for %s in namespace %s", name, namespace)
 	sc := client.CoreV1().Services(namespace)
 	service := &corev1.Service{
@@ -193,7 +189,7 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
-  - export HOME=/home/fedora
+  - dnf clean all
   - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
@@ -289,9 +285,9 @@ ethernets:
 		return "", err
 	}
 	if strings.Contains(name, "host") {
-		err = createCommService(client, label, fmt.Sprintf("%s-svc", name), sshPortLocal)
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
 	} else {
-		err = createCommService(client, label, fmt.Sprintf("%s-svc", name), sshPortAcross)
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
 	}
 	if err != nil {
 		return "", err
@@ -333,8 +329,8 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
-  - dnf install -y --nodocs uperf iperf3 git ethtool
-  - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - dnf clean all
+  - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
