@@ -97,7 +97,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 	}
 	log.Debug(cmd)
-	// Pod mode
+	// Vm mode
 	if virt {
 		retry := 10
 		present := false
@@ -138,30 +138,6 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		}
-	}
-
-	//Empty buffer
-	stdout = bytes.Buffer{}
-	stderr = bytes.Buffer{}
-
-	// VM mode
-	if virt {
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
-		}
-		stdout, err := sshclient.Run(fmt.Sprintf("cat %s", file))
-		if err != nil {
-			if closeErr := sshclient.Close(); closeErr != nil {
-				log.Warnf("Error closing SSH client: %v", closeErr)
-			}
-			return *bytes.NewBuffer(stdout), err
-		}
-		log.Debug(strings.TrimSpace(bytes.NewBuffer(stdout).String()))
-		if err := sshclient.Close(); err != nil {
-			log.Warnf("Error closing SSH client: %v", err)
-		}
-		return *bytes.NewBuffer(stdout), nil
 	} else {
 		//Pod mode
 		req := c.CoreV1().RESTClient().
@@ -194,6 +170,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
 	}
+	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark.

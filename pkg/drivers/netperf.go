@@ -79,18 +79,18 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	if virt {
 		retry := 10
 		present := false
+		var err error
+		createdClient := false
 		var vmClient config.VMExecutor
 		if perf.VMClientExecutor != nil {
 			vmClient = perf.VMClientExecutor
 		} else {
-			sshclient, err := k8s.SSHConnect(perf)
+			vmClient, err = k8s.ConnectToVM(perf)
 			if err != nil {
 				return stdout, err
 			}
-			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
+			createdClient = true
 		}
-
-		var err error
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for netperf to be present on VM")
 			_, err = vmClient.Run("until which netperf; do sleep 30; done")
@@ -103,8 +103,10 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			time.Sleep(30 * time.Second)
 		}
 		if !present {
-			if err := vmClient.Close(); err != nil {
-				log.Warnf("Error closing VM client: %v", err)
+			if createdClient {
+				if err := vmClient.Close(); err != nil {
+					log.Warnf("Error closing VM client: %v", err)
+				}
 			}
 			return stdout, fmt.Errorf("netperf binary is not present on the VM")
 		}
@@ -124,8 +126,10 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		if err != nil {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("failed running command %s", err)
 		}
-		if err := vmClient.Close(); err != nil {
-			log.Warnf("Error closing VM client: %v", err)
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 		}
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")

@@ -196,36 +196,6 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 
 	// VM mode
 	if virt {
-		req := c.CoreV1().RESTClient().
-			Post().
-			Namespace(pod.Namespace).
-			Resource("pods").
-			Name(pod.Name).
-			SubResource("exec").
-			VersionedParams(&apiv1.PodExecOptions{
-				Container: pod.Spec.Containers[0].Name,
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       true,
-			}, scheme.ParameterCodec)
-		exec, err = remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-		if err != nil {
-			return stdout, err
-		}
-		// Connect this process' std{in,out,err} to the remote shell process.
-		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-			Stdin:  nil,
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		if err != nil {
-			return stdout, err
-		}
-		return stdout, nil
-	} else {
-		// Pod mode
 		retry := 10
 		present := false
 
@@ -276,6 +246,36 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 		} else {
 			return *bytes.NewBuffer(stdout), nil
 		}
+	} else {
+		// Pod mode
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err = remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+		return stdout, nil
 	}
 }
 

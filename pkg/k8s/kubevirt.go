@@ -189,6 +189,7 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
+  - export HOME=/home/fedora
   - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
@@ -328,6 +329,7 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
+  - export HOME=/home/fedora
   - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
