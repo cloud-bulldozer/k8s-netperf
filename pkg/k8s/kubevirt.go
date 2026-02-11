@@ -189,8 +189,7 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
-  - dnf clean all
-  - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
@@ -329,8 +328,7 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
-  - dnf clean all
-  - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
