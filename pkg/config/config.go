@@ -72,12 +72,13 @@ type PerfScenarios struct {
 	ClientAcross        apiv1.PodList
 	VMClientAcross      apiv1.PodList
 	ClientHost          apiv1.PodList
-	VMClientHost        apiv1.PodList
 	ServerHost          apiv1.PodList
-	VMServerHost        apiv1.PodList
 	NetperfService      *apiv1.Service
 	IperfService        *apiv1.Service
 	UperfService        *apiv1.Service
+	NetperfVmService    *apiv1.Service
+	IperfVmService      *apiv1.Service
+	UperfVmService      *apiv1.Service
 	RestConfig          rest.Config
 	ClientSet           *kubernetes.Clientset
 	KClient             *kubevirtv1.KubevirtV1Client

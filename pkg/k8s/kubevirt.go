@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	b64 "encoding/base64"
@@ -64,6 +65,7 @@ func SSHConnect(conf *config.PerfScenarios) (*goph.Client, error) {
 	}
 	user := "fedora"
 	addr := conf.VMHost
+	sshPort := sshPort
 	log.Debugf("Attempting to connect with : %s@%s", user, addr)
 
 	config := goph.Config{
@@ -188,7 +190,7 @@ chpasswd:
   expire: False
 runcmd:
   - export HOME=/home/fedora
-  - dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
@@ -282,7 +284,11 @@ ethernets:
 	if err != nil {
 		return "", err
 	}
-	err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
+	if strings.Contains(name, "host") {
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
+	} else {
+		err = createCommService(client, label, fmt.Sprintf("%s-svc", name))
+	}
 	if err != nil {
 		return "", err
 	}
@@ -323,8 +329,8 @@ chpasswd:
     fedora:fedora
   expire: False
 runcmd:
-  - dnf install -y --nodocs uperf iperf3 git ethtool
-  - dnf install -y --nodocs automake gcc bc lksctp-tools-devel texinfo --enablerepo=*
+  - export HOME=/home/fedora
+  - until dnf install -y --nodocs uperf iperf3 git ethtool automake gcc bc lksctp-tools-devel texinfo --enablerepo=*; do sleep 3; done
   - git clone https://github.com/HewlettPackard/netperf.git
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4

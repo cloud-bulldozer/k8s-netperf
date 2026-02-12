@@ -48,7 +48,7 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	rc rest.Config,
 	nc config.Config,
 	client apiv1.PodList,
-	serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
+	serverIP string, perf *config.PerfScenarios, virt bool) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	id := uuid.New()
 	file := fmt.Sprintf("/tmp/iperf-%s", id.String())
@@ -97,37 +97,8 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 	}
 	log.Debug(cmd)
-	// Pod mode
-	if !perf.VM {
-		req := c.CoreV1().RESTClient().
-			Post().
-			Namespace(pod.Namespace).
-			Resource("pods").
-			Name(pod.Name).
-			SubResource("exec").
-			VersionedParams(&apiv1.PodExecOptions{
-				Container: pod.Spec.Containers[0].Name,
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       true,
-			}, scheme.ParameterCodec)
-		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
-		if err != nil {
-			return stdout, err
-		}
-		// Connect this process' std{in,out,err} to the remote shell process.
-		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-			Stdin:  nil,
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		if err != nil {
-			return stdout, err
-		}
-		// VM mode
-	} else {
+	// Vm mode
+	if virt {
 		retry := 10
 		present := false
 		sshclient, err := k8s.SSHConnect(perf)
@@ -167,14 +138,8 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		}
-	}
-
-	//Empty buffer
-	stdout = bytes.Buffer{}
-	stderr = bytes.Buffer{}
-
-	// Pod mode
-	if !perf.VM {
+	} else {
+		//Pod mode
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -204,25 +169,8 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		}
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
-		// VM mode
-	} else {
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
-		}
-		stdout, err := sshclient.Run(fmt.Sprintf("cat %s", file))
-		if err != nil {
-			if closeErr := sshclient.Close(); closeErr != nil {
-				log.Warnf("Error closing SSH client: %v", closeErr)
-			}
-			return *bytes.NewBuffer(stdout), err
-		}
-		log.Debug(strings.TrimSpace(bytes.NewBuffer(stdout).String()))
-		if err := sshclient.Close(); err != nil {
-			log.Warnf("Error closing SSH client: %v", err)
-		}
-		return *bytes.NewBuffer(stdout), nil
 	}
+	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark.

@@ -13,7 +13,7 @@ import (
 
 type Driver interface {
 	IsTestSupported() bool
-	Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error)
+	Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios, virt bool) (bytes.Buffer, error)
 	ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error)
 }
 

@@ -28,7 +28,7 @@ const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_r
 
 // Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
-func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios) (bytes.Buffer, error) {
+func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, client apiv1.PodList, serverIP string, perf *config.PerfScenarios, virt bool) (bytes.Buffer, error) {
 	var stdout, stderr bytes.Buffer
 	pod := client.Items[0]
 	log.Debugf("Server IP: %s", serverIP)
@@ -75,8 +75,70 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 	}
 	cmd = append(cmd, additionalOptions...)
 	log.Debug(cmd)
-	// Pod mode
-	if !perf.VM {
+	// VM mode
+	if virt {
+		retry := 10
+		present := false
+		var err error
+		createdClient := false
+		var vmClient config.VMExecutor
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
+		} else {
+			vmClient, err = k8s.ConnectToVM(perf)
+			if err != nil {
+				return stdout, err
+			}
+			createdClient = true
+		}
+		for i := 0; i <= retry; i++ {
+			log.Debug("⏰ Waiting for netperf to be present on VM")
+			_, err = vmClient.Run("until which netperf; do sleep 30; done")
+			if err == nil {
+				present = true
+				break
+			} else {
+				log.Debugf("Failed running command %s", err)
+			}
+			time.Sleep(30 * time.Second)
+		}
+		if !present {
+			if createdClient {
+				if err := vmClient.Close(); err != nil {
+					log.Warnf("Error closing VM client: %v", err)
+				}
+			}
+			return stdout, fmt.Errorf("netperf binary is not present on the VM")
+		}
+		var stdout []byte
+		ran := false
+		for i := 0; i <= retry; i++ {
+			_, err = vmClient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
+			if err == nil {
+				ran = true
+				break
+			}
+			log.Debugf("Failed running command %s", err)
+			log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
+			time.Sleep(60 * time.Second)
+		}
+		stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
+		if err != nil {
+			return *bytes.NewBuffer(stdout), fmt.Errorf("failed running command %s", err)
+		}
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
+		}
+		if !ran {
+			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
+		} else {
+			log.Debug(bytes.NewBuffer(stdout))
+			return *bytes.NewBuffer(stdout), nil
+		}
+	} else {
+		//Mode pod
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -106,65 +168,6 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 		}
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
-		// VM mode
-	} else {
-		retry := 10
-		present := false
-
-		var vmClient config.VMExecutor
-		if perf.VMClientExecutor != nil {
-			vmClient = perf.VMClientExecutor
-		} else {
-			sshclient, err := k8s.SSHConnect(perf)
-			if err != nil {
-				return stdout, err
-			}
-			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
-		}
-
-		var err error
-		for i := 0; i <= retry; i++ {
-			log.Debug("⏰ Waiting for netperf to be present on VM")
-			_, err = vmClient.Run("until which netperf; do sleep 30; done")
-			if err == nil {
-				present = true
-				break
-			} else {
-				log.Debugf("Failed running command %s", err)
-			}
-			time.Sleep(30 * time.Second)
-		}
-		if !present {
-			if err := vmClient.Close(); err != nil {
-				log.Warnf("Error closing VM client: %v", err)
-			}
-			return stdout, fmt.Errorf("netperf binary is not present on the VM")
-		}
-		var stdout []byte
-		ran := false
-		for i := 0; i <= retry; i++ {
-			_, err = vmClient.Run(fmt.Sprintf("netperf -H %s -l 1 -- %s", serverIP, strconv.Itoa(k8s.NetperfServerDataPort)))
-			if err == nil {
-				ran = true
-				break
-			}
-			log.Debugf("Failed running command %s", err)
-			log.Debugf("⏰ Retrying netperf command -- cloud-init still finishing up")
-			time.Sleep(60 * time.Second)
-		}
-		stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
-		if err != nil {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("failed running command %s", err)
-		}
-		if err := vmClient.Close(); err != nil {
-			log.Warnf("Error closing VM client: %v", err)
-		}
-		if !ran {
-			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
-		} else {
-			log.Debug(bytes.NewBuffer(stdout))
-			return *bytes.NewBuffer(stdout), nil
-		}
 	}
 }
 

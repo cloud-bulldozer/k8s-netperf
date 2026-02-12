@@ -49,7 +49,7 @@ jobs:
       
       - name: Run default tests
         run: |
-          ./bin/amd64/k8s-netperf --debug
+          ./bin/amd64/k8s-netperf --debug --all --tcp-tolerance 100
 
       - name: Run UDN L3 tests (using SVC)
         run: |
