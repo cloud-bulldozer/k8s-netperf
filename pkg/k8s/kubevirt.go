@@ -207,7 +207,7 @@ runcmd:
 		{
 			Name: "default",
 			InterfaceBindingMethod: v1.InterfaceBindingMethod{
-				Bridge: &v1.InterfaceBridge{},
+				Masquerade: &v1.InterfaceMasquerade{},
 			},
 		},
 	}
@@ -348,7 +348,7 @@ runcmd:
 		{
 			Name: "default",
 			InterfaceBindingMethod: v1.InterfaceBindingMethod{
-				Bridge: &v1.InterfaceBridge{},
+				Masquerade: &v1.InterfaceMasquerade{},
 			},
 		},
 	}
