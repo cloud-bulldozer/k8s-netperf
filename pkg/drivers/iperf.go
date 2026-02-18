@@ -101,13 +101,22 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 	if virt {
 		retry := 10
 		present := false
-		sshclient, err := k8s.SSHConnect(perf)
-		if err != nil {
-			return stdout, err
+		createdClient := false
+		var err error
+		var vmClient config.VMExecutor
+
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
+		} else {
+			vmClient, err = k8s.ConnectToVM(perf)
+			if err != nil {
+				return stdout, err
+			}
+			createdClient = true
 		}
 		for i := 0; i <= retry; i++ {
 			log.Debug("⏰ Waiting for iperf3 to be present on VM")
-			_, err = sshclient.Run("until iperf3 -h; do sleep 30; done")
+			_, err = vmClient.Run("until iperf3 -h; do sleep 30; done")
 			if err == nil {
 				present = true
 				break
@@ -115,15 +124,17 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			time.Sleep(10 * time.Second)
 		}
 		if !present {
-			if err := sshclient.Close(); err != nil {
-				log.Warnf("Error closing SSH client: %v", err)
+			if createdClient {
+				if err := vmClient.Close(); err != nil {
+					log.Warnf("Error closing VM client: %v", err)
+				}
 			}
 			return stdout, fmt.Errorf("iperf3 binary is not present on the VM")
 		}
 		var stdout []byte
 		ran := false
 		for i := 0; i <= retry; i++ {
-			stdout, err = sshclient.Run(strings.Join(cmd[:], " "))
+			stdout, err = vmClient.Run(strings.Join(cmd[:], " "))
 			if err == nil {
 				ran = true
 				break
@@ -132,14 +143,82 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 			log.Debugf("⏰ Retrying iperf3 command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		if err := sshclient.Close(); err != nil {
-			log.Warnf("Error closing SSH client: %v", err)
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 		}
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run iperf3")
 		}
 	} else {
 		//Pod mode
+		req := c.CoreV1().RESTClient().
+			Post().
+			Namespace(pod.Namespace).
+			Resource("pods").
+			Name(pod.Name).
+			SubResource("exec").
+			VersionedParams(&apiv1.PodExecOptions{
+				Container: pod.Spec.Containers[0].Name,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
+		exec, err := remotecommand.NewSPDYExecutor(&rc, "POST", req.URL())
+		if err != nil {
+			return stdout, err
+		}
+		// Connect this process' std{in,out,err} to the remote shell process.
+		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			return stdout, err
+		}
+	}
+
+	//Empty buffer
+	stdout = bytes.Buffer{}
+	stderr = bytes.Buffer{}
+
+	//VM result
+	if virt {
+		createdClient := false
+		var err error
+		var vmClient config.VMExecutor
+
+		if perf.VMClientExecutor != nil {
+			vmClient = perf.VMClientExecutor
+		} else {
+			vmClient, err = k8s.ConnectToVM(perf)
+			if err != nil {
+				return stdout, err
+			}
+			createdClient = true
+		}
+		stdout, err := vmClient.Run(fmt.Sprintf("cat %s", file))
+		if err != nil {
+			if createdClient {
+				if closeErr := vmClient.Close(); closeErr != nil {
+					log.Warnf("Error closing SSH client: %v", closeErr)
+				}
+			}
+			return *bytes.NewBuffer(stdout), err
+		}
+		log.Debug(strings.TrimSpace(bytes.NewBuffer(stdout).String()))
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing SSH client: %v", err)
+			}
+		}
+		return *bytes.NewBuffer(stdout), nil
+		//Pod results
+	} else {
 		req := c.CoreV1().RESTClient().
 			Post().
 			Namespace(pod.Namespace).
@@ -170,7 +249,6 @@ func (i *iperf3) Run(c *kubernetes.Clientset,
 		log.Debug(strings.TrimSpace(stdout.String()))
 		return stdout, nil
 	}
-	return stdout, nil
 }
 
 // ParseResults accepts the stdout from the execution of the benchmark.
