@@ -559,11 +559,19 @@ func (v *VirtctlClient) Run(command string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get virtctl binary: %v", err)
 	}
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve users homedir: %v", err)
+	}
+	identityFile := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	log.Debugf("Running command %s against %s", command, v.vmName)
-	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
+	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "--identity-file", identityFile, "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
 	log.Debugf("Command: %s", cmd.String())
 	stdout, err := cmd.Output()
 	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return stdout, fmt.Errorf("failed to run command: %v, stderr: %s", err, string(exitErr.Stderr))
+		}
 		return stdout, fmt.Errorf("failed to run command: %v", err)
 	}
 	log.Debugf("Output: %s", string(stdout))
