@@ -129,7 +129,7 @@ func TCPThroughputDiff(s *ScenarioResults) ([]Diff, error) {
 			hostPerf := 0.0
 			podPerf := 0.0
 			diff := DiffData{}
-			if !t.Service {
+			if !t.Service && !t.Virt {
 				if t.HostNetwork {
 					hostPerf, _ = Average(t.ThroughputSummary)
 					diff.MessageSize = t.MessageSize
