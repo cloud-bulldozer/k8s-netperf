@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -40,6 +42,7 @@ type DeploymentParams struct {
 	NodeAffinity       corev1.NodeAffinity
 	Port               int
 	NetworkAnnotations map[string]string
+	ResourceRequests   corev1.ResourceList
 }
 
 // ServiceParams describes the service specific details
@@ -98,6 +101,9 @@ const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const UdnName = "udn-primary-netperf"
 const CudnName = "cudn-secondary-netperf"
+const SriovNadName = "sriov-netperf"
+const SriovPolicyName = "sriov-netperf-policy"
+const sriovOperatorNamespace = "openshift-sriov-network-operator"
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
@@ -145,6 +151,14 @@ func buildCUdnNetworkAnnotations(cudn string) map[string]string {
 		annotations["k8s.v1.cni.cncf.io/networks"] = namespace + "/" + cudn
 		log.Infof("🌉 Configuring CUdn network: %s", namespace+"/"+cudn)
 	}
+	return annotations
+}
+
+// buildSriovNetworkAnnotations creates the network annotations for Multus CNI SR-IOV networks
+func buildSriovNetworkAnnotations() map[string]string {
+	annotations := make(map[string]string)
+	annotations["k8s.v1.cni.cncf.io/networks"] = namespace + "/" + SriovNadName
+	log.Infof("🌉 Configuring SR-IOV network: %s", namespace+"/"+SriovNadName)
 	return annotations
 }
 
@@ -371,11 +385,162 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 	return nil
 }
 
+// DeploySriovOperatorConfig applies the SriovOperatorConfig with disableDrain to avoid node drain/reboot
+func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient) error {
+	log.Infof("Applying SriovOperatorConfig with disableDrain: true")
+	gvr := schema.GroupVersionResource{
+		Group:    "sriovnetwork.openshift.io",
+		Version:  "v1",
+		Resource: "sriovoperatorconfigs",
+	}
+	existing, err := dyn.Resource(gvr).Namespace(sriovOperatorNamespace).Get(context.TODO(), "default", metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to get SriovOperatorConfig: %v", err)
+	}
+	spec, _ := existing.Object["spec"].(map[string]interface{})
+	if spec == nil {
+		spec = make(map[string]interface{})
+	}
+	spec["configDaemonNodeSelector"] = map[string]interface{}{
+		"node-role.kubernetes.io/worker": "",
+	}
+	spec["disableDrain"] = true
+	existing.Object["spec"] = spec
+	_, err = dyn.Resource(gvr).Namespace(sriovOperatorNamespace).Update(context.TODO(), existing, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to update SriovOperatorConfig: %v", err)
+	}
+	return nil
+}
+
+// DeploySriovPolicy creates a SriovNetworkNodePolicy CR to carve VFs from a PF
+func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string) error {
+	log.Infof("Deploying SriovNetworkNodePolicy for PF: %s", pfName)
+	policy := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "sriovnetwork.openshift.io/v1",
+			"kind":       "SriovNetworkNodePolicy",
+			"metadata": map[string]interface{}{
+				"name":      SriovPolicyName,
+				"namespace": sriovOperatorNamespace,
+			},
+			"spec": map[string]interface{}{
+				"resourceName": pfName,
+				"deviceType":   "netdevice",
+				"numVfs":       2,
+				"nicSelector": map[string]interface{}{
+					"pfNames": []string{pfName},
+				},
+				"nodeSelector": map[string]interface{}{
+					"node-role.kubernetes.io/worker": "",
+				},
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "sriovnetwork.openshift.io",
+		Version:  "v1",
+		Resource: "sriovnetworknodepolicies",
+	}
+	_, err := dyn.Resource(gvr).Namespace(sriovOperatorNamespace).Create(context.TODO(), policy, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to create SriovNetworkNodePolicy: %v", err)
+	}
+	return nil
+}
+
+// DeploySriovNetwork creates a SriovNetwork CR which auto-generates a NAD in the netperf namespace
+func DeploySriovNetwork(dyn *dynamic.DynamicClient, resourceName string) error {
+	log.Infof("Deploying SriovNetwork with resourceName: %s", resourceName)
+	sriovNet := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "sriovnetwork.openshift.io/v1",
+			"kind":       "SriovNetwork",
+			"metadata": map[string]interface{}{
+				"name":      SriovNadName,
+				"namespace": sriovOperatorNamespace,
+			},
+			"spec": map[string]interface{}{
+				"networkNamespace": namespace,
+				"resourceName":    resourceName,
+				"ipam":            `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "sriovnetwork.openshift.io",
+		Version:  "v1",
+		Resource: "sriovnetworks",
+	}
+	_, err := dyn.Resource(gvr).Namespace(sriovOperatorNamespace).Create(context.TODO(), sriovNet, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to create SriovNetwork: %v", err)
+	}
+	return nil
+}
+
+// WaitForSriovNad polls for the SR-IOV NAD to be created in the netperf namespace
+func WaitForSriovNad(dyn *dynamic.DynamicClient) error {
+	log.Infof("Waiting for SR-IOV NetworkAttachmentDefinition %s in namespace %s...", SriovNadName, namespace)
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
+	// Poll every 5 seconds for up to 120 seconds
+	for i := 0; i < 24; i++ {
+		_, err := dyn.Resource(gvr).Namespace(namespace).Get(context.TODO(), SriovNadName, metav1.GetOptions{})
+		if err == nil {
+			log.Infof("SR-IOV NetworkAttachmentDefinition %s is ready", SriovNadName)
+			return nil
+		}
+		log.Debugf("NAD not yet available, retrying in 5s... (%d/24)", i+1)
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("timed out waiting for SR-IOV NAD %s in namespace %s", SriovNadName, namespace)
+}
+
+// DestroySriovResources cleans up the SriovNetwork and SriovNetworkNodePolicy CRs
+func DestroySriovResources(dyn *dynamic.DynamicClient) error {
+	log.Info("Cleaning up SR-IOV resources")
+	deletePolicy := metav1.DeletePropagationForeground
+	opts := metav1.DeleteOptions{PropagationPolicy: &deletePolicy}
+
+	gvrNet := schema.GroupVersionResource{
+		Group:    "sriovnetwork.openshift.io",
+		Version:  "v1",
+		Resource: "sriovnetworks",
+	}
+	err := dyn.Resource(gvrNet).Namespace(sriovOperatorNamespace).Delete(context.TODO(), SriovNadName, opts)
+	if err != nil {
+		log.Warnf("Failed to delete SriovNetwork: %v", err)
+	}
+
+	gvrPolicy := schema.GroupVersionResource{
+		Group:    "sriovnetwork.openshift.io",
+		Version:  "v1",
+		Resource: "sriovnetworknodepolicies",
+	}
+	err = dyn.Resource(gvrPolicy).Namespace(sriovOperatorNamespace).Delete(context.TODO(), SriovPolicyName, opts)
+	if err != nil {
+		log.Warnf("Failed to delete SriovNetworkNodePolicy: %v", err)
+	}
+	return nil
+}
+
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
 	var netperfVmDataPorts []int32
 	var err error
+
+	// Build SR-IOV resource requests if needed
+	var sriovResources corev1.ResourceList
+	if s.SriovNetwork != "" {
+		sriovResources = corev1.ResourceList{
+			corev1.ResourceName("openshift.io/" + s.SriovNetwork): resource.MustParse("1"),
+		}
+	}
 
 	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
 	workerNodeSelectorExpression := &corev1.NodeSelector{
@@ -397,6 +562,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
 		} else if s.Cudn {
 			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+		} else if s.SriovNetwork != "" {
+			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
 			Name:               "client",
@@ -407,6 +574,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
+			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
 		}
 
@@ -481,6 +649,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
 		} else if s.Cudn {
 			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+		} else if s.SriovNetwork != "" {
+			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
 			Name:               "client",
@@ -492,6 +662,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
+			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
 		}
 		if z != "" && numNodes > 1 {
@@ -633,6 +804,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		networkAnnotations = buildBridgeNetworkAnnotations(s.BridgeNetwork, s.BridgeNamespace)
 	} else if s.Cudn {
 		networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
+	} else if s.SriovNetwork != "" {
+		networkAnnotations = buildSriovNetworkAnnotations()
 	}
 	cdpAcross := DeploymentParams{
 		Name:               "client-across",
@@ -643,6 +816,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
+		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
@@ -786,6 +960,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
+		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
 	}
 	if s.NodeLocal {
@@ -941,6 +1116,40 @@ func ExtractBridgeIp(pod corev1.Pod, bridgeNetworkName, bridgeNamespace string) 
 	}
 
 	return "", fmt.Errorf("bridge network IP not found for %s on pod %s", expectedNetworkName, pod.Name)
+}
+
+// ExtractSriovIp extracts the SR-IOV network IP address from pod network status annotation
+func ExtractSriovIp(pod corev1.Pod) (string, error) {
+	networkStatusJson := pod.Annotations["k8s.v1.cni.cncf.io/network-status"]
+	if networkStatusJson == "" {
+		return "", fmt.Errorf("no network status annotation found on pod %s", pod.Name)
+	}
+
+	var networkStatuses []struct {
+		Name      string   `json:"name"`
+		Interface string   `json:"interface"`
+		IPs       []string `json:"ips"`
+		Default   bool     `json:"default,omitempty"`
+	}
+
+	err := json.Unmarshal([]byte(networkStatusJson), &networkStatuses)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling network status: %v", err)
+	}
+
+	expectedNetworkName := fmt.Sprintf("%s/%s", namespace, SriovNadName)
+	for _, netStatus := range networkStatuses {
+		if netStatus.Name == expectedNetworkName && len(netStatus.IPs) > 0 {
+			for _, ip := range netStatus.IPs {
+				if strings.Contains(ip, ".") {
+					log.Debugf("Pod %s SR-IOV network IP: %s", pod.Name, ip)
+					return ip, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("SR-IOV network IP not found for %s on pod %s", expectedNetworkName, pod.Name)
 }
 
 // Extract the UDN Ip address of the server (or the client) from the annotations - Support only ipv4
@@ -1178,6 +1387,14 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 		if dp.Privileged {
 			container.SecurityContext = &corev1.SecurityContext{
 				Privileged: ptr.To(true),
+			}
+		}
+
+		// Add resource requests (e.g., SR-IOV VFs)
+		if len(dp.ResourceRequests) > 0 {
+			container.Resources = corev1.ResourceRequirements{
+				Requests: dp.ResourceRequests,
+				Limits:   dp.ResourceRequests, // extended resources require limits == requests
 			}
 		}
 
