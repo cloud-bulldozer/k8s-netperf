@@ -386,7 +386,7 @@ func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 }
 
 // DeploySriovOperatorConfig applies the SriovOperatorConfig with disableDrain to avoid node drain/reboot
-func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient) error {
+func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient, nodeRole string) error {
 	log.Infof("Applying SriovOperatorConfig with disableDrain: true")
 	gvr := schema.GroupVersionResource{
 		Group:    "sriovnetwork.openshift.io",
@@ -402,7 +402,7 @@ func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient) error {
 		spec = make(map[string]interface{})
 	}
 	spec["configDaemonNodeSelector"] = map[string]interface{}{
-		"node-role.kubernetes.io/worker": "",
+		"node-role.kubernetes.io/" + nodeRole: "",
 	}
 	spec["disableDrain"] = true
 	existing.Object["spec"] = spec
@@ -414,7 +414,7 @@ func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient) error {
 }
 
 // DeploySriovPolicy creates a SriovNetworkNodePolicy CR to carve VFs from a PF
-func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string) error {
+func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string, nodeRole string) error {
 	log.Infof("Deploying SriovNetworkNodePolicy for PF: %s", pfName)
 	policy := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -432,7 +432,7 @@ func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string) error {
 					"pfNames": []string{pfName},
 				},
 				"nodeSelector": map[string]interface{}{
-					"node-role.kubernetes.io/worker": "",
+					"node-role.kubernetes.io/" + nodeRole: "",
 				},
 			},
 		},

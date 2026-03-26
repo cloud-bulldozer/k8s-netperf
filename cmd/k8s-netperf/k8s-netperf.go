@@ -60,6 +60,7 @@ var (
 	bridgeNetwork    string
 	bridgeNamespace  string
 	sriov            string
+	sriovNodeSelector string
 	promURL          string
 	id               string
 	searchURL        string
@@ -319,11 +320,11 @@ var rootCmd = &cobra.Command{
 				}
 				s.DClient = dynClient
 			}
-			err = k8s.DeploySriovOperatorConfig(s.DClient)
+			err = k8s.DeploySriovOperatorConfig(s.DClient, sriovNodeSelector)
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = k8s.DeploySriovPolicy(s.DClient, sriov)
+			err = k8s.DeploySriovPolicy(s.DClient, sriov, sriovNodeSelector)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -828,6 +829,7 @@ func main() {
 	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface (default default)")
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled (default bridgeNetwork.json)")
 	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
+	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

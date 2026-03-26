@@ -59,6 +59,26 @@ $ k8s-netperf --cudn layer2 --vm
 # or
 $ k8s-netperf --cudn layer3 --vm
 ```
+## SR-IOV Network Testing
+To run k8s-netperf over SR-IOV Virtual Functions, the SR-IOV Network Operator must be installed on the cluster. k8s-netperf will automatically create the required `SriovNetworkNodePolicy` and `SriovNetwork` CRs, and clean them up after the test.
+
+Pass the PF (Physical Function) interface name to the `--sriov` flag:
+```bash
+k8s-netperf --sriov ens2f0np0
+```
+
+On a single-node cluster:
+```bash
+k8s-netperf --sriov ens2f0np0 --local
+```
+
+By default, the SR-IOV policy targets nodes with the `node-role.kubernetes.io/worker` label. If SR-IOV NICs are only available on nodes with a different role label, use `--sriov-node-selector`:
+```bash
+k8s-netperf --sriov ens2f0np0 --sriov-node-selector cnf-worker
+```
+
+> Note: `--sriov` is mutually exclusive with `--bridge`, `--ib-write-bw`, `--hostNet`, and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
+
 ## Using a Linux Bridge Interface
 When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required.
 
