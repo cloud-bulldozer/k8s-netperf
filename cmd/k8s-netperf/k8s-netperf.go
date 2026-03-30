@@ -59,6 +59,8 @@ var (
 	bridge           string
 	bridgeNetwork    string
 	bridgeNamespace  string
+	sriov            string
+	sriovNodeSelector string
 	promURL          string
 	id               string
 	searchURL        string
@@ -120,6 +122,21 @@ var rootCmd = &cobra.Command{
 		if ibWriteBwEnabled && bridge != "" {
 			log.Fatalf("😭 ib_write_bw driver cannot be used with --bridge flag")
 		}
+		if sriov != "" && bridge != "" {
+			log.Fatalf("😭 --sriov and --bridge are mutually exclusive")
+		}
+		if sriov != "" && ibWriteBwEnabled {
+			log.Fatalf("😭 --sriov and --ib-write-bw are mutually exclusive")
+		}
+		if sriov != "" && (udnl2 || udnl3 || cudn != "") {
+			log.Fatalf("😭 --sriov cannot be used with UDN flags (--udnl2, --udnl3, --cudn)")
+		}
+		if sriov != "" && hostNetOnly {
+			log.Fatalf("😭 --sriov cannot be used with --hostNet")
+		}
+		if sriov != "" && vm && pod {
+			log.Fatalf("😭 --sriov with --vm requires --pod=false. Pod SR-IOV uses deviceType netdevice while VM SR-IOV uses vfio-pci — they cannot share the same VFs.")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -174,6 +191,7 @@ var rootCmd = &cobra.Command{
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
+			SriovNetwork:    sriov,
 			Cudn:            cudn != "",
 			IbWriteBwParams: ibWriteBw,
 			Sockets:         sockets,
@@ -293,6 +311,33 @@ var rootCmd = &cobra.Command{
 			err = k8s.ValidateBridgeNetwork(client, dynClient, bridge, bridgeNamespace)
 			if err != nil {
 				log.Fatalf("Bridge network validation failed: %v", err)
+			}
+		}
+
+		// Deploy SR-IOV resources if requested
+		if sriov != "" {
+			if s.DClient == nil {
+				dynClient, err := dynamic.NewForConfig(rconfig)
+				if err != nil {
+					log.Fatalf("Failed to create dynamic client for SR-IOV: %v", err)
+				}
+				s.DClient = dynClient
+			}
+			err = k8s.DeploySriovOperatorConfig(s.DClient, sriovNodeSelector)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = k8s.DeploySriovPolicy(s.DClient, sriov, sriovNodeSelector, vm)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = k8s.DeploySriovNetwork(s.DClient, sriov)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = k8s.WaitForSriovNad(s.DClient)
+			if err != nil {
+				log.Fatal(err)
 			}
 		}
 
@@ -537,6 +582,16 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 			log.Error(err)
 		}
 	}
+	if sriov != "" {
+		dynClient, err := dynamic.NewForConfig(rconfig)
+		if err != nil {
+			log.Error(err)
+		}
+		err = k8s.DestroySriovResources(dynClient)
+		if err != nil {
+			log.Error(err)
+		}
+	}
 	err := k8s.DestroyNamespace(client)
 	if err != nil {
 		log.Error(err)
@@ -637,6 +692,17 @@ func executeWorkload(nc config.Config,
 			log.Fatal(err)
 		}
 		npr.UdnInfo = "Cudn -" + cudn
+	} else if s.SriovNetwork != "" {
+		if virt {
+			serverIP, err = k8s.ExtractSriovIp(s.VMServer.Items[0])
+		} else {
+			serverIP, err = k8s.ExtractSriovIp(s.Server.Items[0])
+		}
+		if err != nil {
+			log.Fatalf("Failed to extract SR-IOV IP: %v", err)
+		}
+		log.Debugf("Using SR-IOV network IP: %s", serverIP)
+		npr.SriovInfo = fmt.Sprintf("sriov/%s", s.SriovNetwork)
 	} else if s.BridgeNetwork != "" {
 		// For regular pods, extract bridge IP from network status
 		serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
@@ -769,6 +835,8 @@ func main() {
 	rootCmd.Flags().StringVar(&bridge, "bridge", "", "Name of the NetworkAttachmentDefinition to be used for bridge interface")
 	rootCmd.Flags().StringVar(&bridgeNamespace, "bridgeNamespace", "default", "Namespace of the NetworkAttachmentDefinition for bridge interface (default default)")
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled (default bridgeNetwork.json)")
+	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
+	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

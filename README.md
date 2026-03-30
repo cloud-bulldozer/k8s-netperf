@@ -61,7 +61,7 @@ For detailed documentation, please refer to the following guides:
 - **Multiple benchmark tools**: Support for netperf, iperf3, uperf and ib_write_bw
 - **Flexible test scenarios**: Pod-to-pod, host networking, cross-AZ testing
 - **Virtual Machine support**: Test with KubeVirt VMs
-- **Advanced networking**: User Defined Networks (UDN) and bridge interfaces
+- **Advanced networking**: User Defined Networks (UDN), bridge interfaces, and SR-IOV
 - **Pass/fail validation**: Automated performance regression detection
 - **Result archiving**: CSV export and OpenSearch integration
 - **Prometheus integration**: System metrics collection during tests

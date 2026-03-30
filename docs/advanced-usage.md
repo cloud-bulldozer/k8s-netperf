@@ -59,6 +59,42 @@ $ k8s-netperf --cudn layer2 --vm
 # or
 $ k8s-netperf --cudn layer3 --vm
 ```
+## SR-IOV Network Testing
+To run k8s-netperf over SR-IOV Virtual Functions, the SR-IOV Network Operator must be installed on the cluster. k8s-netperf will automatically create the required `SriovNetworkNodePolicy` and `SriovNetwork` CRs, and clean them up after the test.
+
+### Pod SR-IOV
+Pass the PF (Physical Function) interface name to the `--sriov` flag:
+```bash
+k8s-netperf --sriov ens2f0np0
+```
+
+On a single-node cluster:
+```bash
+k8s-netperf --sriov ens2f0np0 --local
+```
+
+By default, the SR-IOV policy targets nodes with the `node-role.kubernetes.io/worker` label. If SR-IOV NICs are only available on nodes with a different role label, use `--sriov-node-selector`:
+```bash
+k8s-netperf --sriov ens2f0np0 --sriov-node-selector cnf-worker
+```
+
+### VM SR-IOV
+SR-IOV is also supported with KubeVirt VMs. When `--vm` is used with `--sriov`, VFs are created with `deviceType: vfio-pci` and passed through to the guest via PCI passthrough. The IP address assigned by whereabouts to the virt-launcher pod is configured inside the guest VM using `nmcli` over virtctl SSH.
+
+```bash
+k8s-netperf --sriov ens1f0 --vm --use-virtctl --pod=false
+```
+
+Requirements for VM SR-IOV:
+- OpenShift CNV (KubeVirt) must be deployed
+- The PF must use a driver supported by the VM containerdisk (e.g. Intel `ice`/`iavf` drivers are included in Fedora 39; Mellanox `mlx5_core` is not)
+- SSH keys must be present in `~/.ssh/id_rsa.pub`
+- `virtctl` is recommended (`--use-virtctl`) for SSH access into the guest VMs
+
+> Note: Pod and VM SR-IOV tests cannot run in the same invocation because pods require `deviceType: netdevice` while VMs require `deviceType: vfio-pci`. Run them separately with `--pod=false` for VM-only or without `--vm` for pod-only.
+
+> Note: `--sriov` is mutually exclusive with `--bridge`, `--ib-write-bw`, `--hostNet`, and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
+
 ## Using a Linux Bridge Interface
 When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required.
 

@@ -162,7 +162,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
-	cudn bool, sockets uint32, cores uint32, threads uint32) (string, error) {
+	cudn bool, sriovNetwork string, sockets uint32, cores uint32, threads uint32) (string, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -181,6 +181,7 @@ users:
   - name: fedora
     groups: sudo
     shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh_deletekeys: false
     ssh_authorized_keys:
       - %s
@@ -195,9 +196,9 @@ runcmd:
   - cd netperf
   - git reset --hard 3bc455b23f901dae377ca0a558e1e32aa56b31c4
   - curl -o netperf.diff https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/netperf.diff
-  - git apply netperf.diff 
-  - ./autogen.sh 
-  - ./configure --enable-sctp=yes --enable-demo=yes 
+  - git apply netperf.diff
+  - ./autogen.sh
+  - ./configure --enable-sctp=yes --enable-demo=yes
   - make && make install
   - cd
   - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
@@ -279,8 +280,23 @@ ethernets:
 ethernets:
   eth1:
     dhcp4: true`
+	} else if sriovNetwork != "" {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "sriov-netperf",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				SRIOV: &v1.InterfaceSRIOV{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "sriov-netperf",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + SriovNadName,
+				},
+			},
+		})
 	}
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
+	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
 	if err != nil {
 		return "", err
 	}
@@ -302,7 +318,7 @@ ethernets:
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
-	sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -322,6 +338,7 @@ users:
     ssh_deletekeys: false
     groups: sudo
     shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh_authorized_keys:
       - %s
 chpasswd:
@@ -420,16 +437,38 @@ ethernets:
 ethernets:
   eth1:
     dhcp4: true`
+	} else if sriovNetwork != "" {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "sriov-netperf",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				SRIOV: &v1.InterfaceSRIOV{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "sriov-netperf",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + SriovNadName,
+				},
+			},
+		})
 	}
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sockets, cores, threads)
+	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
-	sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
 	delSeconds := int64(0)
 	mutliQ := true
+	resourceRequests := corev1.ResourceList{
+		corev1.ResourceMemory: resource.MustParse("4096Mi"),
+		corev1.ResourceCPU:    resource.MustParse("500m"),
+	}
+	if sriovNetwork != "" {
+		resourceRequests[corev1.ResourceName("openshift.io/"+sriovNetwork)] = resource.MustParse("1")
+	}
 	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: v1.GroupVersion.String(),
@@ -448,10 +487,7 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			TerminationGracePeriodSeconds: &delSeconds,
 			Domain: v1.DomainSpec{
 				Resources: v1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("4096Mi"),
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-					},
+					Requests: resourceRequests,
 				},
 				CPU: &v1.CPU{
 					Sockets: sockets,
@@ -565,7 +601,7 @@ func (v *VirtctlClient) Run(command string) ([]byte, error) {
 	}
 	identityFile := fmt.Sprintf("%s/.ssh/id_rsa", dir)
 	log.Debugf("Running command %s against %s", command, v.vmName)
-	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "--identity-file", identityFile, "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
+	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "--local-ssh-opts", "-o UserKnownHostsFile=/dev/null", "--identity-file", identityFile, "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
 	log.Debugf("Command: %s", cmd.String())
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -580,6 +616,48 @@ func (v *VirtctlClient) Run(command string) ([]byte, error) {
 
 // Close is a no-op for compatibility with VMExecutor interface
 func (v *VirtctlClient) Close() error {
+	return nil
+}
+
+// ConfigureVMSriovIP extracts the SR-IOV IP from the virt-launcher pod's network-status
+// annotation and configures it inside the guest VM via virtctl ssh.
+func ConfigureVMSriovIP(vmName string, pod corev1.Pod) error {
+	ip, err := ExtractSriovIp(pod)
+	if err != nil {
+		return fmt.Errorf("failed to extract SR-IOV IP for VM %s: %v", vmName, err)
+	}
+	log.Infof("Configuring SR-IOV IP %s/24 on VM %s", ip, vmName)
+	vc := NewVirtctlClient(vmName, namespace)
+	// Wait for cloud-init to finish and SSH to be available
+	for i := 0; i < retry; i++ {
+		_, err = vc.Run("echo ready")
+		if err == nil {
+			break
+		}
+		log.Debugf("Waiting for SSH on VM %s (%d/%d)", vmName, i+1, retry)
+		time.Sleep(10 * time.Second)
+	}
+	if err != nil {
+		return fmt.Errorf("SSH not available on VM %s after %d attempts: %v", vmName, retry, err)
+	}
+	// Find the SR-IOV interface name (non-default, non-loopback)
+	// With VFIO passthrough it typically appears as enp<X>s0 or eth1
+	out, err := vc.Run("ls /sys/class/net | grep -v -e lo -e eth0 | head -1")
+	if err != nil {
+		return fmt.Errorf("failed to find SR-IOV interface on VM %s: %v, output: %s", vmName, err, string(out))
+	}
+	iface := strings.TrimSpace(string(out))
+	if iface == "" {
+		return fmt.Errorf("no SR-IOV interface found on VM %s", vmName)
+	}
+	log.Infof("Found SR-IOV interface %s on VM %s", iface, vmName)
+	// Configure the IP address on the SR-IOV interface using nmcli for persistence
+	cmd := fmt.Sprintf("sudo nmcli con add type ethernet ifname %s con-name sriov-netperf ip4 %s/24 && sudo nmcli con up sriov-netperf", iface, ip)
+	out, err = vc.Run(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to configure SR-IOV IP on VM %s: %v, output: %s", vmName, err, string(out))
+	}
+	log.Infof("Successfully configured SR-IOV IP %s on %s in VM %s", ip, iface, vmName)
 	return nil
 }
 
