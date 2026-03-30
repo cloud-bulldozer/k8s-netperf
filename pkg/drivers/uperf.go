@@ -97,24 +97,27 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		uperfCmd := "echo '" + fileContent + "' > " + filePath
 		cmd = []string{uperfCmd}
 
+		var err error
+		createdClient := false
 		var vmClient config.VMExecutor
 		if perf.VMClientExecutor != nil {
 			vmClient = perf.VMClientExecutor
 		} else {
-			sshclient, err := k8s.SSHConnect(perf)
+			vmClient, err = k8s.ConnectToVM(perf)
 			if err != nil {
 				return filePath, err
 			}
-			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
+			createdClient = true
 		}
-
 		log.Debug(strings.Join(cmd[:], " "))
-		_, err := vmClient.Run(strings.Join(cmd[:], " "))
+		_, err = vmClient.Run(strings.Join(cmd[:], " "))
 		if err != nil {
 			return filePath, err
 		}
-		if err := vmClient.Close(); err != nil {
-			log.Warnf("Error closing VM client: %v", err)
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 		}
 		return filePath, nil
 
@@ -199,15 +202,16 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 		retry := 10
 		present := false
 
+		createdClient := false
 		var vmClient config.VMExecutor
 		if perf.VMClientExecutor != nil {
 			vmClient = perf.VMClientExecutor
 		} else {
-			sshclient, err := k8s.SSHConnect(perf)
+			vmClient, err = k8s.ConnectToVM(perf)
 			if err != nil {
 				return stdout, err
 			}
-			vmClient = &k8s.SSHClientWrapper{Client: sshclient}
+			createdClient = true
 		}
 
 		var err error
@@ -217,12 +221,16 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			if err == nil {
 				present = true
 				break
+			} else {
+				log.Debugf("Failed running command %s", err)
 			}
 			time.Sleep(30 * time.Second)
 		}
 		if !present {
-			if err := vmClient.Close(); err != nil {
-				log.Warnf("Error closing VM client: %v", err)
+			if createdClient {
+				if err := vmClient.Close(); err != nil {
+					log.Warnf("Error closing VM client: %v", err)
+				}
 			}
 			return stdout, fmt.Errorf("uperf binary is not present on the VM")
 		}
@@ -238,8 +246,10 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 			log.Debugf("⏰ Retrying uperf command -- cloud-init still finishing up")
 			time.Sleep(60 * time.Second)
 		}
-		if err := vmClient.Close(); err != nil {
-			log.Warnf("Error closing VM client: %v", err)
+		if createdClient {
+			if err := vmClient.Close(); err != nil {
+				log.Warnf("Error closing VM client: %v", err)
+			}
 		}
 		if !ran {
 			return *bytes.NewBuffer(stdout), fmt.Errorf("unable to run uperf")
