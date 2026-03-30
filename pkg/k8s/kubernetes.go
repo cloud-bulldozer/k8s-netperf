@@ -414,8 +414,12 @@ func DeploySriovOperatorConfig(dyn *dynamic.DynamicClient, nodeRole string) erro
 }
 
 // DeploySriovPolicy creates a SriovNetworkNodePolicy CR to carve VFs from a PF
-func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string, nodeRole string) error {
-	log.Infof("Deploying SriovNetworkNodePolicy for PF: %s", pfName)
+func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string, nodeRole string, vm bool) error {
+	deviceType := "netdevice"
+	if vm {
+		deviceType = "vfio-pci"
+	}
+	log.Infof("Deploying SriovNetworkNodePolicy for PF: %s (deviceType: %s)", pfName, deviceType)
 	policy := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "sriovnetwork.openshift.io/v1",
@@ -426,7 +430,7 @@ func DeploySriovPolicy(dyn *dynamic.DynamicClient, pfName string, nodeRole strin
 			},
 			"spec": map[string]interface{}{
 				"resourceName": pfName,
-				"deviceType":   "netdevice",
+				"deviceType":   deviceType,
 				"numVfs":       2,
 				"nicSelector": map[string]interface{}{
 					"pfNames": []string{pfName},
@@ -1189,7 +1193,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
-		perf.Sockets, perf.Cores, perf.Threads)
+		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
 	}
@@ -1204,13 +1208,20 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 	}
 
 	perf.ServerNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
+
+	if perf.SriovNetwork != "" && len(perf.VMServer.Items) > 0 {
+		err = ConfigureVMSriovIP(name, perf.VMServer.Items[0])
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
-		perf.Sockets, perf.Cores, perf.Threads)
+		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
 	}
@@ -1225,6 +1236,13 @@ func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 		return err
 	}
 	perf.ClientNodeInfo, _ = GetPodNodeInfo(perf.ClientSet, fmt.Sprintf("app=%s", name))
+
+	if perf.SriovNetwork != "" && len(perf.VMClientAcross.Items) > 0 {
+		err = ConfigureVMSriovIP(name, perf.VMClientAcross.Items[0])
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

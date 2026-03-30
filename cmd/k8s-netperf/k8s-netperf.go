@@ -134,6 +134,9 @@ var rootCmd = &cobra.Command{
 		if sriov != "" && hostNetOnly {
 			log.Fatalf("😭 --sriov cannot be used with --hostNet")
 		}
+		if sriov != "" && vm && pod {
+			log.Fatalf("😭 --sriov with --vm requires --pod=false. Pod SR-IOV uses deviceType netdevice while VM SR-IOV uses vfio-pci — they cannot share the same VFs.")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -324,7 +327,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = k8s.DeploySriovPolicy(s.DClient, sriov, sriovNodeSelector)
+			err = k8s.DeploySriovPolicy(s.DClient, sriov, sriovNodeSelector, vm)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -690,7 +693,11 @@ func executeWorkload(nc config.Config,
 		}
 		npr.UdnInfo = "Cudn -" + cudn
 	} else if s.SriovNetwork != "" {
-		serverIP, err = k8s.ExtractSriovIp(s.Server.Items[0])
+		if virt {
+			serverIP, err = k8s.ExtractSriovIp(s.VMServer.Items[0])
+		} else {
+			serverIP, err = k8s.ExtractSriovIp(s.Server.Items[0])
+		}
 		if err != nil {
 			log.Fatalf("Failed to extract SR-IOV IP: %v", err)
 		}
