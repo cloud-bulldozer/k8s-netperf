@@ -19,46 +19,47 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID              string           `json:"uuid"`
-	Timestamp         time.Time        `json:"timestamp"`
-	HostNetwork       bool             `json:"hostNetwork"`
-	Driver            string           `json:"driver"`
-	Parallelism       int              `json:"parallelism"`
-	Profile           string           `json:"profile"`
-	Duration          int              `json:"duration"`
-	Service           bool             `json:"service"`
-	Local             bool             `json:"local"`
-	Virt              bool             `json:"virt"`
-	AcrossAZ          bool             `json:"acrossAZ"`
-	Samples           int              `json:"samples"`
-	Messagesize       int              `json:"messageSize"`
-	Burst             int              `json:"burst"`
-	Throughput        float64          `json:"throughput"`
-	Latency           float64          `json:"latency"`
-	TputMetric        string           `json:"tputMetric"`
-	LtcyMetric        string           `json:"ltcyMetric"`
-	TCPRetransmit     float64          `json:"tcpRetransmits"`
-	UDPLossPercent    float64          `json:"udpLossPercent"`
-	ToolVersion       string           `json:"toolVersion"`
-	ToolGitCommit     string           `json:"toolGitCommit"`
-	Metadata          result.Metadata  `json:"metadata"`
-	ServerNodeCPU     metrics.NodeCPU  `json:"serverCPU"`
-	ServerPodCPU      []metrics.PodCPU `json:"serverPods"`
-	ServerPodMem      []metrics.PodMem `json:"serverPodsMem"`
-	ClientNodeCPU     metrics.NodeCPU  `json:"clientCPU"`
-	ClientPodCPU      []metrics.PodCPU `json:"clientPods"`
-	ClientPodMem      []metrics.PodMem `json:"clientPodsMem"`
-	Confidence        []float64        `json:"confidence"`
-	ServerNodeInfo    metrics.NodeInfo `json:"serverNodeInfo"`
-	ClientNodeInfo    metrics.NodeInfo `json:"clientNodeInfo"`
-	ServerVSwitchCpu  float64          `json:"serverVswtichCpu"`
-	ServerVSwitchMem  float64          `json:"serverVswitchMem"`
-	ClientVSwitchCpu  float64          `json:"clientVswtichCpu"`
-	ClientVSwiitchMem float64          `json:"clientVswitchMem"`
-	ExternalServer    bool             `json:"externalServer"`
-	UdnInfo           string           `json:"udnInfo"`
-	BridgeInfo        string           `json:"bridgeInfo"`
-	SriovInfo         string           `json:"sriovInfo"`
+	UUID              string              `json:"uuid"`
+	Timestamp         time.Time           `json:"timestamp"`
+	HostNetwork       bool                `json:"hostNetwork"`
+	Driver            string              `json:"driver"`
+	Parallelism       int                 `json:"parallelism"`
+	Profile           string              `json:"profile"`
+	Duration          int                 `json:"duration"`
+	Service           bool                `json:"service"`
+	Local             bool                `json:"local"`
+	Virt              bool                `json:"virt"`
+	AcrossAZ          bool                `json:"acrossAZ"`
+	Samples           int                 `json:"samples"`
+	Messagesize       int                 `json:"messageSize"`
+	Burst             int                 `json:"burst"`
+	Throughput        metrics.JsonFloat64 `json:"throughput"`
+	Latency           metrics.JsonFloat64 `json:"latency"`
+	TputMetric        string              `json:"tputMetric"`
+	LtcyMetric        string              `json:"ltcyMetric"`
+	TCPRetransmit     metrics.JsonFloat64 `json:"tcpRetransmits"`
+	UDPLossPercent    metrics.JsonFloat64 `json:"udpLossPercent"`
+	ToolVersion       string              `json:"toolVersion"`
+	ToolGitCommit     string              `json:"toolGitCommit"`
+	Metadata          result.Metadata     `json:"metadata"`
+	ServerNodeCPU     metrics.NodeCPU     `json:"serverCPU"`
+	ServerPodCPU      []metrics.PodCPU    `json:"serverPods"`
+	ServerPodMem      []metrics.PodMem    `json:"serverPodsMem"`
+	ClientNodeCPU     metrics.NodeCPU     `json:"clientCPU"`
+	ClientPodCPU      []metrics.PodCPU    `json:"clientPods"`
+	ClientPodMem      []metrics.PodMem    `json:"clientPodsMem"`
+	Confidence        []float64           `json:"confidence"`
+	ServerNodeInfo    metrics.NodeInfo    `json:"serverNodeInfo"`
+	ClientNodeInfo    metrics.NodeInfo    `json:"clientNodeInfo"`
+	ServerVSwitchCpu  metrics.JsonFloat64 `json:"serverVswtichCpu"`
+	ServerVSwitchMem  metrics.JsonFloat64 `json:"serverVswitchMem"`
+	ClientVSwitchCpu  metrics.JsonFloat64 `json:"clientVswtichCpu"`
+	ClientVSwiitchMem metrics.JsonFloat64 `json:"clientVswitchMem"`
+	ExternalServer    bool                `json:"externalServer"`
+	UdnInfo           string              `json:"udnInfo"`
+	BridgeInfo        string              `json:"bridgeInfo"`
+	SriovInfo         string              `json:"sriovInfo"`
+	Tags              []string            `json:"tags,omitempty"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -82,7 +83,7 @@ func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 }
 
 // BuildDocs returns the documents that need to be indexed or an error.
-func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
+func BuildDocs(sr result.ScenarioResults, uuid string, tags []string) ([]interface{}, error) {
 	time := time.Now().UTC()
 
 	var docs []interface{}
@@ -134,34 +135,35 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			UdnInfo:           r.UdnInfo,
 			BridgeInfo:        r.BridgeInfo,
 			SriovInfo:         r.SriovInfo,
+			Tags:              tags,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
 			logging.Warn("Unable to process udp loss, setting value to zero")
 			d.UDPLossPercent = 0
 		} else {
-			d.UDPLossPercent = UDPLossPercent
+			d.UDPLossPercent = metrics.JsonFloat64(UDPLossPercent)
 		}
 		TCPRetransmit, e := result.Average(r.RetransmitSummary)
 		if e != nil {
 			logging.Warn("Unable to process tcp retransmits, setting value to zero")
 			d.TCPRetransmit = 0
 		} else {
-			d.TCPRetransmit = TCPRetransmit
+			d.TCPRetransmit = metrics.JsonFloat64(TCPRetransmit)
 		}
 		Throughput, e := result.Average(r.ThroughputSummary)
 		if e != nil {
 			logging.Warn("Unable to process throughput, setting value to zero")
 			d.Throughput = 0
 		} else {
-			d.Throughput = Throughput
+			d.Throughput = metrics.JsonFloat64(Throughput)
 		}
 		Latency, e := result.Average(r.LatencySummary)
 		if e != nil {
 			logging.Warn("Unable to process latency, setting value to zero")
 			d.Latency = 0
 		} else {
-			d.Latency = Latency
+			d.Latency = metrics.JsonFloat64(Latency)
 		}
 		docs = append(docs, d)
 	}
@@ -171,6 +173,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 // Common csv header fields.
 func commonCsvHeaderFields() []string {
 	return []string{
+		"Tags",
 		"Driver",
 		"Profile",
 		"Same node",
@@ -192,12 +195,13 @@ func commonCsvHeaderFields() []string {
 }
 
 // Common csv data fields.
-func commonCsvDataFields(row result.Data) []string {
+func commonCsvDataFields(row result.Data, tags []string) []string {
 	var lo, hi float64
 	if row.Samples > 1 {
 		_, lo, hi = result.ConfidenceInterval(row.ThroughputSummary, 0.95)
 	}
 	return []string{
+		strings.Join(tags, ";"),
 		fmt.Sprint(row.Driver),
 		fmt.Sprint(row.Profile),
 		fmt.Sprint(row.SameNode),
@@ -219,11 +223,11 @@ func commonCsvDataFields(row result.Data) []string {
 }
 
 // Writes all the mertics to the archive.
-func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU, podMem []metrics.PodMem) error {
+func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU, podMem []metrics.PodMem, tags []string) error {
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
 		if err := podarchive.Write(append(append(roleFieldData,
-			commonCsvDataFields(row)...),
+			commonCsvDataFields(row, tags)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -232,7 +236,7 @@ func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, ro
 	}
 	for _, pod := range podMem {
 		if err := podmemarchive.Write(append(append(roleFieldData,
-			commonCsvDataFields(row)...),
+			commonCsvDataFields(row, tags)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -245,13 +249,13 @@ func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, ro
 		cpu = row.ServerMetrics
 	}
 	if err := vswitch.Write(append(append(roleFieldData,
-		commonCsvDataFields(row)...),
+		commonCsvDataFields(row, tags)...),
 		fmt.Sprintf("%f", cpu.VSwitchCPU),
 		fmt.Sprintf("%f", cpu.VSwitchMem))); err != nil {
 		return fmt.Errorf("failed to write archive to file")
 	}
 	if err := cpuarchive.Write(append(append(roleFieldData,
-		commonCsvDataFields(row)...),
+		commonCsvDataFields(row, tags)...),
 		fmt.Sprintf("%f", cpu.Idle),
 		fmt.Sprintf("%f", cpu.User),
 		fmt.Sprintf("%f", cpu.System),
@@ -348,10 +352,10 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 		return fmt.Errorf("failed to write vswitch archive to file")
 	}
 	for _, row := range r.Results {
-		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Client", row, row.ClientPodCPU.Results, row.ClientPodMem.MemResults); err != nil {
+		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Client", row, row.ClientPodCPU.Results, row.ClientPodMem.MemResults, r.Tags); err != nil {
 			return err
 		}
-		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Server", row, row.ServerPodCPU.Results, row.ServerPodMem.MemResults); err != nil {
+		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Server", row, row.ServerPodCPU.Results, row.ServerPodMem.MemResults, r.Tags); err != nil {
 			return err
 		}
 	}
@@ -381,7 +385,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "UDP_STREAM") {
 			loss, _ := result.Average(row.LossSummary)
 			header := []string{"UDP Percent Loss"}
-			data := append(header, commonCsvDataFields(row)...)
+			data := append(header, commonCsvDataFields(row, r.Tags)...)
 			iperfdata = append(data, fmt.Sprintf("%f", loss))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -390,7 +394,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "TCP_STREAM") {
 			rt, _ := result.Average(row.RetransmitSummary)
 			header := []string{"TCP Retransmissions"}
-			data := append(header, commonCsvDataFields(row)...)
+			data := append(header, commonCsvDataFields(row, r.Tags)...)
 			iperfdata = append(data, fmt.Sprintf("%f", rt))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -402,7 +406,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 
 // WriteJSONResult sends the results as JSON to stdout
 func WriteJSONResult(r result.ScenarioResults) error {
-	docs, err := BuildDocs(r, "k8s-netperf")
+	docs, err := BuildDocs(r, "k8s-netperf", r.Tags)
 	if err != nil {
 		return err
 	}
@@ -442,7 +446,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
-		data := append(commonCsvDataFields(row),
+		data := append(commonCsvDataFields(row, r.Tags),
 			fmt.Sprintf("%f", avg),
 			row.Metric,
 			fmt.Sprint(lavg),
