@@ -25,15 +25,16 @@ type VMExecutor interface {
 
 // Config describes the netperf tests
 type Config struct {
-	Parallelism int    `default:"1" yaml:"parallelism,omitempty"`
-	Duration    int    `yaml:"duration,omitempty"`
-	Profile     string `yaml:"profile,omitempty"`
-	Samples     int    `yaml:"samples,omitempty"`
-	MessageSize int    `yaml:"messagesize,omitempty"`
-	Burst       int    `yaml:"burst,omitempty"`
-	Service     bool   `default:"false" yaml:"service,omitempty"`
-	Metric      string
-	AcrossAZ    bool
+	Parallelism     int    `default:"1" yaml:"parallelism,omitempty"`
+	Duration        int    `yaml:"duration,omitempty"`
+	Profile         string `yaml:"profile,omitempty"`
+	Samples         int    `yaml:"samples,omitempty"`
+	MessageSize     int    `yaml:"messagesize,omitempty"`
+	MessageReadSize int    `yaml:"messagereadsize,omitempty"`
+	Burst           int    `yaml:"burst,omitempty"`
+	Service         bool   `default:"false" yaml:"service,omitempty"`
+	Metric          string
+	AcrossAZ        bool
 }
 
 // PerfScenarios describes the different scenarios
@@ -77,9 +78,11 @@ type PerfScenarios struct {
 	NetperfService      *apiv1.Service
 	IperfService        *apiv1.Service
 	UperfService        *apiv1.Service
+	UperfLatService     *apiv1.Service
 	NetperfVmService    *apiv1.Service
 	IperfVmService      *apiv1.Service
 	UperfVmService      *apiv1.Service
+	UperfLatVmService   *apiv1.Service
 	RestConfig          rest.Config
 	ClientSet           *kubernetes.Clientset
 	KClient             *kubevirtv1.KubevirtV1Client

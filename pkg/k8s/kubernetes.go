@@ -13,8 +13,8 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -72,6 +72,7 @@ const IperfServerCtlPort = 22865
 
 // UperferverCtlPort control port for the service
 const UperfServerCtlPort = 30000
+const UperfLatServerCtlPort = 31000
 
 // NetperfServerDataPort data port for the service
 const NetperfServerDataPort = 42424
@@ -87,9 +88,11 @@ const IperfVmServerDataPort = 43533
 
 // UperfServerDataPort data port for the service
 const UperfServerDataPort = 30001
+const UperfLatServerDataPort = 31001
 
 // UperfServerDataPort data port for the service
 const UperfVmServerDataPort = 30101
+const UperfLatVmServerDataPort = 31101
 
 // Labels we will apply to k8s assets.
 const serverRole = "server"
@@ -466,8 +469,8 @@ func DeploySriovNetwork(dyn *dynamic.DynamicClient, resourceName string) error {
 			},
 			"spec": map[string]interface{}{
 				"networkNamespace": namespace,
-				"resourceName":    resourceName,
-				"ipam":            `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
+				"resourceName":     resourceName,
+				"ipam":             `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
 			},
 		},
 	}
@@ -749,6 +752,18 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			if err != nil {
 				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
 			}
+			// Create uperf-histogram service
+			uperfLatSVC := ServiceParams{
+				Name:      "uperf-histogram-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   UperfLatServerCtlPort,
+				DataPorts: []int32{UperfLatServerDataPort},
+			}
+			s.UperfLatService, err = CreateService(uperfLatSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
+			}
 		}
 		if s.VM {
 			uperfSVC := ServiceParams{
@@ -761,6 +776,18 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			s.UperfVmService, err = CreateService(uperfSVC, client)
 			if err != nil {
 				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+			}
+			//
+			uperfLatSVC := ServiceParams{
+				Name:      "uperf-vm-histogram-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   UperfLatServerCtlPort,
+				DataPorts: []int32{UperfLatVmServerDataPort},
+			}
+			s.UperfLatVmService, err = CreateService(uperfLatSVC, client)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
 			}
 		}
 	}
@@ -923,6 +950,21 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
 	}
 	if containsDriver(s.RequestedDrivers, "uperf") {
+		// Check if any config uses TCP_STREAM_LAT profile
+		needsHistogram := false
+		for _, cfg := range s.Configs {
+			if cfg.Profile == "TCP_STREAM_LAT" {
+				needsHistogram = true
+				break
+			}
+		}
+
+		// Start uperf_histogram server only if TCP_STREAM_LAT is used
+		if needsHistogram {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("/opt/uperf-histogram/bin/uperf -s -v -P %d && sleep 10000000", UperfLatServerCtlPort)})
+		}
+
+		// Always start regular uperf server for other profiles
 		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
 	}
 	if containsDriver(s.RequestedDrivers, "ib_write_bw") {
