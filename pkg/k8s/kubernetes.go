@@ -952,7 +952,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		cdpHostAcross.NodeAffinity = affinity
 	}
 
-	if ncount > 1 {
+	if ncount > 1 && !s.NodeLocal {
 		if s.HostNetwork {
 			cdpHostAcross.NodeAffinity = corev1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),

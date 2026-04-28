@@ -105,6 +105,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string, tags []string) ([]interfa
 			ToolVersion:       sr.Version,
 			ToolGitCommit:     sr.GitCommit,
 			Driver:            r.Driver,
+			Local:             r.SameNode,
 			HostNetwork:       r.HostNetwork,
 			Parallelism:       r.Parallelism,
 			Profile:           r.Profile,
