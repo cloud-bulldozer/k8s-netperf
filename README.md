@@ -53,7 +53,7 @@ For detailed documentation, please refer to the following guides:
 
 - **[Setup and Installation](docs/setup.md)** - How to build, install, and configure k8s-netperf
 - **[Configuration](docs/configuration.md)** - Configuration file formats, benchmark options, and OpenSearch integration
-- **[Advanced Usage](docs/advanced-usage.md)** - VMs, User Defined Networks (UDN), bridge networks, and external servers
+- **[Advanced Usage](docs/advanced-usage.md)** - VMs, User Defined Networks (UDN), bridge networks, SR-IOV, MACVLAN and external servers
 - **[Output and Results](docs/output-and-results.md)** - Understanding test output, pass/fail criteria, and CSV exports
 
 ## Features
@@ -61,7 +61,7 @@ For detailed documentation, please refer to the following guides:
 - **Multiple benchmark tools**: Support for netperf, iperf3, uperf and ib_write_bw
 - **Flexible test scenarios**: Pod-to-pod, host networking, cross-AZ testing
 - **Virtual Machine support**: Test with KubeVirt VMs
-- **Advanced networking**: User Defined Networks (UDN), bridge interfaces, and SR-IOV
+- **Advanced networking**: User Defined Networks (UDN), bridge interfaces, SR-IOV and MACVLAN
 - **Pass/fail validation**: Automated performance regression detection
 - **Result archiving**: CSV export and OpenSearch integration
 - **Prometheus integration**: System metrics collection during tests

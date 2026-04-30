@@ -93,7 +93,26 @@ Requirements for VM SR-IOV:
 
 > Note: Pod and VM SR-IOV tests cannot run in the same invocation because pods require `deviceType: netdevice` while VMs require `deviceType: vfio-pci`. Run them separately with `--pod=false` for VM-only or without `--vm` for pod-only.
 
-> Note: `--sriov` is mutually exclusive with `--bridge`, `--ib-write-bw`, `--hostNet`, and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
+> Note: `--sriov` is mutually exclusive with `--bridge`, `--macvlan`, `--ib-write-bw`, `--hostNet` and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
+
+## MACVLAN Network Testing
+To run k8s-netperf over a MACVLAN interface, pass the master (host) interface name to the `--macvlan` flag. k8s-netperf will automatically create a MACVLAN `NetworkAttachmentDefinition` with [whereabouts](https://github.com/k8snetworkplumbingwg/whereabouts) IPAM in the `netperf` namespace and clean it up after the test.
+
+Prerequisites:
+- [Multus CNI](https://github.com/k8snetworkplumbingwg/multus-cni) must be installed on the cluster
+- The `macvlan` CNI plugin must be available on the nodes (`/opt/cni/bin/macvlan`)
+- The whereabouts IPAM plugin must be installed
+
+```bash
+k8s-netperf --macvlan eth0
+```
+
+On a single-node cluster:
+```bash
+k8s-netperf --macvlan eth0 --local
+```
+
+> Note: `--macvlan` is mutually exclusive with `--bridge`, `--sriov`, `--ib-write-bw`, `--hostNet` and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
 
 ## Using a Linux Bridge Interface
 When using `--bridge`, a NetworkAttachmentDefinition defining a bridge interface is attached to the VMs and is used for the test. It requires the name of the bridge as it is defined in the NetworkNodeConfigurationPolicy, NMstate operator is required.

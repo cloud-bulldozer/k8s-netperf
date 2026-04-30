@@ -153,6 +153,9 @@ var rootCmd = &cobra.Command{
 		if macvlan != "" && hostNetOnly {
 			log.Fatalf("😭 --macvlan cannot be used with --hostNet")
 		}
+		if macvlan != "" && vm {
+			log.Fatalf("😭 --macvlan cannot be used with --vm")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
