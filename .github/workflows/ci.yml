@@ -69,8 +69,9 @@ jobs:
           kubectl -n kube-system wait --for=condition=Ready pod -l app=whereabouts --timeout=120s
           for node in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}'); do
             docker exec "$node" bash -c 'curl -sSL https://github.com/containernetworking/plugins/releases/download/v1.6.2/cni-plugins-linux-amd64-v1.6.2.tgz | tar -xz -C /opt/cni/bin ./macvlan'
+            docker exec "$node" bash -c 'ip link add macvlan0 type dummy && ip link set macvlan0 up'
           done
 
       - name: Run MACVLAN tests
         run: |
-          ./bin/amd64/k8s-netperf --debug --macvlan eth0 --tcp-tolerance 100
+          ./bin/amd64/k8s-netperf --debug --macvlan macvlan0 --tcp-tolerance 100
