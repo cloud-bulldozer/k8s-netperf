@@ -74,4 +74,4 @@ jobs:
 
       - name: Run MACVLAN tests
         run: |
-          ./bin/amd64/k8s-netperf --debug --macvlan macvlan0 --tcp-tolerance 100
+          ./bin/amd64/k8s-netperf --debug --macvlan macvlan0 --local --tcp-tolerance 100
