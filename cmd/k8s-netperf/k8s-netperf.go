@@ -26,6 +26,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -37,44 +38,51 @@ const index = "k8s-netperf"
 const retry = 3
 
 var (
-	cfgfile          string
-	nl               bool
-	clean            bool
-	netperf          bool
-	iperf3           bool
-	uperf            bool
-	ibWriteBw        string
-	udnl2            bool
-	udnl3            bool
-	cudn             string
-	udnPluginBinding string
-	acrossAZ         bool
-	full             bool
-	hostNetOnly      bool
-	pod              bool
-	vm               bool
-	vmimage          string
-	useVirtctl       bool
-	debug            bool
-	bridge           string
-	bridgeNetwork    string
-	bridgeNamespace  string
-	sriov            string
+	cfgfile           string
+	nl                bool
+	clean             bool
+	netperf           bool
+	iperf3            bool
+	uperf             bool
+	ibWriteBw         string
+	udnl2             bool
+	udnl3             bool
+	cudn              string
+	udnPluginBinding  string
+	acrossAZ          bool
+	full              bool
+	hostNetOnly       bool
+	pod               bool
+	vm                bool
+	vmimage           string
+	useVirtctl        bool
+	debug             bool
+	bridge            string
+	bridgeNetwork     string
+	bridgeNamespace   string
+	sriov             string
 	sriovNodeSelector string
-	promURL          string
-	id               string
-	searchURL        string
-	showMetrics      bool
-	tcpt             float64
-	json             bool
-	version          bool
-	csvArchive       bool
-	searchIndex      string
-	serverIPAddr     string
-	sockets          uint32
-	cores            uint32
-	threads          uint32
-	privileged       bool
+	kubeconfig        string
+	netperfNamespace  string
+	namespaceFile     string
+	nodeSelectors     []string
+	tolerationKeys    []string
+	autoTolerate      bool
+	tags              []string
+	promURL           string
+	id                string
+	searchURL         string
+	showMetrics       bool
+	tcpt              float64
+	json              bool
+	version           bool
+	csvArchive        bool
+	searchIndex       string
+	serverIPAddr      string
+	sockets           uint32
+	cores             uint32
+	threads           uint32
+	privileged        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -167,17 +175,86 @@ var rootCmd = &cobra.Command{
 			cfg = cf
 		}
 		// Read in k8s config
+		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+		if kubeconfig != "" {
+			loadingRules.ExplicitPath = kubeconfig
+		}
 		kconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			clientcmd.NewDefaultClientConfigLoadingRules(),
+			loadingRules,
 			&clientcmd.ConfigOverrides{})
 		rconfig, err := kconfig.ClientConfig()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("😭 Unable to load kubeconfig: %v. Use --kubeconfig to specify the path or set KUBECONFIG env variable.", err)
 		}
 		client, err := kubernetes.NewForConfig(rconfig)
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		// If a namespace file is provided, read the namespace name from it
+		if namespaceFile != "" {
+			nsName, err := k8s.ReadNamespaceFromFile(namespaceFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			netperfNamespace = nsName
+			log.Infof("📁 Using namespace %q from file: %s", netperfNamespace, namespaceFile)
+		}
+
+		// Configure namespace override
+		k8s.SetNamespace(netperfNamespace)
+
+		// Parse node selectors from CLI flags (key=value pairs)
+		parsedNodeSelectors := make(map[string]string)
+		for _, sel := range nodeSelectors {
+			parts := strings.SplitN(sel, "=", 2)
+			if len(parts) != 2 {
+				log.Fatalf("😭 Invalid node selector format %q, expected key=value", sel)
+			}
+			parsedNodeSelectors[parts[0]] = parts[1]
+		}
+
+		// Build tolerations from CLI flags
+		var tolerations []corev1.Toleration
+		for _, key := range tolerationKeys {
+			tolerations = append(tolerations, corev1.Toleration{
+				Key:      key,
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			})
+		}
+
+		// Auto-tolerate: discover taints from given node selectors nodes
+		if autoTolerate {
+			seenTaintKeys := make(map[string]bool)
+			for _, key := range tolerationKeys {
+				seenTaintKeys[key] = true
+			}
+			for labelKey, labelVal := range parsedNodeSelectors {
+				labelSel := labelKey + "=" + labelVal
+				labeledNodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: labelSel})
+				if err != nil {
+					log.Warnf("⚠️  Unable to list nodes with label %s for auto-tolerate: %v", labelSel, err)
+					continue
+				}
+				for _, node := range labeledNodes.Items {
+					for _, taint := range node.Spec.Taints {
+						if seenTaintKeys[taint.Key] {
+							continue
+						}
+						seenTaintKeys[taint.Key] = true
+						log.Infof("🔧 Auto-tolerating taint %s=%s:%s from node %s", taint.Key, taint.Value, taint.Effect, node.Name)
+						tolerations = append(tolerations, corev1.Toleration{
+							Key:      taint.Key,
+							Value:    taint.Value,
+							Operator: corev1.TolerationOpEqual,
+							Effect:   taint.Effect,
+						})
+					}
+				}
+			}
+		}
+
 		if clean {
 			cleanup(client, rconfig)
 		}
@@ -186,6 +263,9 @@ var rootCmd = &cobra.Command{
 			HostNetworkOnly: hostNetOnly,
 			NodeLocal:       nl,
 			AcrossAZ:        acrossAZ,
+			Namespace:       netperfNamespace,
+			NodeSelectors:   parsedNodeSelectors,
+			Tolerations:     tolerations,
 			RestConfig:      *rconfig,
 			Configs:         cfg,
 			ClientSet:       client,
@@ -202,8 +282,9 @@ var rootCmd = &cobra.Command{
 		if serverIPAddr != "" {
 			s.ExternalServer = true
 		}
-		// Get node count
-		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
+		// Get node count using the same selector logic as pod scheduling
+		nodeCountSelector := k8s.NodeLabelSelector(s.NodeSelectors)
+		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: nodeCountSelector})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -215,18 +296,26 @@ var rootCmd = &cobra.Command{
 		}
 
 		pavail := true
-		pcon, _ := metrics.Discover()
+		var pcon metrics.PromConnect
 		if len(promURL) > 1 {
+			// User provided Prometheus URL directly, skip OpenShift discovery
 			pcon.URL = promURL
+		} else {
+			// Try OpenShift auto-discovery
+			pcon, _ = metrics.Discover(rconfig)
 		}
-		pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.Verify)
-		if err != nil {
+		if pcon.URL != "" {
+			pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.Verify)
+			if err != nil {
+				pavail = false
+				log.Warn("😥 Prometheus is not available")
+			}
+		} else {
 			pavail = false
-			log.Warn("😥 Prometheus is not available")
 		}
 
 		// Build the namespace and create the sa account
-		err = k8s.BuildInfra(client, udnl2 || udnl3)
+		err = k8s.BuildInfra(client, udnl2 || udnl3, namespaceFile)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
@@ -371,8 +460,9 @@ var rootCmd = &cobra.Command{
 
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
+		sr.Tags = tags
 		// If the client and server needs to be across zones
-		lz, zones, _ := k8s.GetZone(client)
+		lz, zones, _ := k8s.GetZone(client, k8s.NodeLabelSelector(s.NodeSelectors))
 		nodesInZone := zones[lz]
 		if nodesInZone > 1 {
 			acrossAZ = false
@@ -492,7 +582,7 @@ var rootCmd = &cobra.Command{
 
 		if len(searchURL) > 1 {
 			var esClient *indexers.Indexer
-			jdocs, err := archive.BuildDocs(sr, uid)
+			jdocs, err := archive.BuildDocs(sr, uid, tags)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -533,7 +623,10 @@ var rootCmd = &cobra.Command{
 				log.Error(err)
 			}
 		}
-		if csvArchive {
+		// Only write CSV files when --csv is explicitly set by the user,
+		// or when neither --json nor --search is used (backward-compatible default).
+		writeCSV := csvArchive && (cmd.Flags().Changed("csv") || (!json && len(searchURL) < 2))
+		if writeCSV {
 			if archive.WriteCSVResult(sr) != nil {
 				log.Fatal(err)
 			}
@@ -808,6 +901,7 @@ func executeWorkload(nc config.Config,
 }
 
 func main() {
+	rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to the kubeconfig file (defaults to KUBECONFIG env or ~/.kube/config)")
 	rootCmd.Flags().StringVar(&cfgfile, "config", "netperf.yml", "K8s netperf Configuration File")
 	rootCmd.Flags().BoolVar(&netperf, "netperf", true, "Use netperf as load driver (default true)")
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (default false)")
@@ -837,8 +931,14 @@ func main() {
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled (default bridgeNetwork.json)")
 	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
 	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
+	rootCmd.Flags().StringVar(&netperfNamespace, "namespace", k8s.DefaultNamespace, "Kubernetes namespace for netperf resources (default netperf)")
+	rootCmd.Flags().StringVar(&namespaceFile, "namespace-file", "", "Path to a YAML file defining the namespace to create (metadata.name must match --namespace)")
+	rootCmd.Flags().StringSliceVar(&nodeSelectors, "node-selector", nil, "Additional node selector as key=value to constrain pod scheduling and node count checks (can be specified multiple times)")
+	rootCmd.Flags().StringSliceVar(&tolerationKeys, "toleration", nil, "Toleration key to add to netperf pods (can be specified multiple times, e.g. --toleration=key1 --toleration=key2)")
+	rootCmd.Flags().BoolVar(&autoTolerate, "auto-tolerate", false, "Automatically add tolerations for taints found on nodes matching netperf=server and netperf=client labels (default false)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
+	rootCmd.Flags().StringSliceVar(&tags, "tag", nil, "Tags to attach to indexed results for filtering in dashboards (can be specified multiple times, e.g. --tag=baseline --tag=cluster-a)")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")
 	rootCmd.Flags().StringVar(&searchIndex, "index", "", "OpenSearch Index to save the results to (default k8s-netperf)")
 	rootCmd.Flags().BoolVar(&showMetrics, "metrics", false, "Show all system metrics retrieved from prom (default false)")

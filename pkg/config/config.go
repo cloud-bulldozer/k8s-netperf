@@ -44,6 +44,10 @@ type PerfScenarios struct {
 	HostNetworkOnly     bool
 	ExternalServer      bool
 	Privileged          bool
+	Namespace           string
+	NamespaceFile       string
+	NodeSelectors       map[string]string
+	Tolerations         []apiv1.Toleration
 	Configs             []Config
 	Pod                 bool
 	VM                  bool

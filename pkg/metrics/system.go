@@ -3,7 +3,8 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,8 +13,34 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/rest"
 )
+
+// JsonFloat64 is a float64 that always marshals with a decimal point,
+// ensuring OpenSearch consistently maps the field as a float type.
+type JsonFloat64 float64
+
+func (f JsonFloat64) MarshalJSON() ([]byte, error) {
+	v := float64(f)
+	if math.IsInf(v, 0) || math.IsNaN(v) {
+		return []byte("0.0"), nil
+	}
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	// Ensure there's always a decimal point
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return []byte(s), nil
+}
+
+func (f *JsonFloat64) UnmarshalJSON(data []byte) error {
+	var v float64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*f = JsonFloat64(v)
+	return nil
+}
 
 // NodeInfo stores the node metadata like IP and Hostname
 type NodeInfo struct {
@@ -24,27 +51,27 @@ type NodeInfo struct {
 
 // NodeCPU stores CPU information for a specific Node
 type NodeCPU struct {
-	Idle       float64 `json:"idleCPU"`
-	User       float64 `json:"userCPU"`
-	Steal      float64 `json:"stealCPU"`
-	System     float64 `json:"systemCPU"`
-	Nice       float64 `json:"niceCPU"`
-	Irq        float64 `json:"irqCPU"`
-	Softirq    float64 `json:"softCPU"`
-	Iowait     float64 `json:"ioCPU"`
-	VSwitchCPU float64 `json:"vSwitchCPU"`
-	VSwitchMem float64 `json:"vSwitchMem"`
+	Idle       JsonFloat64 `json:"idleCPU"`
+	User       JsonFloat64 `json:"userCPU"`
+	Steal      JsonFloat64 `json:"stealCPU"`
+	System     JsonFloat64 `json:"systemCPU"`
+	Nice       JsonFloat64 `json:"niceCPU"`
+	Irq        JsonFloat64 `json:"irqCPU"`
+	Softirq    JsonFloat64 `json:"softCPU"`
+	Iowait     JsonFloat64 `json:"ioCPU"`
+	VSwitchCPU JsonFloat64 `json:"vSwitchCPU"`
+	VSwitchMem JsonFloat64 `json:"vSwitchMem"`
 }
 
 // PodCPU stores pod CPU
 type PodCPU struct {
-	Name  string  `json:"podName"`
-	Value float64 `json:"cpuUsage"`
+	Name  string      `json:"podName"`
+	Value JsonFloat64 `json:"cpuUsage"`
 }
 
 type PodMem struct {
-	Name  string  `json:"podName"`
-	Value float64 `json:"memUsage"`
+	Name  string      `json:"podName"`
+	Value JsonFloat64 `json:"memUsage"`
 }
 
 // PodValues is a collection of PodCPU
@@ -70,24 +97,21 @@ type Details struct {
 	}
 }
 
-// Discover is to find Prometheus and generate an auth token if necessary.
-func Discover() (PromConnect, bool) {
+// Discover tries to find Prometheus via OpenShift routes using the provided rest config.
+func Discover(config *rest.Config) (PromConnect, bool) {
 	var conn PromConnect
-	kconfig := os.Getenv("KUBECONFIG")
-	config, err := clientcmd.BuildConfigFromFlags("", kconfig)
-	if err != nil {
-		logging.Error(err)
+	if config == nil {
+		logging.Debug("No rest config provided, skipping Prometheus discovery")
 		return conn, false
 	}
 	ocpMetadata, err := ocpmetadata.NewMetadata(config)
 	if err != nil {
-		logging.Error(err)
+		logging.Debug("Unable to initialize OCP metadata, likely not an OpenShift cluster")
 		return conn, false
 	}
 	conn.URL, conn.Token, err = ocpMetadata.GetPrometheus()
 	if err != nil {
-		logging.Info("😥 prometheus discovery failure")
-		logging.Error(err)
+		logging.Debug("Prometheus auto-discovery not available (non-OpenShift cluster or route not exposed)")
 		return conn, false
 	}
 	logging.Info("🔬 prometheus discovered at openshift-monitoring")
@@ -99,8 +123,7 @@ func Discover() (PromConnect, bool) {
 // NodeDetails returns the Details of the nodes. Only returning a single node info.
 func NodeDetails(conn PromConnect) Details {
 	pd := Details{}
-	if !conn.OpenShift {
-		logging.Warn("Not able to collect OpenShift specific node info")
+	if conn.Client == nil {
 		return pd
 	}
 	query := `kube_node_info`
@@ -118,8 +141,8 @@ func NodeDetails(conn PromConnect) Details {
 
 // NodeMTU return mtu
 func NodeMTU(conn PromConnect) (int, error) {
-	if !conn.OpenShift {
-		return 0, fmt.Errorf(" Not able to collect OpenShift specific mtu info ")
+	if conn.Client == nil {
+		return 0, fmt.Errorf("prometheus client not available for MTU query")
 	}
 	query := `node_network_mtu_bytes`
 	value, err := conn.Client.QueryRange(query, time.Now().Add(-time.Minute*1), time.Now(), time.Minute)
@@ -249,12 +272,12 @@ func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 }
 
 // Calculates average for the given data
-func avg(data []model.SamplePair) float64 {
+func avg(data []model.SamplePair) JsonFloat64 {
 	sum := 0.0
 	for s := range data {
 		sum += float64(data[s].Value)
 	}
-	return sum / float64(len(data))
+	return JsonFloat64(sum / float64(len(data)))
 }
 
 // Unmarshals the vector to a given type
