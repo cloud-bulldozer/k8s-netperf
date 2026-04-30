@@ -104,6 +104,7 @@ const CudnName = "cudn-secondary-netperf"
 const SriovNadName = "sriov-netperf"
 const SriovPolicyName = "sriov-netperf-policy"
 const sriovOperatorNamespace = "openshift-sriov-network-operator"
+const MacvlanNadName = "macvlan-netperf"
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
@@ -160,6 +161,76 @@ func buildSriovNetworkAnnotations() map[string]string {
 	annotations["k8s.v1.cni.cncf.io/networks"] = namespace + "/" + SriovNadName
 	log.Infof("🌉 Configuring SR-IOV network: %s", namespace+"/"+SriovNadName)
 	return annotations
+}
+
+// buildMacvlanNetworkAnnotations creates the network annotations for Multus CNI MACVLAN networks
+func buildMacvlanNetworkAnnotations() map[string]string {
+	annotations := make(map[string]string)
+	annotations["k8s.v1.cni.cncf.io/networks"] = namespace + "/" + MacvlanNadName
+	log.Infof("🌉 Configuring MACVLAN network: %s", namespace+"/"+MacvlanNadName)
+	return annotations
+}
+
+// DeployNADMacvlan creates a NetworkAttachmentDefinition for MACVLAN in the netperf namespace
+func DeployNADMacvlan(dyn *dynamic.DynamicClient, master string) error {
+	log.Infof("Deploying MACVLAN NetworkAttachmentDefinition with master: %s", master)
+	nadMacvlan := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.cni.cncf.io/v1",
+			"kind":       "NetworkAttachmentDefinition",
+			"metadata": map[string]interface{}{
+				"name":      MacvlanNadName,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				"config": fmt.Sprintf(`{"cniVersion": "0.3.1", "type": "macvlan", "master": "%s", "mode": "bridge", "ipam": {"type": "whereabouts", "range": "192.168.200.0/24"}}`, master),
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
+	_, err := dyn.Resource(gvr).Namespace(namespace).Create(context.TODO(), nadMacvlan, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to create MACVLAN NAD: %v", err)
+	}
+	return nil
+}
+
+// ExtractMacvlanIp extracts the MACVLAN network IP address from pod network status annotation
+func ExtractMacvlanIp(pod corev1.Pod) (string, error) {
+	networkStatusJson := pod.Annotations["k8s.v1.cni.cncf.io/network-status"]
+	if networkStatusJson == "" {
+		return "", fmt.Errorf("no network status annotation found on pod %s", pod.Name)
+	}
+
+	var networkStatuses []struct {
+		Name      string   `json:"name"`
+		Interface string   `json:"interface"`
+		IPs       []string `json:"ips"`
+		Default   bool     `json:"default,omitempty"`
+	}
+
+	err := json.Unmarshal([]byte(networkStatusJson), &networkStatuses)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling network status: %v", err)
+	}
+
+	expectedNetworkName := fmt.Sprintf("%s/%s", namespace, MacvlanNadName)
+	for _, netStatus := range networkStatuses {
+		if netStatus.Name == expectedNetworkName && len(netStatus.IPs) > 0 {
+			for _, ip := range netStatus.IPs {
+				if strings.Contains(ip, ".") {
+					log.Debugf("Pod %s MACVLAN network IP: %s", pod.Name, ip)
+					return ip, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("MACVLAN network IP not found for %s on pod %s", expectedNetworkName, pod.Name)
 }
 
 // BuildInfra will create the infra for the SUT
@@ -568,6 +639,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
 		} else if s.SriovNetwork != "" {
 			networkAnnotations = buildSriovNetworkAnnotations()
+		} else if s.MacvlanNetwork != "" {
+			networkAnnotations = buildMacvlanNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
 			Name:               "client",
@@ -655,6 +728,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
 		} else if s.SriovNetwork != "" {
 			networkAnnotations = buildSriovNetworkAnnotations()
+		} else if s.MacvlanNetwork != "" {
+			networkAnnotations = buildMacvlanNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
 			Name:               "client",
@@ -810,6 +885,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		networkAnnotations = buildCUdnNetworkAnnotations(CudnName)
 	} else if s.SriovNetwork != "" {
 		networkAnnotations = buildSriovNetworkAnnotations()
+	} else if s.MacvlanNetwork != "" {
+		networkAnnotations = buildMacvlanNetworkAnnotations()
 	}
 	cdpAcross := DeploymentParams{
 		Name:               "client-across",
