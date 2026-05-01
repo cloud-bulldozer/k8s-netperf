@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
+
+	"sigs.k8s.io/yaml"
 
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	log "github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -40,6 +43,7 @@ type DeploymentParams struct {
 	PodAffinity        corev1.PodAffinity
 	PodAntiAffinity    corev1.PodAntiAffinity
 	NodeAffinity       corev1.NodeAffinity
+	Tolerations        []corev1.Toleration
 	Port               int
 	NetworkAnnotations map[string]string
 	ResourceRequests   corev1.ResourceList
@@ -62,7 +66,17 @@ type PodNetworksData struct {
 }
 
 const sa string = "netperf"
-const namespace string = "netperf"
+
+// DefaultNamespace is the default namespace used for netperf resources
+const DefaultNamespace = "netperf"
+
+// Package-level variable that can be overridden via SetNamespace
+var namespace = DefaultNamespace
+
+// SetNamespace overrides the namespace used for all netperf resources
+func SetNamespace(ns string) {
+	namespace = ns
+}
 
 // NetperfServerCtlPort control port for the service
 const NetperfServerCtlPort = 12865
@@ -162,19 +176,54 @@ func buildSriovNetworkAnnotations() map[string]string {
 	return annotations
 }
 
+// ReadNamespaceFromFile reads a namespace YAML file and returns the namespace name.
+func ReadNamespaceFromFile(filePath string) (string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("unable to read namespace file %s: %v", filePath, err)
+	}
+	var ns corev1.Namespace
+	if err := yaml.Unmarshal(data, &ns); err != nil {
+		return "", fmt.Errorf("unable to parse namespace file %s: %v", filePath, err)
+	}
+	if ns.Name == "" {
+		return "", fmt.Errorf("namespace file %s must have metadata.name set", filePath)
+	}
+	return ns.Name, nil
+}
+
+// createNamespaceFromFile reads a namespace YAML file and creates the namespace.
+func createNamespaceFromFile(client *kubernetes.Clientset, filePath string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("unable to read namespace file %s: %v", filePath, err)
+	}
+	var ns corev1.Namespace
+	if err := yaml.Unmarshal(data, &ns); err != nil {
+		return fmt.Errorf("unable to parse namespace file %s: %v", filePath, err)
+	}
+	log.Infof("🔨 Creating namespace %s from file: %s", ns.Name, filePath)
+	_, err = client.CoreV1().Namespaces().Create(context.TODO(), &ns, metav1.CreateOptions{})
+	return err
+}
+
 // BuildInfra will create the infra for the SUT
-func BuildInfra(client *kubernetes.Clientset, udn bool) error {
+func BuildInfra(client *kubernetes.Clientset, udn bool, namespaceFile string) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err == nil {
 		log.Infof("♻️ Namespace already exists, reusing it")
 	} else {
-		log.Infof("🔨 Creating namespace: %s", namespace)
-		if udn {
-			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
-				Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
+		if namespaceFile != "" {
+			err = createNamespaceFromFile(client, namespaceFile)
 		} else {
-			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
-				Labels: map[string]string{"netperf": "test-namespace"}}}, metav1.CreateOptions{})
+			log.Infof("🔨 Creating namespace: %s", namespace)
+			if udn {
+				_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
+					Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
+			} else {
+				_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
+					Labels: map[string]string{"netperf": "test-namespace"}}}, metav1.CreateOptions{})
+			}
 		}
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create namespace: %v", err)
@@ -190,31 +239,38 @@ func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 			return fmt.Errorf("😥 Unable to create service account: %v", err)
 		}
 	}
-	rBinding := &v1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      sa,
-			Namespace: namespace,
-		},
-		RoleRef: v1.RoleRef{
-			Kind: "ClusterRole",
-			Name: "system:openshift:scc:hostnetwork",
-		},
-		Subjects: []v1.Subject{
-			{
-				Namespace: namespace,
-				Name:      sa,
-				Kind:      "ServiceAccount",
-			},
-		},
-	}
-	_, err = client.RbacV1().RoleBindings(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
+	// Only create the hostnetwork SCC role binding if the OpenShift ClusterRole exists
+	const sccClusterRole = "system:openshift:scc:hostnetwork"
+	_, err = client.RbacV1().ClusterRoles().Get(context.TODO(), sccClusterRole, metav1.GetOptions{})
 	if err == nil {
-		log.Infof("♻️ Role binding already exists, reusing it")
-	} else {
-		_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
+		rBinding := &v1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      sa,
+				Namespace: namespace,
+			},
+			RoleRef: v1.RoleRef{
+				Kind: "ClusterRole",
+				Name: sccClusterRole,
+			},
+			Subjects: []v1.Subject{
+				{
+					Namespace: namespace,
+					Name:      sa,
+					Kind:      "ServiceAccount",
+				},
+			},
 		}
+		_, err = client.RbacV1().RoleBindings(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
+		if err == nil {
+			log.Infof("♻️ Role binding already exists, reusing it")
+		} else {
+			_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create role-binding: %v", err)
+			}
+		}
+	} else {
+		log.Debug("Skipping OpenShift SCC role binding (non-OpenShift cluster)")
 	}
 	return nil
 }
@@ -466,8 +522,8 @@ func DeploySriovNetwork(dyn *dynamic.DynamicClient, resourceName string) error {
 			},
 			"spec": map[string]interface{}{
 				"networkNamespace": namespace,
-				"resourceName":    resourceName,
-				"ipam":            `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
+				"resourceName":     resourceName,
+				"ipam":             `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
 			},
 		},
 	}
@@ -532,11 +588,58 @@ func DestroySriovResources(dyn *dynamic.DynamicClient) error {
 	return nil
 }
 
+// NodeLabelSelector builds a label selector string from NodeSelectors,
+// falling back to the default worker node selector when none are provided.
+func NodeLabelSelector(nodeSelectors map[string]string) string {
+	if len(nodeSelectors) > 0 {
+		parts := make([]string, 0, len(nodeSelectors))
+		for key, value := range nodeSelectors {
+			parts = append(parts, key+"="+value)
+		}
+		return strings.Join(parts, ",")
+	}
+	return "node-role.kubernetes.io/worker="
+}
+
+// runIDLabel is the label key used to scope resources to a single run.
+const runIDLabel = "k8s-netperf/run-id"
+
+// runName returns base when runID is empty, otherwise base-runID for unique names.
+func runName(base, runID string) string {
+	if runID == "" {
+		return base
+	}
+	return base + "-" + runID
+}
+
+// runLabels returns role/run-id labels for a deployment or service.
+func runLabels(role, runID string) map[string]string {
+	l := map[string]string{"role": role}
+	if runID != "" {
+		l[runIDLabel] = runID
+	}
+	return l
+}
+
+// runMatchExpressions builds a LabelSelector matching role + run-id (when set).
+func runMatchExpressions(role, runID string) []metav1.LabelSelectorRequirement {
+	exprs := []metav1.LabelSelectorRequirement{
+		{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{role}},
+	}
+	if runID != "" {
+		exprs = append(exprs, metav1.LabelSelectorRequirement{
+			Key: runIDLabel, Operator: metav1.LabelSelectorOpIn, Values: []string{runID},
+		})
+	}
+	return exprs
+}
+
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
 	var netperfVmDataPorts []int32
 	var err error
+	rid := s.RunID
 
 	// Build SR-IOV resource requests if needed
 	var sriovResources corev1.ResourceList
@@ -546,15 +649,27 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
+	// Build node selector expressions for pod scheduling.
+	// When --node-selector is provided, use those selectors instead of the defaults.
+	var matchExpressions []corev1.NodeSelectorRequirement
+	if len(s.NodeSelectors) > 0 {
+		for key, value := range s.NodeSelectors {
+			matchExpressions = append(matchExpressions, corev1.NodeSelectorRequirement{
+				Key: key, Operator: corev1.NodeSelectorOpIn, Values: []string{value},
+			})
+		}
+	} else {
+		// Default: schedule on worker nodes, exclude infra and workload nodes
+		matchExpressions = []corev1.NodeSelectorRequirement{
+			{Key: "node-role.kubernetes.io/worker", Operator: corev1.NodeSelectorOpIn, Values: []string{""}},
+			{Key: "node-role.kubernetes.io/infra", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
+			{Key: "node-role.kubernetes.io/workload", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
+		}
+	}
 	workerNodeSelectorExpression := &corev1.NodeSelector{
 		NodeSelectorTerms: []corev1.NodeSelectorTerm{
 			{
-				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{Key: "node-role.kubernetes.io/worker", Operator: corev1.NodeSelectorOpIn, Values: []string{""}},
-					{Key: "node-role.kubernetes.io/infra", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
-					{Key: "node-role.kubernetes.io/workload", Operator: corev1.NodeSelectorOpNotIn, Values: []string{""}},
-				},
+				MatchExpressions: matchExpressions,
 			},
 		},
 	}
@@ -570,16 +685,17 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
-			Name:               "client",
-			Namespace:          "netperf",
+			Name:               runName("client", rid),
+			Namespace:          namespace,
 			Replicas:           1,
 			Image:              k8sNetperfImage,
-			Labels:             map[string]string{"role": clientRole},
+			Labels:             runLabels(clientRole, rid),
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
+			Tolerations:        s.Tolerations,
 		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
@@ -599,7 +715,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	// Check if nodes have the zone label to keep the netperf test
 	// in the same AZ/Zone versus across AZ/Zone
-	z, zones, err := GetZone(client)
+	z, zones, err := GetZone(client, NodeLabelSelector(s.NodeSelectors))
 	if err != nil {
 		log.Warn(err)
 	}
@@ -623,8 +739,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	// Get node count
-	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker=,node-role.kubernetes.io/infra!="})
+	// Get node count using the same selector logic as pod scheduling
+	nodeCountSelector := NodeLabelSelector(s.NodeSelectors)
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: nodeCountSelector})
 	if err != nil {
 		return err
 	}
@@ -637,9 +754,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	clientRoleAffinity := []corev1.PodAffinityTerm{
 		{
 			LabelSelector: &metav1.LabelSelector{
-				MatchExpressions: []metav1.LabelSelectorRequirement{
-					{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientRole}},
-				},
+				MatchExpressions: runMatchExpressions(clientRole, rid),
 			},
 			TopologyKey: "kubernetes.io/hostname",
 		},
@@ -657,17 +772,18 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
-			Name:               "client",
-			Namespace:          "netperf",
+			Name:               runName("client", rid),
+			Namespace:          namespace,
 			Replicas:           1,
 			HostNetwork:        s.HostNetwork,
 			Image:              k8sNetperfImage,
-			Labels:             map[string]string{"role": clientRole},
+			Labels:             runLabels(clientRole, rid),
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
+			Tolerations:        s.Tolerations,
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -708,9 +824,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.Pod {
 			// Create iperf service
 			iperfSVC := ServiceParams{
-				Name:      "iperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
+				Name:      runName("iperf-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   IperfServerCtlPort,
 				DataPorts: []int32{IperfServerDataPort},
 			}
@@ -722,9 +838,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.VM {
 			// Create iperf VM service
 			iperfSVC := ServiceParams{
-				Name:      "iperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
+				Name:      runName("iperf-vm-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   IperfServerCtlPort,
 				DataPorts: []int32{IperfVmServerDataPort},
 			}
@@ -739,9 +855,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.Pod {
 			// Create uperf service
 			uperfSVC := ServiceParams{
-				Name:      "uperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
+				Name:      runName("uperf-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   UperfServerCtlPort,
 				DataPorts: []int32{UperfServerDataPort},
 			}
@@ -752,9 +868,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if s.VM {
 			uperfSVC := ServiceParams{
-				Name:      "uperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
+				Name:      runName("uperf-vm-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   UperfServerCtlPort,
 				DataPorts: []int32{UperfVmServerDataPort},
 			}
@@ -772,9 +888,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
 			}
 			netperfSVC := ServiceParams{
-				Name:      "netperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
+				Name:      runName("netperf-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   NetperfServerCtlPort,
 				DataPorts: netperfDataPorts,
 			}
@@ -789,9 +905,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				netperfVmDataPorts = append(netperfVmDataPorts, NetperfServerDataPort+int32(i))
 			}
 			netperfSVC := ServiceParams{
-				Name:      "netperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
+				Name:      runName("netperf-vm-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   NetperfServerCtlPort,
 				DataPorts: netperfVmDataPorts,
 			}
@@ -812,31 +928,33 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		networkAnnotations = buildSriovNetworkAnnotations()
 	}
 	cdpAcross := DeploymentParams{
-		Name:               "client-across",
-		Namespace:          "netperf",
+		Name:               runName("client-across", rid),
+		Namespace:          namespace,
 		Replicas:           1,
 		Image:              k8sNetperfImage,
-		Labels:             map[string]string{"role": clientAcrossRole},
+		Labels:             runLabels(clientAcrossRole, rid),
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
+		Tolerations:        s.Tolerations,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 	}
 
 	cdpHostAcross := DeploymentParams{
-		Name:        "client-host",
-		Namespace:   "netperf",
+		Name:        runName("client-host", rid),
+		Namespace:   namespace,
 		Replicas:    1,
 		HostNetwork: true,
 		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetClientRole},
+		Labels:      runLabels(hostNetClientRole, rid),
 		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
 		Privileged:  s.Privileged,
+		Tolerations: s.Tolerations,
 	}
 	if z != "" {
 		if numNodes > 1 {
@@ -866,7 +984,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		cdpHostAcross.NodeAffinity = affinity
 	}
 
-	if ncount > 1 {
+	if ncount > 1 && !s.NodeLocal {
 		if s.HostNetwork {
 			cdpHostAcross.NodeAffinity = corev1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: zoneNodeSelectorExpression(*client, z, "client"),
@@ -944,28 +1062,30 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	sdpHost := DeploymentParams{
-		Name:        "server-host",
-		Namespace:   "netperf",
+		Name:        runName("server-host", rid),
+		Namespace:   namespace,
 		Replicas:    1,
 		HostNetwork: true,
 		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetServerRole},
+		Labels:      runLabels(hostNetServerRole, rid),
 		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
 		Privileged:  s.Privileged,
+		Tolerations: s.Tolerations,
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
-		Name:               "server",
-		Namespace:          "netperf",
+		Name:               runName("server", rid),
+		Namespace:          namespace,
 		Replicas:           1,
 		Image:              k8sNetperfImage,
-		Labels:             map[string]string{"role": serverRole},
+		Labels:             runLabels(serverRole, rid),
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
+		Tolerations:        s.Tolerations,
 	}
 	if s.NodeLocal {
 		sdp.PodAffinity = corev1.PodAffinity{
@@ -1015,9 +1135,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
 					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRole}},
-						},
+						MatchExpressions: runMatchExpressions(clientAcrossRole, rid),
 					},
 					TopologyKey: "kubernetes.io/hostname",
 				},
@@ -1028,9 +1146,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
 					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRole}},
-						},
+						MatchExpressions: runMatchExpressions(hostNetClientRole, rid),
 					},
 					TopologyKey: "kubernetes.io/hostname",
 				},
@@ -1350,11 +1466,11 @@ func waitForNamespaceDelete(c *kubernetes.Clientset, nsName string) error {
 
 // GetZone will determine if we have a multiAZ/Zone cloud.
 // returns string of the zone, int of the node count in that zone, error if encountered a problem.
-func GetZone(c *kubernetes.Clientset) (string, map[string]int, error) {
+func GetZone(c *kubernetes.Clientset, nodeSelector string) (string, map[string]int, error) {
 	zones := map[string]int{}
 	zone := ""
 	lz := ""
-	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
+	n, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: nodeSelector})
 	if err != nil {
 		return "", zones, fmt.Errorf("unable to query nodes: %v", err)
 	}
@@ -1408,12 +1524,18 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			}
 		}
 
-		// Add resource requests (e.g., SR-IOV VFs)
-		if len(dp.ResourceRequests) > 0 {
-			container.Resources = corev1.ResourceRequirements{
-				Requests: dp.ResourceRequests,
-				Limits:   dp.ResourceRequests, // extended resources require limits == requests
-			}
+		// Set default resource requests
+		requests := corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("50m"),
+			corev1.ResourceMemory: resource.MustParse("50M"),
+		}
+		// Merge any additional resource requests (e.g., SR-IOV VFs)
+		for k, v := range dp.ResourceRequests {
+			requests[k] = v
+		}
+		container.Resources = corev1.ResourceRequirements{
+			Requests: requests,
+			Limits:   dp.ResourceRequests, // only set limits for extended resources
 		}
 
 		cmdContainers = append(cmdContainers, container)
@@ -1446,6 +1568,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					ServiceAccountName:            sa,
 					HostNetwork:                   dp.HostNetwork,
 					Containers:                    cmdContainers,
+					Tolerations:                   dp.Tolerations,
 					Affinity: &corev1.Affinity{
 						NodeAffinity:    &dp.NodeAffinity,
 						PodAffinity:     &dp.PodAffinity,
