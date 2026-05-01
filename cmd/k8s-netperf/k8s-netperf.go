@@ -157,6 +157,11 @@ var rootCmd = &cobra.Command{
 			u := uuid.New()
 			uid = u.String()
 		}
+		// short DNS-safe suffix for run-scoped resource names
+		runID := strings.ToLower(strings.ReplaceAll(uid, "-", ""))
+		if len(runID) > 8 {
+			runID = runID[:8]
+		}
 
 		if json {
 			log.SetError()
@@ -264,6 +269,7 @@ var rootCmd = &cobra.Command{
 			NodeLocal:       nl,
 			AcrossAZ:        acrossAZ,
 			Namespace:       netperfNamespace,
+			RunID:           runID,
 			NodeSelectors:   parsedNodeSelectors,
 			Tolerations:     tolerations,
 			RestConfig:      *rconfig,

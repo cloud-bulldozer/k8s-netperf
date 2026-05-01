@@ -601,11 +601,45 @@ func NodeLabelSelector(nodeSelectors map[string]string) string {
 	return "node-role.kubernetes.io/worker="
 }
 
+// runIDLabel is the label key used to scope resources to a single run.
+const runIDLabel = "k8s-netperf/run-id"
+
+// runName returns base when runID is empty, otherwise base-runID for unique names.
+func runName(base, runID string) string {
+	if runID == "" {
+		return base
+	}
+	return base + "-" + runID
+}
+
+// runLabels returns role/run-id labels for a deployment or service.
+func runLabels(role, runID string) map[string]string {
+	l := map[string]string{"role": role}
+	if runID != "" {
+		l[runIDLabel] = runID
+	}
+	return l
+}
+
+// runMatchExpressions builds a LabelSelector matching role + run-id (when set).
+func runMatchExpressions(role, runID string) []metav1.LabelSelectorRequirement {
+	exprs := []metav1.LabelSelectorRequirement{
+		{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{role}},
+	}
+	if runID != "" {
+		exprs = append(exprs, metav1.LabelSelectorRequirement{
+			Key: runIDLabel, Operator: metav1.LabelSelectorOpIn, Values: []string{runID},
+		})
+	}
+	return exprs
+}
+
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfDataPorts []int32
 	var netperfVmDataPorts []int32
 	var err error
+	rid := s.RunID
 
 	// Build SR-IOV resource requests if needed
 	var sriovResources corev1.ResourceList
@@ -651,11 +685,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
-			Name:               "client",
+			Name:               runName("client", rid),
 			Namespace:          namespace,
 			Replicas:           1,
 			Image:              k8sNetperfImage,
-			Labels:             map[string]string{"role": clientRole},
+			Labels:             runLabels(clientRole, rid),
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
@@ -720,9 +754,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	clientRoleAffinity := []corev1.PodAffinityTerm{
 		{
 			LabelSelector: &metav1.LabelSelector{
-				MatchExpressions: []metav1.LabelSelectorRequirement{
-					{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientRole}},
-				},
+				MatchExpressions: runMatchExpressions(clientRole, rid),
 			},
 			TopologyKey: "kubernetes.io/hostname",
 		},
@@ -740,12 +772,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			networkAnnotations = buildSriovNetworkAnnotations()
 		}
 		cdp := DeploymentParams{
-			Name:               "client",
+			Name:               runName("client", rid),
 			Namespace:          namespace,
 			Replicas:           1,
 			HostNetwork:        s.HostNetwork,
 			Image:              k8sNetperfImage,
-			Labels:             map[string]string{"role": clientRole},
+			Labels:             runLabels(clientRole, rid),
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
@@ -792,9 +824,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.Pod {
 			// Create iperf service
 			iperfSVC := ServiceParams{
-				Name:      "iperf-service",
+				Name:      runName("iperf-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": serverRole},
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   IperfServerCtlPort,
 				DataPorts: []int32{IperfServerDataPort},
 			}
@@ -806,9 +838,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.VM {
 			// Create iperf VM service
 			iperfSVC := ServiceParams{
-				Name:      "iperf-vm-service",
+				Name:      runName("iperf-vm-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": vmServerRole},
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   IperfServerCtlPort,
 				DataPorts: []int32{IperfVmServerDataPort},
 			}
@@ -823,9 +855,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.Pod {
 			// Create uperf service
 			uperfSVC := ServiceParams{
-				Name:      "uperf-service",
+				Name:      runName("uperf-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": serverRole},
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   UperfServerCtlPort,
 				DataPorts: []int32{UperfServerDataPort},
 			}
@@ -836,9 +868,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		if s.VM {
 			uperfSVC := ServiceParams{
-				Name:      "uperf-vm-service",
+				Name:      runName("uperf-vm-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": vmServerRole},
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   UperfServerCtlPort,
 				DataPorts: []int32{UperfVmServerDataPort},
 			}
@@ -856,9 +888,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
 			}
 			netperfSVC := ServiceParams{
-				Name:      "netperf-service",
+				Name:      runName("netperf-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": serverRole},
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   NetperfServerCtlPort,
 				DataPorts: netperfDataPorts,
 			}
@@ -873,9 +905,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				netperfVmDataPorts = append(netperfVmDataPorts, NetperfServerDataPort+int32(i))
 			}
 			netperfSVC := ServiceParams{
-				Name:      "netperf-vm-service",
+				Name:      runName("netperf-vm-service", rid),
 				Namespace: namespace,
-				Labels:    map[string]string{"role": vmServerRole},
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   NetperfServerCtlPort,
 				DataPorts: netperfVmDataPorts,
 			}
@@ -896,11 +928,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		networkAnnotations = buildSriovNetworkAnnotations()
 	}
 	cdpAcross := DeploymentParams{
-		Name:               "client-across",
+		Name:               runName("client-across", rid),
 		Namespace:          namespace,
 		Replicas:           1,
 		Image:              k8sNetperfImage,
-		Labels:             map[string]string{"role": clientAcrossRole},
+		Labels:             runLabels(clientAcrossRole, rid),
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
@@ -913,12 +945,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	cdpHostAcross := DeploymentParams{
-		Name:        "client-host",
+		Name:        runName("client-host", rid),
 		Namespace:   namespace,
 		Replicas:    1,
 		HostNetwork: true,
 		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetClientRole},
+		Labels:      runLabels(hostNetClientRole, rid),
 		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:        NetperfServerCtlPort,
 		Privileged:  s.Privileged,
@@ -1030,12 +1062,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	sdpHost := DeploymentParams{
-		Name:        "server-host",
+		Name:        runName("server-host", rid),
 		Namespace:   namespace,
 		Replicas:    1,
 		HostNetwork: true,
 		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetServerRole},
+		Labels:      runLabels(hostNetServerRole, rid),
 		Commands:    dpCommands,
 		Port:        NetperfServerCtlPort,
 		Privileged:  s.Privileged,
@@ -1043,11 +1075,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
-		Name:               "server",
+		Name:               runName("server", rid),
 		Namespace:          namespace,
 		Replicas:           1,
 		Image:              k8sNetperfImage,
-		Labels:             map[string]string{"role": serverRole},
+		Labels:             runLabels(serverRole, rid),
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
@@ -1103,9 +1135,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
 					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{clientAcrossRole}},
-						},
+						MatchExpressions: runMatchExpressions(clientAcrossRole, rid),
 					},
 					TopologyKey: "kubernetes.io/hostname",
 				},
@@ -1116,9 +1146,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
 					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{hostNetClientRole}},
-						},
+						MatchExpressions: runMatchExpressions(hostNetClientRole, rid),
 					},
 					TopologyKey: "kubernetes.io/hostname",
 				},

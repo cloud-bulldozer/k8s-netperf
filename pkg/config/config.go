@@ -46,6 +46,7 @@ type PerfScenarios struct {
 	Privileged          bool
 	Namespace           string
 	NamespaceFile       string
+	RunID               string
 	NodeSelectors       map[string]string
 	Tolerations         []apiv1.Toleration
 	Configs             []Config

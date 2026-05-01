@@ -49,6 +49,24 @@ The service account and hostnetwork role binding are always created automaticall
 
 > *Note: When `--clean=true` (the default), k8s-netperf deletes the namespace at startup to remove leftover resources from previous runs, then recreates it. Pass `--clean=false` to skip this.*
 
+## Concurrent Runs in the Same Namespace
+
+k8s-netperf scopes all deployments, services, pod labels, and pod-affinity selectors to a per-run ID derived from the run UUID. This means multiple k8s-netperf instances can run side by side in the same namespace without colliding on resource names or routing service traffic to the wrong pods.
+
+Each run produces resources named like `client-<runID>`, `server-<runID>`, `netperf-service-<runID>`, etc. Pods carry a `k8s-netperf/run-id=<runID>` label, and service selectors plus PodAntiAffinity rules match on that label so each run only sees its own pods.
+
+**Required for concurrent runs:** pass `--clean=false`. The default cleanup deletes the entire namespace at both startup and shutdown, which would terminate any other in-flight run sharing the namespace.
+
+```shell
+# Run A
+$ k8s-netperf --namespace shared-perf --clean=false --tag baseline ...
+
+# Run B in parallel
+$ k8s-netperf --namespace shared-perf --clean=false --tag experimental ...
+```
+
+Use `--uuid` to fix the run ID if you want predictable resource names. Otherwise k8s-netperf generates a fresh UUID per run.
+
 ```shell
 $ kubectl create ns netperf
 $ kubectl create sa -n netperf netperf
