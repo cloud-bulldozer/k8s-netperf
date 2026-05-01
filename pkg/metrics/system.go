@@ -427,8 +427,8 @@ func unmarshalVector(value model.Value, pd interface{}) bool {
 	v := value.(model.Vector)
 	for _, s := range v {
 		d, _ := s.MarshalJSON()
-		error := json.Unmarshal(d, &pd)
-		if error != nil {
+		err := json.Unmarshal(d, &pd)
+		if err != nil {
 			continue
 		} else {
 			return true

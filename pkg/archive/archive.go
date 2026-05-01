@@ -19,50 +19,50 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID              string              `json:"uuid"`
-	Timestamp         time.Time           `json:"timestamp"`
-	HostNetwork       bool                `json:"hostNetwork"`
-	Driver            string              `json:"driver"`
-	Parallelism       int                 `json:"parallelism"`
-	Profile           string              `json:"profile"`
-	Duration          int                 `json:"duration"`
-	Service           bool                `json:"service"`
-	Local             bool                `json:"local"`
-	Virt              bool                `json:"virt"`
-	AcrossAZ          bool                `json:"acrossAZ"`
-	Samples           int                 `json:"samples"`
-	Messagesize       int                 `json:"messageSize"`
-	Burst             int                 `json:"burst"`
-	Throughput        metrics.JsonFloat64 `json:"throughput"`
-	Latency           metrics.JsonFloat64 `json:"latency"`
-	TputMetric        string              `json:"tputMetric"`
-	LtcyMetric        string              `json:"ltcyMetric"`
-	TCPRetransmit     metrics.JsonFloat64 `json:"tcpRetransmits"`
-	UDPLossPercent    metrics.JsonFloat64 `json:"udpLossPercent"`
-	ToolVersion       string              `json:"toolVersion"`
-	ToolGitCommit     string              `json:"toolGitCommit"`
-	Metadata          result.Metadata     `json:"metadata"`
-	ServerNodeCPU     metrics.NodeCPU     `json:"serverCPU"`
-	ServerCPUCollected bool             `json:"serverCPUCollected"`
-	ServerPodCPU      []metrics.PodCPU    `json:"serverPods"`
-	ServerPodMem      []metrics.PodMem    `json:"serverPodsMem"`
-	ClientNodeCPU     metrics.NodeCPU     `json:"clientCPU"`
-	ClientCPUCollected bool             `json:"clientCPUCollected"`
-	ClientPodCPU      []metrics.PodCPU    `json:"clientPods"`
-	ClientPodMem      []metrics.PodMem    `json:"clientPodsMem"`
-	Confidence        []float64           `json:"confidence"`
-	ServerNodeInfo    metrics.NodeInfo    `json:"serverNodeInfo"`
-	ClientNodeInfo    metrics.NodeInfo    `json:"clientNodeInfo"`
-	ServerVSwitchCpu  metrics.JsonFloat64 `json:"serverVswtichCpu"`
-	ServerVSwitchMem  metrics.JsonFloat64 `json:"serverVswitchMem"`
-	ClientVSwitchCpu  metrics.JsonFloat64 `json:"clientVswtichCpu"`
-	ClientVSwiitchMem metrics.JsonFloat64 `json:"clientVswitchMem"`
-	ExternalServer    bool                `json:"externalServer"`
-	UdnInfo           string              `json:"udnInfo"`
-	BridgeInfo        string              `json:"bridgeInfo"`
-	SriovInfo         string              `json:"sriovInfo"`
-	Tags              []string            `json:"tags,omitempty"`
-	MacvlanInfo        string           `json:"macvlanInfo"`
+	UUID               string              `json:"uuid"`
+	Timestamp          time.Time           `json:"timestamp"`
+	HostNetwork        bool                `json:"hostNetwork"`
+	Driver             string              `json:"driver"`
+	Parallelism        int                 `json:"parallelism"`
+	Profile            string              `json:"profile"`
+	Duration           int                 `json:"duration"`
+	Service            bool                `json:"service"`
+	Local              bool                `json:"local"`
+	Virt               bool                `json:"virt"`
+	AcrossAZ           bool                `json:"acrossAZ"`
+	Samples            int                 `json:"samples"`
+	Messagesize        int                 `json:"messageSize"`
+	Burst              int                 `json:"burst"`
+	Throughput         metrics.JsonFloat64 `json:"throughput"`
+	Latency            metrics.JsonFloat64 `json:"latency"`
+	TputMetric         string              `json:"tputMetric"`
+	LtcyMetric         string              `json:"ltcyMetric"`
+	TCPRetransmit      metrics.JsonFloat64 `json:"tcpRetransmits"`
+	UDPLossPercent     metrics.JsonFloat64 `json:"udpLossPercent"`
+	ToolVersion        string              `json:"toolVersion"`
+	ToolGitCommit      string              `json:"toolGitCommit"`
+	Metadata           result.Metadata     `json:"metadata"`
+	ServerNodeCPU      metrics.NodeCPU     `json:"serverCPU"`
+	ServerCPUCollected bool                `json:"serverCPUCollected"`
+	ServerPodCPU       []metrics.PodCPU    `json:"serverPods"`
+	ServerPodMem       []metrics.PodMem    `json:"serverPodsMem"`
+	ClientNodeCPU      metrics.NodeCPU     `json:"clientCPU"`
+	ClientCPUCollected bool                `json:"clientCPUCollected"`
+	ClientPodCPU       []metrics.PodCPU    `json:"clientPods"`
+	ClientPodMem       []metrics.PodMem    `json:"clientPodsMem"`
+	Confidence         []float64           `json:"confidence"`
+	ServerNodeInfo     metrics.NodeInfo    `json:"serverNodeInfo"`
+	ClientNodeInfo     metrics.NodeInfo    `json:"clientNodeInfo"`
+	ServerVSwitchCpu   metrics.JsonFloat64 `json:"serverVswtichCpu"`
+	ServerVSwitchMem   metrics.JsonFloat64 `json:"serverVswitchMem"`
+	ClientVSwitchCpu   metrics.JsonFloat64 `json:"clientVswtichCpu"`
+	ClientVSwiitchMem  metrics.JsonFloat64 `json:"clientVswitchMem"`
+	ExternalServer     bool                `json:"externalServer"`
+	UdnInfo            string              `json:"udnInfo"`
+	BridgeInfo         string              `json:"bridgeInfo"`
+	SriovInfo          string              `json:"sriovInfo"`
+	Tags               []string            `json:"tags,omitempty"`
+	MacvlanInfo        string              `json:"macvlanInfo"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -87,8 +87,6 @@ func Connect(url, index string, skip bool) (*indexers.Indexer, error) {
 
 // BuildDocs returns the documents that need to be indexed or an error.
 func BuildDocs(sr result.ScenarioResults, uuid string, tags []string) ([]interface{}, error) {
-	time := time.Now().UTC()
-
 	var docs []interface{}
 	if len(sr.Results) < 1 {
 		return nil, fmt.Errorf("no result documents")
@@ -103,46 +101,45 @@ func BuildDocs(sr result.ScenarioResults, uuid string, tags []string) ([]interfa
 		}
 		c := []float64{lo, hi}
 		d := Doc{
-			UUID:              uuid,
-			Timestamp:         time,
-			ToolVersion:       sr.Version,
-			ToolGitCommit:     sr.GitCommit,
-			Driver:            r.Driver,
-			Local:             r.SameNode,
-			HostNetwork:       r.HostNetwork,
-			Parallelism:       r.Parallelism,
-			Profile:           r.Profile,
-			Duration:          r.Duration,
-			Virt:              r.Virt,
-			Samples:           r.Samples,
-			Service:           r.Service,
+			UUID:               uuid,
+			Timestamp:          time.Now().UTC(),
+			ToolVersion:        sr.Version,
+			ToolGitCommit:      sr.GitCommit,
+			Driver:             r.Driver,
+			HostNetwork:        r.HostNetwork,
+			Parallelism:        r.Parallelism,
+			Profile:            r.Profile,
+			Duration:           r.Duration,
+			Virt:               r.Virt,
+			Samples:            r.Samples,
+			Service:            r.Service,
 			Local:              r.SameNode,
-			ExternalServer:    r.ExternalServer,
-			Messagesize:       r.MessageSize,
-			Burst:             r.Burst,
-			TputMetric:        r.Metric,
-			LtcyMetric:        ltcyMetric,
-			ServerNodeCPU:     r.ServerMetrics,
+			ExternalServer:     r.ExternalServer,
+			Messagesize:        r.MessageSize,
+			Burst:              r.Burst,
+			TputMetric:         r.Metric,
+			LtcyMetric:         ltcyMetric,
+			ServerNodeCPU:      r.ServerMetrics,
 			ServerCPUCollected: r.ServerCPUCollected,
-			ClientNodeCPU:     r.ClientMetrics,
+			ClientNodeCPU:      r.ClientMetrics,
 			ClientCPUCollected: r.ClientCPUCollected,
-			ServerPodCPU:      r.ServerPodCPU.Results,
-			ServerPodMem:      r.ServerPodMem.MemResults,
-			ClientPodMem:      r.ClientPodMem.MemResults,
-			ClientPodCPU:      r.ClientPodCPU.Results,
-			ClientVSwitchCpu:  r.ClientMetrics.VSwitchCPU,
-			ClientVSwiitchMem: r.ClientMetrics.VSwitchMem,
-			ServerVSwitchCpu:  r.ServerMetrics.VSwitchCPU,
-			ServerVSwitchMem:  r.ServerMetrics.VSwitchMem,
-			Metadata:          sr.Metadata,
-			AcrossAZ:          r.AcrossAZ,
-			Confidence:        c,
-			ClientNodeInfo:    r.ClientNodeInfo,
-			ServerNodeInfo:    r.ServerNodeInfo,
-			UdnInfo:           r.UdnInfo,
-			BridgeInfo:        r.BridgeInfo,
-			SriovInfo:         r.SriovInfo,
-			Tags:              tags,
+			ServerPodCPU:       r.ServerPodCPU.Results,
+			ServerPodMem:       r.ServerPodMem.MemResults,
+			ClientPodMem:       r.ClientPodMem.MemResults,
+			ClientPodCPU:       r.ClientPodCPU.Results,
+			ClientVSwitchCpu:   r.ClientMetrics.VSwitchCPU,
+			ClientVSwiitchMem:  r.ClientMetrics.VSwitchMem,
+			ServerVSwitchCpu:   r.ServerMetrics.VSwitchCPU,
+			ServerVSwitchMem:   r.ServerMetrics.VSwitchMem,
+			Metadata:           sr.Metadata,
+			AcrossAZ:           r.AcrossAZ,
+			Confidence:         c,
+			ClientNodeInfo:     r.ClientNodeInfo,
+			ServerNodeInfo:     r.ServerNodeInfo,
+			UdnInfo:            r.UdnInfo,
+			BridgeInfo:         r.BridgeInfo,
+			SriovInfo:          r.SriovInfo,
+			Tags:               tags,
 			MacvlanInfo:        r.MacvlanInfo,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
