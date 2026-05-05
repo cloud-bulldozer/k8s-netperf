@@ -98,7 +98,7 @@ type BridgeNetworkConfig struct {
 }
 
 // Tests we will support in k8s-netperf
-const validTests = "tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr|udp_crr|sctp_stream|sctp_rr|sctp_crr"
+const validTests = "tcp_stream_lat|tcp_stream|udp_stream|tcp_rr|udp_rr|tcp_crr|udp_crr|sctp_stream|sctp_rr|sctp_crr"
 
 func validConfig(cfg Config) (bool, error) {
 	preEval := regexp.MustCompile("(?i)" + validTests)
