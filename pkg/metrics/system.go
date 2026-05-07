@@ -124,10 +124,23 @@ func NodeMTU(conn PromConnect) (int, error) {
 	query := `node_network_mtu_bytes`
 	value, err := conn.Client.QueryRange(query, time.Now().Add(-time.Minute*1), time.Now(), time.Minute)
 	if err != nil {
-		return 0, fmt.Errorf("issue querying openshift mtu info from prometheus")
+		return 0, fmt.Errorf("issue querying openshift mtu info from prometheus: %w", err)
 	}
-	mtu := int(value.(model.Matrix)[0].Values[0].Value)
-	return mtu, nil
+	return extractMTU(value)
+}
+
+func extractMTU(value model.Value) (int, error) {
+	matrix, ok := value.(model.Matrix)
+	if !ok {
+		return 0, fmt.Errorf("unexpected prometheus response type for mtu query: %T", value)
+	}
+	for _, stream := range matrix {
+		if stream == nil || len(stream.Values) == 0 {
+			continue
+		}
+		return int(stream.Values[len(stream.Values)-1].Value), nil
+	}
+	return 0, fmt.Errorf("no mtu samples returned from prometheus")
 }
 
 // QueryNodeCPU will return all the CPU usage information for a given node
