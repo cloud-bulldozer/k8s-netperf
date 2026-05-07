@@ -37,44 +37,44 @@ const index = "k8s-netperf"
 const retry = 3
 
 var (
-	cfgfile          string
-	nl               bool
-	clean            bool
-	netperf          bool
-	iperf3           bool
-	uperf            bool
-	ibWriteBw        string
-	udnl2            bool
-	udnl3            bool
-	cudn             string
-	udnPluginBinding string
-	acrossAZ         bool
-	full             bool
-	hostNetOnly      bool
-	pod              bool
-	vm               bool
-	vmimage          string
-	useVirtctl       bool
-	debug            bool
-	bridge           string
-	bridgeNetwork    string
-	bridgeNamespace  string
-	sriov            string
+	cfgfile           string
+	nl                bool
+	clean             bool
+	netperf           bool
+	iperf3            bool
+	uperf             bool
+	ibWriteBw         string
+	udnl2             bool
+	udnl3             bool
+	cudn              string
+	udnPluginBinding  string
+	acrossAZ          bool
+	full              bool
+	hostNetOnly       bool
+	pod               bool
+	vm                bool
+	vmimage           string
+	useVirtctl        bool
+	debug             bool
+	bridge            string
+	bridgeNetwork     string
+	bridgeNamespace   string
+	sriov             string
 	sriovNodeSelector string
-	promURL          string
-	id               string
-	searchURL        string
-	showMetrics      bool
-	tcpt             float64
-	json             bool
-	version          bool
-	csvArchive       bool
-	searchIndex      string
-	serverIPAddr     string
-	sockets          uint32
-	cores            uint32
-	threads          uint32
-	privileged       bool
+	promURL           string
+	id                string
+	searchURL         string
+	showMetrics       bool
+	tcpt              float64
+	json              bool
+	version           bool
+	csvArchive        bool
+	searchIndex       string
+	serverIPAddr      string
+	sockets           uint32
+	cores             uint32
+	threads           uint32
+	privileged        bool
 )
 
 var rootCmd = &cobra.Command{

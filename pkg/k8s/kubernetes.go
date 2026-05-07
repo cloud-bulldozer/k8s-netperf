@@ -13,8 +13,8 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -466,8 +466,8 @@ func DeploySriovNetwork(dyn *dynamic.DynamicClient, resourceName string) error {
 			},
 			"spec": map[string]interface{}{
 				"networkNamespace": namespace,
-				"resourceName":    resourceName,
-				"ipam":            `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
+				"resourceName":     resourceName,
+				"ipam":             `{"type": "whereabouts", "range": "192.168.100.0/24"}`,
 			},
 		},
 	}
