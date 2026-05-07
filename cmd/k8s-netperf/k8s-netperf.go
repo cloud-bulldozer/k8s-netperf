@@ -637,7 +637,9 @@ func parseNetworkConfig(jsonFile string) (string, string, error) {
 	return serverIP, clientIP, nil
 }
 
-// executeWorkload executes the workload and returns the result data.
+// executeWorkload runs the workload and returns (result.Data, bool).
+// The bool is true when the result should be recorded and false when
+// the selected driver does not support the configured profile.
 func executeWorkload(nc config.Config,
 	s config.PerfScenarios,
 	hostNet bool,
