@@ -59,6 +59,7 @@ type PerfScenarios struct {
 	BridgeServerNetwork string
 	BridgeClientNetwork string
 	SriovNetwork        string
+	MacvlanNetwork      string
 	IbWriteBwParams     string
 	Sockets             uint32
 	Cores               uint32

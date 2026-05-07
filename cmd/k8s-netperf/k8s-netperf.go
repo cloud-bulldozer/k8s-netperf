@@ -59,8 +59,9 @@ var (
 	bridge           string
 	bridgeNetwork    string
 	bridgeNamespace  string
-	sriov            string
+	sriov             string
 	sriovNodeSelector string
+	macvlan           string
 	promURL          string
 	id               string
 	searchURL        string
@@ -137,6 +138,24 @@ var rootCmd = &cobra.Command{
 		if sriov != "" && vm && pod {
 			log.Fatalf("😭 --sriov with --vm requires --pod=false. Pod SR-IOV uses deviceType netdevice while VM SR-IOV uses vfio-pci — they cannot share the same VFs.")
 		}
+		if macvlan != "" && bridge != "" {
+			log.Fatalf("😭 --macvlan and --bridge are mutually exclusive")
+		}
+		if macvlan != "" && sriov != "" {
+			log.Fatalf("😭 --macvlan and --sriov are mutually exclusive")
+		}
+		if macvlan != "" && ibWriteBwEnabled {
+			log.Fatalf("😭 --macvlan and --ib-write-bw are mutually exclusive")
+		}
+		if macvlan != "" && (udnl2 || udnl3 || cudn != "") {
+			log.Fatalf("😭 --macvlan cannot be used with UDN flags (--udnl2, --udnl3, --cudn)")
+		}
+		if macvlan != "" && hostNetOnly {
+			log.Fatalf("😭 --macvlan cannot be used with --hostNet")
+		}
+		if macvlan != "" && vm {
+			log.Fatalf("😭 --macvlan cannot be used with --vm")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -205,6 +224,7 @@ var rootCmd = &cobra.Command{
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
 			SriovNetwork:    sriov,
+			MacvlanNetwork:  macvlan,
 			Cudn:            cudn != "",
 			IbWriteBwParams: ibWriteBw,
 			Sockets:         sockets,
@@ -349,6 +369,21 @@ var rootCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 			err = k8s.WaitForSriovNad(s.DClient)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		// Deploy MACVLAN NAD if requested
+		if macvlan != "" {
+			if s.DClient == nil {
+				dynClient, err := dynamic.NewForConfig(rconfig)
+				if err != nil {
+					log.Fatalf("Failed to create dynamic client for MACVLAN: %v", err)
+				}
+				s.DClient = dynClient
+			}
+			err = k8s.DeployNADMacvlan(s.DClient, macvlan)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -717,6 +752,13 @@ func executeWorkload(nc config.Config,
 
 		// Set bridge info similar to UdnInfo
 		npr.BridgeInfo = fmt.Sprintf("%s/%s", s.BridgeNamespace, s.BridgeNetwork)
+	} else if s.MacvlanNetwork != "" {
+		serverIP, err = k8s.ExtractMacvlanIp(s.Server.Items[0])
+		if err != nil {
+			log.Fatalf("Failed to extract MACVLAN IP: %v", err)
+		}
+		log.Debugf("Using MACVLAN network IP: %s", serverIP)
+		npr.MacvlanInfo = fmt.Sprintf("macvlan/%s", s.MacvlanNetwork)
 	} else if s.BridgeServerNetwork != "" {
 		// For VMs, use static bridge IP from JSON config
 		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
@@ -839,6 +881,7 @@ func main() {
 	rootCmd.Flags().StringVar(&bridgeNetwork, "bridgeNetwork", "bridgeNetwork.json", "Json file for the VM network defined by the bridge interface - bridge should be enabled (default bridgeNetwork.json)")
 	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
 	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
+	rootCmd.Flags().StringVar(&macvlan, "macvlan", "", "MACVLAN master interface name (e.g., eth0). Creates a MACVLAN NetworkAttachmentDefinition.")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

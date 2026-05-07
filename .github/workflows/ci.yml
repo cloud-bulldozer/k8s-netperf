@@ -58,3 +58,20 @@ jobs:
       - name: Run UDN L2 tests (using SVC)
         run: |
           ./bin/amd64/k8s-netperf --debug --udnl2 --config examples/netperf-svc.yml
+
+      - name: Install Multus and MACVLAN prerequisites
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-thick.yml
+          kubectl -n kube-system wait --for=condition=Ready pod -l app=multus --timeout=120s
+          kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/master/doc/crds/daemonset-install.yaml \
+            -f https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/master/doc/crds/whereabouts.cni.cncf.io_ippools.yaml \
+            -f https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/master/doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
+          kubectl -n kube-system wait --for=condition=Ready pod -l app=whereabouts --timeout=120s
+          for node in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}'); do
+            docker exec "$node" bash -c 'curl -sSL https://github.com/containernetworking/plugins/releases/download/v1.6.2/cni-plugins-linux-amd64-v1.6.2.tgz | tar -xz -C /opt/cni/bin ./macvlan'
+            docker exec "$node" bash -c 'ip link add macvlan0 type dummy && ip link set macvlan0 up'
+          done
+
+      - name: Run MACVLAN tests
+        run: |
+          ./bin/amd64/k8s-netperf --debug --macvlan macvlan0 --local --tcp-tolerance 100
