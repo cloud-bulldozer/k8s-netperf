@@ -158,6 +158,19 @@ var rootCmd = &cobra.Command{
 			log.SetDebug()
 		}
 
+		searchIndexName := index
+		if len(searchIndex) > 1 {
+			searchIndexName = searchIndex
+		}
+		var esClient *indexers.Indexer
+		if len(searchURL) > 1 {
+			var err error
+			esClient, err = archive.Connect(searchURL, searchIndexName, true)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		cfg, err := config.ParseConf(cfgfile)
 		if err != nil {
 			cf, err := config.ParseV2Conf(cfgfile)
@@ -490,33 +503,6 @@ var rootCmd = &cobra.Command{
 			sr.MTU = mtu
 		}
 
-		if len(searchURL) > 1 {
-			var esClient *indexers.Indexer
-			jdocs, err := archive.BuildDocs(sr, uid)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if len(searchIndex) > 1 {
-				esClient, err = archive.Connect(searchURL, searchIndex, true)
-				if err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				esClient, err = archive.Connect(searchURL, index, true)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-			}
-			log.Infof("Indexing [%d] documents in %s with UUID %s", len(jdocs), index, uid)
-			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
-			if err != nil {
-				log.Error(err.Error())
-			} else {
-				log.Info(resp)
-			}
-		}
-
 		if !json {
 			result.ShowStreamResult(sr)
 			result.ShowRRResult(sr)
@@ -534,14 +520,30 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		if csvArchive {
-			if archive.WriteCSVResult(sr) != nil {
+			if err := archive.WriteCSVResult(sr); err != nil {
 				log.Fatal(err)
 			}
-			if pavail && archive.WritePromCSVResult(sr) != nil {
+			if pavail {
+				if err := archive.WritePromCSVResult(sr); err != nil {
+					log.Fatal(err)
+				}
+			}
+			if err := archive.WriteSpecificCSV(sr); err != nil {
 				log.Fatal(err)
 			}
-			if archive.WriteSpecificCSV(sr) != nil {
+		}
+
+		if len(searchURL) > 1 {
+			jdocs, err := archive.BuildDocs(sr, uid)
+			if err != nil {
 				log.Fatal(err)
+			}
+			log.Infof("Indexing [%d] documents in %s with UUID %s", len(jdocs), searchIndexName, uid)
+			resp, err := (*esClient).Index(jdocs, indexers.IndexingOpts{})
+			if err != nil {
+				log.Error(err.Error())
+			} else {
+				log.Info(resp)
 			}
 		}
 		// Initially we are just checking against TCP_STREAM results.
