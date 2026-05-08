@@ -156,7 +156,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		} else {
 			d.Throughput = Throughput
 		}
-		Latency, e := result.Average(r.LatencySummary)
+		Latency, e := result.Average(r.Latency99Summary)
 		if e != nil {
 			logging.Warn("Unable to process latency, setting value to zero")
 			d.Latency = 0
@@ -441,7 +441,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	}
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
-		lavg, _ := result.Average(row.LatencySummary)
+		lavg, _ := result.Average(row.Latency99Summary)
 		data := append(commonCsvDataFields(row),
 			fmt.Sprintf("%f", avg),
 			row.Metric,

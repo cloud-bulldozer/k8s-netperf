@@ -42,3 +42,11 @@ tests:
     duration: 10
     samples: 3
     messagesize: 1024
+
+  - TCPStreamLatency:
+    parallelism: 1
+    profile: "TCP_STREAM_LAT" # Only available with the uperf driver
+    duration: 10
+    samples: 3
+    messagesize: 1024
+    # messagereadsize: 1      # Optional: defaults to 1 byte if not specified

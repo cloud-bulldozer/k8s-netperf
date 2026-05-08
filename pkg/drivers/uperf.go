@@ -56,20 +56,47 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 	}
 
 	if strings.Contains(nc.Profile, "STREAM") {
-		fileContent = fmt.Sprintf(`<?xml version=1.0?>
-		<profile name="stream-%s-%d-%d">
-		<group nprocs="%d">
-		<transaction iterations="1">
-		  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
-		</transaction>
-		<transaction duration="%d">		  
-		  <flowop type=write options="count=16 size=%d"/>
-		<transaction iterations="1">
-		  <flowop type=disconnect />
-		</transaction>
-		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize)
-		filePath = fmt.Sprintf("/tmp/uperf-stream-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
+		// TCP_STREAM_LAT uses a different flow with read operation
+		if nc.Profile == "TCP_STREAM_LAT" {
+			// Default message read size to 1 byte if not specified
+			messageReadSize := nc.MessageReadSize
+			if messageReadSize == 0 {
+				messageReadSize = 1
+			}
+			fileContent = fmt.Sprintf(`<?xml version=1.0?>
+			<profile name="stream-%s-%d-%d">
+			<group nprocs="%d">
+			<transaction iterations="1">
+			  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
+			</transaction>
+			<transaction duration="%d">
+			  <flowop type=write options="count=16 size=%d"/>
+			  <flowop type=read options="count=16 size=%d"/>
+			</transaction>
+			<transaction iterations="1">
+			  <flowop type=disconnect />
+			</transaction>
+			</group>
+			</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfLatServerDataPort, nc.Duration, nc.MessageSize, messageReadSize)
+			filePath = fmt.Sprintf("/tmp/uperf-stream-lat-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
+		} else {
+			// Standard STREAM profile (write only)
+			fileContent = fmt.Sprintf(`<?xml version=1.0?>
+			<profile name="stream-%s-%d-%d">
+			<group nprocs="%d">
+			<transaction iterations="1">
+			  <flowop type="connect" options="remotehost=%s protocol=%s port=%d"/>
+			</transaction>
+			<transaction duration="%d">
+			  <flowop type=write options="count=16 size=%d"/>
+			</transaction>
+			<transaction iterations="1">
+			  <flowop type=disconnect />
+			</transaction>
+			</group>
+			</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerDataPort, nc.Duration, nc.MessageSize)
+			filePath = fmt.Sprintf("/tmp/uperf-stream-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
+		}
 	} else {
 		fileContent = fmt.Sprintf(`<?xml version=1.0?>		
 		<profile name="rr-%s-%d-%d">
@@ -85,7 +112,7 @@ func createUperfProfile(c *kubernetes.Clientset, rc rest.Config, nc config.Confi
 		  <flowop type=disconnect />
 		</transaction>
 		</group>		
-		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerCtlPort+1, nc.Duration, nc.MessageSize, nc.MessageSize)
+		</profile>`, protocol, nc.MessageSize, nc.Parallelism, nc.Parallelism, serverIP, protocol, k8s.UperfServerDataPort, nc.Duration, nc.MessageSize, nc.MessageSize)
 		filePath = fmt.Sprintf("/tmp/uperf-rr-%s-%d-%d", protocol, nc.MessageSize, nc.Parallelism)
 	}
 
@@ -194,7 +221,11 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 	stdout = bytes.Buffer{}
 	stderr = bytes.Buffer{}
 
+	// Select binary based on profile
 	cmd := []string{"uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(k8s.UperfServerCtlPort)}
+	if nc.Profile == "TCP_STREAM_LAT" {
+		cmd = []string{"/opt/uperf-histogram/bin/uperf", "-v", "-a", "-R", "-i", "1", "-m", filePath, "-P", fmt.Sprint(k8s.UperfLatServerCtlPort), "-H", "stdout"}
+	}
 	log.Debug(cmd)
 
 	// VM mode
@@ -291,7 +322,7 @@ func (u *uperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config, c
 
 // ParseResults accepts the stdout from the execution of the benchmark.
 // It will return a Sample struct or error
-func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sample, error) {
+func (u *uperf) ParseResults(stdout *bytes.Buffer, nc config.Config) (sample.Sample, error) {
 	var prevTimestamp, normLtcy float64
 	var prevBytes, prevOps, normOps float64
 	var byteSummary, latSummary, opSummary []float64
@@ -333,7 +364,29 @@ func (u *uperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Samp
 		tputUnit = "Mbps"
 	}
 	sample.Latency99ptile, _ = stats.Percentile(latSummary, 99)
-	log.Debugf("Storing uperf sample throughput: P99 Latency %f, Throughput: %f %s", sample.Latency99ptile, sample.Throughput, tputUnit)
+
+	// Parse uperf histogram if available for more accurate percentile measurements
+	if nc.Profile == "TCP_STREAM_LAT" {
+		// Parse average and percentiles from histogram output
+		avgRegex := regexp.MustCompile(`Average\s*:\s*(\d+(?:\.\d+)?)`)
+		p50Regex := regexp.MustCompile(`50th\s*:\s*(\d+(?:\.\d+)?)`)
+		p99Regex := regexp.MustCompile(`99th\s*:\s*(\d+(?:\.\d+)?)`)
+
+		output := stdout.String()
+		if match := avgRegex.FindStringSubmatch(output); len(match) > 1 {
+			sample.Latency, _ = strconv.ParseFloat(match[1], 64)
+		}
+		if match := p50Regex.FindStringSubmatch(output); len(match) > 1 {
+			sample.Latency50ptile, _ = strconv.ParseFloat(match[1], 64)
+		}
+		if match := p99Regex.FindStringSubmatch(output); len(match) > 1 {
+			sample.Latency99ptile, _ = strconv.ParseFloat(match[1], 64)
+		}
+
+		log.Debugf("Storing uperf-histogram sample: Avg Latency %f, P50 Latency %f, P99 Latency %f, Throughput: %f %s", sample.Latency, sample.Latency50ptile, sample.Latency99ptile, sample.Throughput, tputUnit)
+	} else {
+		log.Debugf("Storing uperf sample throughput: P99 Latency %f, Throughput: %f %s", sample.Latency99ptile, sample.Throughput, tputUnit)
+	}
 
 	return sample, nil
 

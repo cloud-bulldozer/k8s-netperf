@@ -225,5 +225,5 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 
 // IsTestSupported Determine if the test is supported for driver
 func (n *netperf) IsTestSupported() bool {
-	return true
+	return n.testConfig.Profile != "TCP_STREAM_LAT"
 }

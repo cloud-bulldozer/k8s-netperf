@@ -33,6 +33,13 @@ RUN curl -L https://github.com/esnet/iperf/releases/download/3.16/iperf-3.16.tar
     cd .. && \
     rm -rf iperf-3.16
 
+# Build uperf_histogram from uperf's histogram branch
+RUN git clone https://github.com/rafaelfolco/uperf.git uperf_histogram && \
+    cd uperf_histogram && git checkout master && \
+    autoreconf --install && ./configure --prefix=/opt/uperf-histogram --disable-sctp && make install && \
+    ldconfig && /opt/uperf-histogram/bin/uperf -V && \
+    cd .. && \
+    rm -rf uperf_histogram
 
 RUN rm -rf netperf && \
     dnf clean all
