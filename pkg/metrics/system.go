@@ -1,8 +1,10 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -122,6 +125,45 @@ func IsMicroShift(client *kubernetes.Clientset) bool {
 		return true
 	}
 	return false
+}
+
+const (
+	microShiftVersionNamespace = "kube-public"
+	microShiftVersionConfigMap = "microshift-version"
+)
+
+// MicroShiftVersionInfo holds the version fields read from the MicroShift
+// kube-public/microshift-version ConfigMap.
+type MicroShiftVersionInfo struct {
+	Version    string
+	MajorMinor string
+}
+
+var microShiftMajorMinorRe = regexp.MustCompile(`^[0-9]+\.[0-9]+`)
+
+// MicroShiftVersion reads version data from the kube-public/microshift-version
+// ConfigMap. It is intended as a fallback for clusters where the OpenShift
+// ClusterVersion resource is absent. If `major` or `minor` is missing, the
+// MajorMinor field is derived from `version` instead. An empty MajorMinor is
+// not a failure — Version is the load-bearing field.
+func MicroShiftVersion(client kubernetes.Interface) (MicroShiftVersionInfo, error) {
+	cm, err := client.CoreV1().ConfigMaps(microShiftVersionNamespace).Get(context.TODO(), microShiftVersionConfigMap, metav1.GetOptions{})
+	if err != nil {
+		return MicroShiftVersionInfo{}, fmt.Errorf("reading %s/%s ConfigMap: %w", microShiftVersionNamespace, microShiftVersionConfigMap, err)
+	}
+	version := cm.Data["version"]
+	if version == "" {
+		return MicroShiftVersionInfo{}, fmt.Errorf("%s/%s ConfigMap has no version field", microShiftVersionNamespace, microShiftVersionConfigMap)
+	}
+	info := MicroShiftVersionInfo{Version: version}
+	major := cm.Data["major"]
+	minor := cm.Data["minor"]
+	if major != "" && minor != "" {
+		info.MajorMinor = major + "." + minor
+	} else {
+		info.MajorMinor = microShiftMajorMinorRe.FindString(version)
+	}
+	return info, nil
 }
 
 // NodeDetails returns the Details of the nodes. Only returning a single node info.

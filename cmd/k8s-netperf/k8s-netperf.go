@@ -496,6 +496,17 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		if pcon.MicroShift && sr.OCPVersion == "" {
+			if v, err := metrics.MicroShiftVersion(client); err == nil {
+				sr.OCPVersion = v.Version
+				if v.MajorMinor != "" {
+					sr.OCPMajorVersion = v.MajorMinor
+				}
+			} else {
+				log.Warnf("MicroShift detected but unable to read version ConfigMap: %v", err)
+			}
+		}
+
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.OCPVersion)
 		sr.OCPShortVersion = short
