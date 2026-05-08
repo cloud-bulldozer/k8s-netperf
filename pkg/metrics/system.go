@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -55,11 +58,12 @@ type PodValues struct {
 
 // PromConnect stores the prom information
 type PromConnect struct {
-	URL       string
-	Token     string
-	Client    *prometheus.Prometheus
-	Verify    bool
-	OpenShift bool
+	URL        string
+	Token      string
+	Client     *prometheus.Prometheus
+	SkipTLSVerify bool
+	OpenShift  bool
+	MicroShift bool
 }
 
 // Details stores the node details
@@ -73,8 +77,10 @@ type Details struct {
 // Discover is to find Prometheus and generate an auth token if necessary.
 func Discover() (PromConnect, bool) {
 	var conn PromConnect
-	kconfig := os.Getenv("KUBECONFIG")
-	config, err := clientcmd.BuildConfigFromFlags("", kconfig)
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
 	if err != nil {
 		logging.Error(err)
 		return conn, false
@@ -91,14 +97,92 @@ func Discover() (PromConnect, bool) {
 		return conn, false
 	}
 	logging.Info("🔬 prometheus discovered at openshift-monitoring")
-	conn.Verify = true
+	conn.SkipTLSVerify = true
 	conn.OpenShift = true
 	return conn, true
+}
+
+// IsMicroShift detects a MicroShift cluster by checking API groups.
+// MicroShift has route.openshift.io but lacks config.openshift.io.
+func IsMicroShift(client *kubernetes.Clientset) bool {
+	groups, err := client.Discovery().ServerGroups()
+	if err != nil {
+		logging.Warnf("Failed to discover server groups: %v", err)
+		return false
+	}
+	hasRoute := false
+	hasConfig := false
+	for _, g := range groups.Groups {
+		if g.Name == "route.openshift.io" {
+			hasRoute = true
+		}
+		if g.Name == "config.openshift.io" {
+			hasConfig = true
+		}
+	}
+	if hasRoute && !hasConfig {
+		logging.Info("🔬 Detected MicroShift cluster")
+		return true
+	}
+	return false
+}
+
+const (
+	microShiftVersionNamespace = "kube-public"
+	microShiftVersionConfigMap = "microshift-version"
+)
+
+// MicroShiftVersionInfo holds the version fields read from the MicroShift
+// kube-public/microshift-version ConfigMap.
+type MicroShiftVersionInfo struct {
+	Version    string
+	MajorMinor string
+}
+
+var microShiftMajorMinorRe = regexp.MustCompile(`^[0-9]+\.[0-9]+`)
+
+// MicroShiftVersion reads version data from the kube-public/microshift-version
+// ConfigMap. It is intended as a fallback for clusters where the OpenShift
+// ClusterVersion resource is absent. If `major` or `minor` is missing, the
+// MajorMinor field is derived from `version` instead. An empty MajorMinor is
+// not a failure — Version is the load-bearing field.
+func MicroShiftVersion(client kubernetes.Interface) (MicroShiftVersionInfo, error) {
+	cm, err := client.CoreV1().ConfigMaps(microShiftVersionNamespace).Get(context.TODO(), microShiftVersionConfigMap, metav1.GetOptions{})
+	if err != nil {
+		return MicroShiftVersionInfo{}, fmt.Errorf("reading %s/%s ConfigMap: %w", microShiftVersionNamespace, microShiftVersionConfigMap, err)
+	}
+	version := cm.Data["version"]
+	if version == "" {
+		return MicroShiftVersionInfo{}, fmt.Errorf("%s/%s ConfigMap has no version field", microShiftVersionNamespace, microShiftVersionConfigMap)
+	}
+	info := MicroShiftVersionInfo{Version: version}
+	major := cm.Data["major"]
+	minor := cm.Data["minor"]
+	if major != "" && minor != "" {
+		info.MajorMinor = major + "." + minor
+	} else {
+		info.MajorMinor = microShiftMajorMinorRe.FindString(version)
+	}
+	return info, nil
 }
 
 // NodeDetails returns the Details of the nodes. Only returning a single node info.
 func NodeDetails(conn PromConnect) Details {
 	pd := Details{}
+	if conn.MicroShift {
+		query := `node_uname_info`
+		value, err := conn.Client.Query(query, time.Now())
+		if err != nil {
+			logging.Error("Issue querying Prometheus for node_uname_info")
+			return pd
+		}
+		v := value.(model.Vector)
+		for _, s := range v {
+			pd.Metric.Kernel = string(s.Metric["release"])
+			break
+		}
+		return pd
+	}
 	if !conn.OpenShift {
 		logging.Warn("Not able to collect OpenShift specific node info")
 		return pd
@@ -118,7 +202,7 @@ func NodeDetails(conn PromConnect) Details {
 
 // NodeMTU return mtu
 func NodeMTU(conn PromConnect) (int, error) {
-	if !conn.OpenShift {
+	if !conn.OpenShift && !conn.MicroShift {
 		return 0, fmt.Errorf(" Not able to collect OpenShift specific mtu info ")
 	}
 	query := `node_network_mtu_bytes`
@@ -134,8 +218,8 @@ func NodeMTU(conn PromConnect) (int, error) {
 func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (NodeCPU, bool) {
 	cpu := NodeCPU{}
 	query := fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s:.*\"}[2m])) * 100)", node.IP)
-	if conn.OpenShift {
-		// OpenShift changes the instance in its metrics.
+	if conn.OpenShift || conn.MicroShift {
+		// OpenShift and MicroShift expose node-exporter instance labels as node names.
 		query = fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s\"}[2m])) * 100)", node.NodeName)
 	}
 	logging.Debugf("Prom Query : %s", query)
@@ -178,6 +262,10 @@ func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Tim
 func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
 	var pods PodValues
 	query := fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
+	if conn.MicroShift {
+		// MicroShift cAdvisor metrics use the node name in the instance label.
+		query = fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s\"}[2m]) * 100) by (pod, namespace, instance))", node.NodeName)
+	}
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
@@ -198,6 +286,10 @@ func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 // VSwitchCPU will return the vswitchd cpu usage for specific node
 func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
 	query := fmt.Sprintf("irate(container_cpu_usage_seconds_total{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}[2m])*100", node.NodeName)
+	if conn.MicroShift {
+		// MicroShift exposes OVS through namedprocess metrics.
+		query = fmt.Sprintf("sum(irate(namedprocess_namegroup_cpu_seconds_total{groupname=~\"ovs-vswitchd\",instance=~\"%s\"}[2m]))*100", node.NodeName)
+	}
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
@@ -211,9 +303,13 @@ func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 	return true
 }
 
-// VSwitchMem will return the vswitchd cpu usage for specific node
+// VSwitchMem will return the vswitchd memory usage for specific node
 func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
 	query := fmt.Sprintf("container_memory_rss{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}", node.NodeName)
+	if conn.MicroShift {
+		// MicroShift exposes OVS through namedprocess metrics.
+		query = fmt.Sprintf("namedprocess_namegroup_memory_bytes{groupname=~\"ovs-vswitchd\",memtype=~\"resident\",instance=~\"%s\"}", node.NodeName)
+	}
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
@@ -231,6 +327,10 @@ func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (PodValues, bool) {
 	var pods PodValues
 	query := fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",node=~\"%s\"}) by (pod, namespace, node))", node.NodeName)
+	if conn.MicroShift {
+		// MicroShift cAdvisor metrics use the node name in the instance label.
+		query = fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",instance=~\"%s\"}) by (pod, namespace, instance))", node.NodeName)
+	}
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {

@@ -232,7 +232,10 @@ var rootCmd = &cobra.Command{
 		if len(promURL) > 1 {
 			pcon.URL = promURL
 		}
-		pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.Verify)
+		if !pcon.OpenShift && metrics.IsMicroShift(client) {
+			pcon.MicroShift = true
+		}
+		pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.SkipTLSVerify)
 		if err != nil {
 			pavail = false
 			log.Warn("😥 Prometheus is not available")
@@ -493,14 +496,28 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		node := metrics.NodeDetails(pcon)
-		sr.Kernel = node.Metric.Kernel
+		if pcon.MicroShift && sr.OCPVersion == "" {
+			if v, err := metrics.MicroShiftVersion(client); err == nil {
+				sr.OCPVersion = v.Version
+				if v.MajorMinor != "" {
+					sr.OCPMajorVersion = v.MajorMinor
+				}
+			} else {
+				log.Warnf("MicroShift detected but unable to read version ConfigMap: %v", err)
+			}
+		}
+
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.OCPVersion)
 		sr.OCPShortVersion = short
-		mtu, err := metrics.NodeMTU(pcon)
-		if err == nil {
-			sr.MTU = mtu
+
+		if pavail {
+			node := metrics.NodeDetails(pcon)
+			sr.Kernel = node.Metric.Kernel
+			mtu, err := metrics.NodeMTU(pcon)
+			if err == nil {
+				sr.MTU = mtu
+			}
 		}
 
 		if !json {
