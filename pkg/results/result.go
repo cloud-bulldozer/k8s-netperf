@@ -8,7 +8,7 @@ import (
 	"time"
 
 	math "github.com/aclements/go-moremath/stats"
-	ocpmeta "github.com/cloud-bulldozer/go-commons/ocp-metadata"
+	ocpmeta "github.com/cloud-bulldozer/go-commons/v2/ocp-metadata"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/logging"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"

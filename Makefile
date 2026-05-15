@@ -32,7 +32,7 @@ SOURCES := $(shell find . -type f -name '*.go' -not -path './vendor/*' -not -pat
 # k8s-netperf version
 GIT_COMMIT = $(shell git rev-parse HEAD)
 BUILD_DATE = $(shell date '+%Y-%m-%d-%H:%M:%S')
-CMD_VERSION= github.com/cloud-bulldozer/go-commons/version
+CMD_VERSION= github.com/cloud-bulldozer/go-commons/v2/version
 VERSION = $(shell branch="$$(git rev-parse --abbrev-ref HEAD)"; \
 	if [ "$$branch" = "HEAD" ]; then \
 		git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD; \

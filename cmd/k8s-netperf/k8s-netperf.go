@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloud-bulldozer/go-commons/indexers"
-	ocpmetadata "github.com/cloud-bulldozer/go-commons/ocp-metadata"
-	"github.com/cloud-bulldozer/go-commons/prometheus"
-	cmdVersion "github.com/cloud-bulldozer/go-commons/version"
+	"github.com/cloud-bulldozer/go-commons/v2/indexers"
+	ocpmetadata "github.com/cloud-bulldozer/go-commons/v2/ocp-metadata"
+	"github.com/cloud-bulldozer/go-commons/v2/prometheus"
+	cmdVersion "github.com/cloud-bulldozer/go-commons/v2/version"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/drivers"
@@ -210,6 +210,20 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
+		var metadataAgent *ocpmetadata.Metadata
+		clusterInfo := ocpmetadata.ClusterInfo{}
+		clusterInfoDegraded := false
+		if meta, err := ocpmetadata.NewMetadata(rconfig); err == nil {
+			metadataAgent = &meta
+			info, infoErr := metadataAgent.GetClusterInfo()
+			clusterInfo = info
+			if infoErr != nil {
+				clusterInfoDegraded = true
+				log.Warnf("Cluster info discovery degraded: %v", infoErr)
+			}
+		} else {
+			log.Warnf("Cluster metadata client unavailable: %v", err)
+		}
 		if clean {
 			cleanup(client, rconfig)
 		}
@@ -248,14 +262,23 @@ var rootCmd = &cobra.Command{
 		}
 
 		pavail := true
-		pcon, _ := metrics.Discover()
+		var pcon metrics.PromConnect
+		if shouldDiscoverPrometheus(clusterInfo.Metadata.Distribution, promURL, metadataAgent != nil, clusterInfoDegraded) {
+			pcon, _ = metrics.Discover(metadataAgent)
+		}
 		if promURL != "" {
 			pcon.URL = promURL
 		}
-		pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.Verify)
-		if err != nil {
+		applyClusterDistribution(&pcon, clusterInfo.Metadata.Distribution)
+		if pcon.URL == "" {
 			pavail = false
 			log.Warn("😥 Prometheus is not available")
+		} else {
+			pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.SkipTLSVerify)
+			if err != nil {
+				pavail = false
+				log.Warn("😥 Prometheus is not available")
+			}
 		}
 
 		// Build the namespace and create the sa account
@@ -515,25 +538,19 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		// Metadata
-		meta, err := ocpmetadata.NewMetadata(&s.RestConfig)
-		if err == nil {
-			metadata, err := meta.GetClusterMetadata()
-			if err == nil {
-				sr.ClusterMetadata = metadata
-			} else {
-				log.Error("Issue getting common metadata using go-commons")
-			}
-		}
+		sr.ClusterMetadata = clusterInfo.Metadata
 
-		node := metrics.NodeDetails(pcon)
-		sr.Kernel = node.Metric.Kernel
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.OCPVersion)
 		sr.OCPShortVersion = short
-		mtu, err := metrics.NodeMTU(pcon)
-		if err == nil {
-			sr.MTU = mtu
+
+		if pavail {
+			node := metrics.NodeDetails(pcon)
+			sr.Kernel = node.Metric.Kernel
+			mtu, err := metrics.NodeMTU(pcon)
+			if err == nil {
+				sr.MTU = mtu
+			}
 		}
 
 		if !json {
@@ -604,6 +621,34 @@ var rootCmd = &cobra.Command{
 		}
 		os.Exit(retCode)
 	},
+}
+
+func applyClusterDistribution(pcon *metrics.PromConnect, distribution string) {
+	switch distribution {
+	case ocpmetadata.DistributionOpenShift:
+		pcon.OpenShift = true
+	case ocpmetadata.DistributionMicroShift:
+		pcon.MicroShift = true
+	}
+}
+
+func shouldDiscoverPrometheus(distribution, promURL string, metadataAgentAvailable, clusterInfoDegraded bool) bool {
+	if !metadataAgentAvailable {
+		return false
+	}
+	if clusterInfoDegraded {
+		return true
+	}
+	switch distribution {
+	case ocpmetadata.DistributionOpenShift:
+		// OpenShift --prom often points at a port-forwarded monitoring service
+		// and still benefits from discovery for the auth token.
+		return true
+	case ocpmetadata.DistributionMicroShift, ocpmetadata.DistributionKubernetes:
+		return false
+	default:
+		return promURL == ""
+	}
 }
 
 func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
