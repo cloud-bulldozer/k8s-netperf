@@ -443,12 +443,12 @@ var rootCmd = &cobra.Command{
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
 		// If the client and server needs to be across zones
-		lz, zones, _ := k8s.GetZone(client)
-		nodesInZone := zones[lz]
-		if nodesInZone > 1 {
+		lz, zones, err := k8s.GetZone(client)
+		if s.NodeLocal || err != nil || len(zones) == 0 {
 			acrossAZ = false
 		} else {
-			acrossAZ = true
+			nodesInZone := zones[lz]
+			acrossAZ = nodesInZone <= 1
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
 
@@ -851,6 +851,9 @@ func executeWorkload(nc config.Config,
 		npr.AcrossAZ = true
 	} else {
 		npr.AcrossAZ = nc.AcrossAZ
+	}
+	if npr.SameNode {
+		npr.AcrossAZ = false
 	}
 	npr.StartTime = time.Now()
 	log.Debugf("Executing workloads. hostNetwork is %t, service is %t, externalServer is %t, VM mode is %t", hostNet, nc.Service, npr.ExternalServer, virt)

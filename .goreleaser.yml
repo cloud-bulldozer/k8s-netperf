@@ -16,7 +16,7 @@ builds:
       - s390x
     dir: ./cmd/k8s-netperf/
     ldflags:
-      - -X github.com/cloud-bulldozer/go-commons/version.GitCommit={{.Commit}} -X github.com/cloud-bulldozer/go-commons/version.BuildDate={{.Date}} -X github.com/cloud-bulldozer/go-commons/version.Version={{.Version}}
+      - -X github.com/cloud-bulldozer/go-commons/v2/version.GitCommit={{.Commit}} -X github.com/cloud-bulldozer/go-commons/v2/version.BuildDate={{.Date}} -X github.com/cloud-bulldozer/go-commons/v2/version.Version={{.Version}}
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of uname.

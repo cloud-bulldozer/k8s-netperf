@@ -114,6 +114,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			Virt:               sr.Virt,
 			Samples:            r.Samples,
 			Service:            r.Service,
+			Local:              r.SameNode,
 			ExternalServer:     r.ExternalServer,
 			Messagesize:        r.MessageSize,
 			Burst:              r.Burst,
