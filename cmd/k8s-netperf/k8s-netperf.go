@@ -524,8 +524,20 @@ var rootCmd = &cobra.Command{
 		if pavail {
 			for i, npr := range sr.Results {
 				if len(npr.ClientNodeInfo.NodeName) > 0 && len(npr.ServerNodeInfo.NodeName) > 0 {
-					sr.Results[i].ClientMetrics, _ = metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					sr.Results[i].ServerMetrics, _ = metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					clientCPU, err := metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					if err != nil {
+						log.Warnf("Client node CPU metrics were not collected; archiving zero clientCPU with clientCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ClientNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
+					} else {
+						sr.Results[i].ClientMetrics = clientCPU
+						sr.Results[i].ClientCPUCollected = true
+					}
+					serverCPU, err := metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					if err != nil {
+						log.Warnf("Server node CPU metrics were not collected; archiving zero serverCPU with serverCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ServerNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
+					} else {
+						sr.Results[i].ServerMetrics = serverCPU
+						sr.Results[i].ServerCPUCollected = true
+					}
 					metrics.VSwitchCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
 					metrics.VSwitchMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
 					metrics.VSwitchCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ServerMetrics)

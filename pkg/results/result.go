@@ -42,16 +42,19 @@ type Data struct {
 	RetransmitSummary []float64
 	ClientMetrics     metrics.NodeCPU
 	ServerMetrics     metrics.NodeCPU
-	ClientPodCPU      metrics.PodValues
-	ClientPodMem      metrics.PodValues
-	ServerPodCPU      metrics.PodValues
-	ServerPodMem      metrics.PodValues
-	ExternalServer    bool
-	UdnInfo           string
-	BridgeInfo        string
-	SriovInfo         string
-	MacvlanInfo       string
-	Virt              bool
+	// CPUCollected covers node CPU mode metrics; vSwitch metrics are collected independently.
+	ClientCPUCollected bool
+	ServerCPUCollected bool
+	ClientPodCPU       metrics.PodValues
+	ClientPodMem       metrics.PodValues
+	ServerPodCPU       metrics.PodValues
+	ServerPodMem       metrics.PodValues
+	ExternalServer     bool
+	UdnInfo            string
+	BridgeInfo         string
+	SriovInfo          string
+	MacvlanInfo        string
+	Virt               bool
 }
 
 // ScenarioResults each scenario could have multiple results

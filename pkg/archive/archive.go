@@ -19,47 +19,49 @@ const ltcyMetric = "usec"
 
 // Doc struct of the JSON document to be indexed
 type Doc struct {
-	UUID              string           `json:"uuid"`
-	Timestamp         time.Time        `json:"timestamp"`
-	HostNetwork       bool             `json:"hostNetwork"`
-	Driver            string           `json:"driver"`
-	Parallelism       int              `json:"parallelism"`
-	Profile           string           `json:"profile"`
-	Duration          int              `json:"duration"`
-	Service           bool             `json:"service"`
-	Local             bool             `json:"local"`
-	Virt              bool             `json:"virt"`
-	AcrossAZ          bool             `json:"acrossAZ"`
-	Samples           int              `json:"samples"`
-	Messagesize       int              `json:"messageSize"`
-	Burst             int              `json:"burst"`
-	Throughput        float64          `json:"throughput"`
-	Latency           float64          `json:"latency"`
-	TputMetric        string           `json:"tputMetric"`
-	LtcyMetric        string           `json:"ltcyMetric"`
-	TCPRetransmit     float64          `json:"tcpRetransmits"`
-	UDPLossPercent    float64          `json:"udpLossPercent"`
-	ToolVersion       string           `json:"toolVersion"`
-	ToolGitCommit     string           `json:"toolGitCommit"`
-	Metadata          result.Metadata  `json:"metadata"`
-	ServerNodeCPU     metrics.NodeCPU  `json:"serverCPU"`
-	ServerPodCPU      []metrics.PodCPU `json:"serverPods"`
-	ServerPodMem      []metrics.PodMem `json:"serverPodsMem"`
-	ClientNodeCPU     metrics.NodeCPU  `json:"clientCPU"`
-	ClientPodCPU      []metrics.PodCPU `json:"clientPods"`
-	ClientPodMem      []metrics.PodMem `json:"clientPodsMem"`
-	Confidence        []float64        `json:"confidence"`
-	ServerNodeInfo    metrics.NodeInfo `json:"serverNodeInfo"`
-	ClientNodeInfo    metrics.NodeInfo `json:"clientNodeInfo"`
-	ServerVSwitchCpu  float64          `json:"serverVswtichCpu"`
-	ServerVSwitchMem  float64          `json:"serverVswitchMem"`
-	ClientVSwitchCpu  float64          `json:"clientVswtichCpu"`
-	ClientVSwiitchMem float64          `json:"clientVswitchMem"`
-	ExternalServer    bool             `json:"externalServer"`
-	UdnInfo           string           `json:"udnInfo"`
-	BridgeInfo        string           `json:"bridgeInfo"`
-	SriovInfo         string           `json:"sriovInfo"`
-	MacvlanInfo       string           `json:"macvlanInfo"`
+	UUID               string           `json:"uuid"`
+	Timestamp          time.Time        `json:"timestamp"`
+	HostNetwork        bool             `json:"hostNetwork"`
+	Driver             string           `json:"driver"`
+	Parallelism        int              `json:"parallelism"`
+	Profile            string           `json:"profile"`
+	Duration           int              `json:"duration"`
+	Service            bool             `json:"service"`
+	Local              bool             `json:"local"`
+	Virt               bool             `json:"virt"`
+	AcrossAZ           bool             `json:"acrossAZ"`
+	Samples            int              `json:"samples"`
+	Messagesize        int              `json:"messageSize"`
+	Burst              int              `json:"burst"`
+	Throughput         float64          `json:"throughput"`
+	Latency            float64          `json:"latency"`
+	TputMetric         string           `json:"tputMetric"`
+	LtcyMetric         string           `json:"ltcyMetric"`
+	TCPRetransmit      float64          `json:"tcpRetransmits"`
+	UDPLossPercent     float64          `json:"udpLossPercent"`
+	ToolVersion        string           `json:"toolVersion"`
+	ToolGitCommit      string           `json:"toolGitCommit"`
+	Metadata           result.Metadata  `json:"metadata"`
+	ServerNodeCPU      metrics.NodeCPU  `json:"serverCPU"`
+	ServerCPUCollected bool             `json:"serverCPUCollected"`
+	ServerPodCPU       []metrics.PodCPU `json:"serverPods"`
+	ServerPodMem       []metrics.PodMem `json:"serverPodsMem"`
+	ClientNodeCPU      metrics.NodeCPU  `json:"clientCPU"`
+	ClientCPUCollected bool             `json:"clientCPUCollected"`
+	ClientPodCPU       []metrics.PodCPU `json:"clientPods"`
+	ClientPodMem       []metrics.PodMem `json:"clientPodsMem"`
+	Confidence         []float64        `json:"confidence"`
+	ServerNodeInfo     metrics.NodeInfo `json:"serverNodeInfo"`
+	ClientNodeInfo     metrics.NodeInfo `json:"clientNodeInfo"`
+	ServerVSwitchCpu   float64          `json:"serverVswtichCpu"`
+	ServerVSwitchMem   float64          `json:"serverVswitchMem"`
+	ClientVSwitchCpu   float64          `json:"clientVswtichCpu"`
+	ClientVSwiitchMem  float64          `json:"clientVswitchMem"`
+	ExternalServer     bool             `json:"externalServer"`
+	UdnInfo            string           `json:"udnInfo"`
+	BridgeInfo         string           `json:"bridgeInfo"`
+	SriovInfo          string           `json:"sriovInfo"`
+	MacvlanInfo        string           `json:"macvlanInfo"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -100,42 +102,44 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		}
 		c := []float64{lo, hi}
 		d := Doc{
-			UUID:              uuid,
-			Timestamp:         time,
-			ToolVersion:       sr.Version,
-			ToolGitCommit:     sr.GitCommit,
-			Driver:            r.Driver,
-			HostNetwork:       r.HostNetwork,
-			Parallelism:       r.Parallelism,
-			Profile:           r.Profile,
-			Duration:          r.Duration,
-			Virt:              sr.Virt,
-			Samples:           r.Samples,
-			Service:           r.Service,
-			ExternalServer:    r.ExternalServer,
-			Messagesize:       r.MessageSize,
-			Burst:             r.Burst,
-			TputMetric:        r.Metric,
-			LtcyMetric:        ltcyMetric,
-			ServerNodeCPU:     r.ServerMetrics,
-			ClientNodeCPU:     r.ClientMetrics,
-			ServerPodCPU:      r.ServerPodCPU.Results,
-			ServerPodMem:      r.ServerPodMem.MemResults,
-			ClientPodMem:      r.ClientPodMem.MemResults,
-			ClientPodCPU:      r.ClientPodCPU.Results,
-			ClientVSwitchCpu:  r.ClientMetrics.VSwitchCPU,
-			ClientVSwiitchMem: r.ClientMetrics.VSwitchMem,
-			ServerVSwitchCpu:  r.ServerMetrics.VSwitchCPU,
-			ServerVSwitchMem:  r.ServerMetrics.VSwitchMem,
-			Metadata:          sr.Metadata,
-			AcrossAZ:          r.AcrossAZ,
-			Confidence:        c,
-			ClientNodeInfo:    r.ClientNodeInfo,
-			ServerNodeInfo:    r.ServerNodeInfo,
-			UdnInfo:           r.UdnInfo,
-			BridgeInfo:        r.BridgeInfo,
-			SriovInfo:         r.SriovInfo,
-			MacvlanInfo:       r.MacvlanInfo,
+			UUID:               uuid,
+			Timestamp:          time,
+			ToolVersion:        sr.Version,
+			ToolGitCommit:      sr.GitCommit,
+			Driver:             r.Driver,
+			HostNetwork:        r.HostNetwork,
+			Parallelism:        r.Parallelism,
+			Profile:            r.Profile,
+			Duration:           r.Duration,
+			Virt:               sr.Virt,
+			Samples:            r.Samples,
+			Service:            r.Service,
+			ExternalServer:     r.ExternalServer,
+			Messagesize:        r.MessageSize,
+			Burst:              r.Burst,
+			TputMetric:         r.Metric,
+			LtcyMetric:         ltcyMetric,
+			ServerNodeCPU:      r.ServerMetrics,
+			ServerCPUCollected: r.ServerCPUCollected,
+			ClientNodeCPU:      r.ClientMetrics,
+			ClientCPUCollected: r.ClientCPUCollected,
+			ServerPodCPU:       r.ServerPodCPU.Results,
+			ServerPodMem:       r.ServerPodMem.MemResults,
+			ClientPodMem:       r.ClientPodMem.MemResults,
+			ClientPodCPU:       r.ClientPodCPU.Results,
+			ClientVSwitchCpu:   r.ClientMetrics.VSwitchCPU,
+			ClientVSwiitchMem:  r.ClientMetrics.VSwitchMem,
+			ServerVSwitchCpu:   r.ServerMetrics.VSwitchCPU,
+			ServerVSwitchMem:   r.ServerMetrics.VSwitchMem,
+			Metadata:           sr.Metadata,
+			AcrossAZ:           r.AcrossAZ,
+			Confidence:         c,
+			ClientNodeInfo:     r.ClientNodeInfo,
+			ServerNodeInfo:     r.ServerNodeInfo,
+			UdnInfo:            r.UdnInfo,
+			BridgeInfo:         r.BridgeInfo,
+			SriovInfo:          r.SriovInfo,
+			MacvlanInfo:        r.MacvlanInfo,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {

@@ -3,7 +3,6 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	ocpmetadata "github.com/cloud-bulldozer/go-commons/v2/ocp-metadata"
@@ -161,44 +160,115 @@ func extractMTU(value model.Value) (int, error) {
 	return 0, fmt.Errorf("no mtu samples returned from prometheus")
 }
 
-// QueryNodeCPU will return all the CPU usage information for a given node
-func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (NodeCPU, bool) {
+const (
+	prometheusQueryAttempts       = 3
+	prometheusQueryInitialBackoff = time.Second
+)
+
+// QueryNodeCPU will return all the CPU usage information for a given node.
+func QueryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (NodeCPU, error) {
+	nodeID := nodeIdentifier(node)
+	if conn.Client == nil {
+		return NodeCPU{}, fmt.Errorf("prometheus client is unavailable for node CPU metrics on %s", nodeID)
+	}
+	// Node CPU has explicit archive validity markers, so retry transient
+	// Prometheus failures before marking the mode breakdown uncollected.
+	return queryPrometheusWithRetry("Node CPU metrics query for "+nodeID, prometheusQueryAttempts, prometheusQueryInitialBackoff, func() (NodeCPU, error) {
+		return queryNodeCPU(node, conn, start, end)
+	})
+}
+
+func queryPrometheusWithRetry[T any](description string, attempts int, initialBackoff time.Duration, query func() (T, error)) (T, error) {
+	var zero T
+	var err error
+	backoff := initialBackoff
+	if attempts < 1 {
+		attempts = 1
+	}
+	for attempt := 1; attempt <= attempts; attempt++ {
+		value, queryErr := query()
+		if queryErr == nil {
+			return value, nil
+		}
+		err = queryErr
+		if attempt < attempts {
+			logging.Warnf("%s failed (attempt %d/%d): %v; retrying in %s", description, attempt, attempts, err, backoff)
+			if backoff > 0 {
+				time.Sleep(backoff)
+			}
+			backoff *= 2
+		}
+	}
+	return zero, err
+}
+
+func queryNodeCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) (NodeCPU, error) {
 	cpu := NodeCPU{}
+	nodeID := nodeIdentifier(node)
 	query := nodeCPUQuery(node, conn)
 	logging.Debugf("Prom Query : %s", query)
 	val, err := conn.Client.QueryRange(query, start, end, time.Minute)
 	if err != nil {
-		logging.Error("Issue querying Prometheus")
-		return cpu, false
+		return cpu, fmt.Errorf("querying prometheus for node CPU metrics on %s: %w", nodeID, err)
 	}
-	v := val.(model.Matrix)
+	return extractNodeCPU(val, nodeID)
+}
+
+func extractNodeCPU(val model.Value, nodeID string) (NodeCPU, error) {
+	cpu := NodeCPU{}
+	v, ok := val.(model.Matrix)
+	if !ok {
+		return cpu, fmt.Errorf("unexpected prometheus response type for node CPU metrics on %s: %T", nodeID, val)
+	}
+	if len(v) == 0 {
+		return cpu, fmt.Errorf("no node CPU series returned from prometheus for %s", nodeID)
+	}
+	collected := false
 	for _, s := range v {
-		if strings.Contains(s.Metric.String(), "idle") {
+		if s == nil || len(s.Values) == 0 {
+			continue
+		}
+		switch s.Metric[model.LabelName("mode")] {
+		case "idle":
 			cpu.Idle = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "steal") {
+			collected = true
+		case "steal":
 			cpu.Steal = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "system") {
+			collected = true
+		case "system":
 			cpu.System = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "user") {
+			collected = true
+		case "user":
 			cpu.User = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "nice") {
+			collected = true
+		case "nice":
 			cpu.Nice = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "\"irq\"") {
+			collected = true
+		case "irq":
 			cpu.Irq = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "softirq") {
+			collected = true
+		case "softirq":
 			cpu.Softirq = avg(s.Values)
-		}
-		if strings.Contains(s.Metric.String(), "iowait") {
+			collected = true
+		case "iowait":
 			cpu.Iowait = avg(s.Values)
+			collected = true
 		}
 	}
-	return cpu, true
+	if !collected {
+		return cpu, fmt.Errorf("no usable node CPU samples returned from prometheus for %s", nodeID)
+	}
+	return cpu, nil
+}
+
+func nodeIdentifier(node NodeInfo) string {
+	if node.NodeName != "" {
+		return node.NodeName
+	}
+	if node.IP != "" {
+		return node.IP
+	}
+	return "unknown node"
 }
 
 func nodeCPUQuery(node NodeInfo, conn PromConnect) string {
