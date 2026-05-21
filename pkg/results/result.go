@@ -39,7 +39,7 @@ type Data struct {
 	ThroughputSummary  []float64
 	LatencyAvgSummary  []float64
 	Latency50Summary   []float64
-	Latency99Summary     []float64
+	LatencySummary     []float64 // 99%tile latency summary
 	LossSummary        []float64
 	RetransmitSummary  []float64
 	ClientMetrics     metrics.NodeCPU
@@ -310,7 +310,7 @@ func ShowLatencyResult(s ScenarioResults) {
 			if strings.Contains(r.Profile, "STREAM_LAT") {
 				avg, _ := Average(r.LatencyAvgSummary)
 				p50, _ := Average(r.Latency50Summary)
-				p99, _ := Average(r.Latency99Summary)
+				p99, _ := Average(r.LatencySummary)
 				table.Append([]string{"Stream Latency Results", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Virt), strconv.FormatBool(r.Service), fmt.Sprintf("%t", r.ExternalServer), r.UdnInfo, r.BridgeInfo, r.SriovInfo, strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, "usec"), fmt.Sprintf("%f (%s)", p50, "usec"), fmt.Sprintf("%f (%s)", p99, "usec")})
 			}
 		}
@@ -322,7 +322,7 @@ func ShowLatencyResult(s ScenarioResults) {
 		table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Virt mode", "Service", "External Server", "UDN Info", "Bridge Info", "SR-IOV Info", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg 99%tile value"})
 		for _, r := range s.Results {
 			if strings.Contains(r.Profile, "RR") {
-				p99, _ := Average(r.Latency99Summary)
+				p99, _ := Average(r.LatencySummary)
 				table.Append([]string{"RR Latency Results", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Virt), strconv.FormatBool(r.Service), fmt.Sprintf("%t", r.ExternalServer), r.UdnInfo, r.BridgeInfo, r.SriovInfo, strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", p99, "usec")})
 			}
 		}

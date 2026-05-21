@@ -800,7 +800,7 @@ func executeWorkload(nc config.Config,
 		npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
 		npr.LatencyAvgSummary = append(npr.LatencyAvgSummary, nr.Latency)
 		npr.Latency50Summary = append(npr.Latency50Summary, nr.Latency50ptile)
-		npr.Latency99Summary = append(npr.Latency99Summary, nr.Latency99ptile)
+		npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 	}
 	npr.EndTime = time.Now()
 	npr.ClientNodeInfo = s.ClientNodeInfo
