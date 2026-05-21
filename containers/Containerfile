@@ -1,17 +1,108 @@
 # RHEL_VERSION defined in Makefile
 ARG RHEL_VERSION
+ARG PERFTEST_VERSION=perftest-26.01.5
+ARG CUDA_VERSION=12-8
+
+# ============================================================
+# Stage 1: Build perftest from source (with CUDA on x86_64/aarch64)
+# ============================================================
+FROM registry.access.redhat.com/${RHEL_VERSION}:latest AS perftest-builder
+
+ARG PERFTEST_VERSION
+ARG CUDA_VERSION
+
+RUN dnf install -y --nodocs \
+        make automake autoconf libtool gcc git \
+        rdma-core-devel libibumad-devel pciutils-devel && \
+    dnf clean all
+
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64) \
+            dnf config-manager --add-repo \
+                https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
+            dnf install -y --nodocs \
+                cuda-driver-devel-${CUDA_VERSION} \
+                cuda-cudart-devel-${CUDA_VERSION} \
+                cuda-nvcc-${CUDA_VERSION} \
+            ;; \
+        aarch64) \
+            dnf config-manager --add-repo \
+                https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo && \
+            dnf install -y --nodocs \
+                cuda-driver-devel-${CUDA_VERSION} \
+                cuda-cudart-devel-${CUDA_VERSION} \
+                cuda-nvcc-${CUDA_VERSION} \
+            ;; \
+    esac && \
+    dnf clean all
+
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64|aarch64) \
+            git clone --branch ${PERFTEST_VERSION} --depth 1 \
+                https://github.com/linux-rdma/perftest.git /tmp/perftest && \
+            cd /tmp/perftest && \
+            ./autogen.sh && \
+            CUDA_H_PATH=/usr/local/cuda/include \
+                ./configure --prefix=/usr --enable-cudart && \
+            make -j$(nproc) && \
+            make install DESTDIR=/install \
+            ;; \
+        ppc64le) \
+            git clone --branch ${PERFTEST_VERSION} --depth 1 \
+                https://github.com/linux-rdma/perftest.git /tmp/perftest && \
+            cd /tmp/perftest && \
+            ./autogen.sh && \
+            ./configure --prefix=/usr && \
+            make -j$(nproc) && \
+            make install DESTDIR=/install \
+            ;; \
+        s390x) \
+            mkdir -p /install \
+            ;; \
+    esac
+
+# ============================================================
+# Stage 2: Final runtime image
+# ============================================================
 FROM registry.access.redhat.com/${RHEL_VERSION}:latest
+
+ARG CUDA_VERSION
 
 COPY appstream.repo /etc/yum.repos.d/centos8-appstream.repo
 
 COPY netperf.diff /tmp/netperf.diff
 RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && dnf clean all
 
-RUN case "$(uname -m)" in \
-        x86_64|aarch64|ppc64le) dnf install -y uperf perftest ;; \
-        s390x) dnf install -y uperf ;; \
+RUN dnf install -y uperf && dnf clean all
+
+COPY --from=perftest-builder /install/ /
+
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64) \
+            dnf config-manager --add-repo \
+                https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
+            dnf install -y --nodocs cuda-cudart-${CUDA_VERSION} ;; \
+        aarch64) \
+            dnf config-manager --add-repo \
+                https://developer.download.nvidia.com/compute/cuda/repos/rhel9/sbsa/cuda-rhel9.repo && \
+            dnf install -y --nodocs cuda-cudart-${CUDA_VERSION} ;; \
     esac && \
+    dnf install -y rdma-core libibverbs librdmacm && \
     dnf clean all
+
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64|aarch64) \
+            echo "/usr/local/cuda/lib64" > /etc/ld.so.conf.d/cuda.conf && \
+            ldconfig ;; \
+    esac
 
 RUN dnf install -y --nodocs make automake --enablerepo=centos9 --allowerasing  && \
     dnf install -y --nodocs gcc git bc lksctp-tools-devel --enablerepo=*
