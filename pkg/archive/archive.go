@@ -111,7 +111,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			Parallelism:        r.Parallelism,
 			Profile:            r.Profile,
 			Duration:           r.Duration,
-			Virt:               sr.Virt,
+			Virt:               r.Virt,
 			Samples:            r.Samples,
 			Service:            r.Service,
 			Local:              r.SameNode,
