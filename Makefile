@@ -22,6 +22,8 @@ BIN_DIR = bin
 BIN_PATH = $(BIN_DIR)/$(ARCH)/$(BIN)
 CGO = 0
 RHEL_VERSION = ubi9
+PERFTEST_VERSION ?= perftest-26.01.5
+CUDA_VERSION ?= 12-8
 CONTAINER ?= podman
 CONTAINER_BUILD ?= podman build --force-rm
 CONTAINER_NS ?= quay.io/cloud-bulldozer
@@ -50,12 +52,17 @@ container-build: build
 	@echo "Building the container image"
 	$(CONTAINER_BUILD) -f containers/Containerfile \
 		--build-arg RHEL_VERSION=$(RHEL_VERSION) \
+		--build-arg PERFTEST_VERSION=$(PERFTEST_VERSION) \
+		--build-arg CUDA_VERSION=$(CUDA_VERSION) \
 		-t $(CONTAINER_NS)/$(BIN):latest ./containers
 
 gha-build:
 	@echo "Building the container image for GHA"
 	$(CONTAINER_BUILD) -f containers/Containerfile \
-		--build-arg RHEL_VERSION=$(RHEL_VERSION) --platform=linux/amd64,linux/arm64,linux/ppc64le,linux/s390x \
+		--build-arg RHEL_VERSION=$(RHEL_VERSION) \
+		--build-arg PERFTEST_VERSION=$(PERFTEST_VERSION) \
+		--build-arg CUDA_VERSION=$(CUDA_VERSION) \
+		--platform=linux/amd64,linux/arm64,linux/ppc64le,linux/s390x \
 		./containers --manifest=$(CONTAINER_NS)/${BIN}:latest
 
 gha-push:

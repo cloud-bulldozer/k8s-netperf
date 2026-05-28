@@ -15,6 +15,8 @@ env:
   CONTAINER_REGISTRY: ${{ 'quay.io' }}
   GO_VER: 1.25
   RHEL_VERSION: ubi9
+  PERFTEST_VERSION: perftest-26.01.5
+  CUDA_VERSION: 12-8
 
 jobs:
   build-and-push-container-images:
@@ -48,6 +50,8 @@ jobs:
           make gha-build
         env:
           GO_VER: ${{ env.GO_VER }}
+          PERFTEST_VERSION: ${{ env.PERFTEST_VERSION }}
+          CUDA_VERSION: ${{ env.CUDA_VERSION }}
 
       - name: Push multi-arch Image
         id: push
