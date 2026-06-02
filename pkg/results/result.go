@@ -36,12 +36,12 @@ type Data struct {
 	EndTime           time.Time
 	Service           bool
 	AcrossAZ          bool
-	ThroughputSummary  []float64
-	LatencyAvgSummary  []float64
-	Latency50Summary   []float64
-	LatencySummary     []float64 // 99%tile latency summary
-	LossSummary        []float64
-	RetransmitSummary  []float64
+	ThroughputSummary []float64
+	LatencyAvgSummary []float64
+	Latency50Summary  []float64
+	LatencySummary    []float64 // 99%tile latency summary
+	LossSummary       []float64
+	RetransmitSummary []float64
 	ClientMetrics     metrics.NodeCPU
 	ServerMetrics     metrics.NodeCPU
 	ClientPodCPU      metrics.PodValues
