@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,8 +113,14 @@ var rootCmd = &cobra.Command{
 		if cudn != "" && (udnl2 || udnl3) {
 			log.Fatal("flags --cudn and --udnl2/--udnl3 are mutually exclusive; please set only one")
 		}
-		if useCuda != "" && !ibWriteBwEnabled {
-			log.Fatalf("😭 --use-cuda requires --ib-write-bw flag")
+		if useCuda != "" {
+			useCuda = strings.TrimSpace(useCuda)
+			if !ibWriteBwEnabled {
+				log.Fatalf("😭 --use-cuda requires --ib-write-bw flag")
+			}
+			if cudaID, err := strconv.Atoi(useCuda); err != nil || cudaID < 0 {
+				log.Fatalf("😭 --use-cuda must be a non-negative integer (CUDA device index), got: %s", useCuda)
+			}
 		}
 		if ibWriteBwEnabled && (!privileged || !hostNetOnly) {
 			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
