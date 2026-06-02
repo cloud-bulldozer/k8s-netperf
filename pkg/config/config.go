@@ -67,6 +67,7 @@ type PerfScenarios struct {
 	LocalnetServerNetwork string
 	LocalnetClientNetwork string
 	IbWriteBwParams       string
+	UseCuda               string
 	Sockets               uint32
 	Cores                 uint32
 	Threads               uint32

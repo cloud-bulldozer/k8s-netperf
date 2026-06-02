@@ -82,6 +82,10 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 	// Add duration (ib_write_bw uses -D for duration in seconds)
 	cmd = append(cmd, "-D", fmt.Sprint(nc.Duration))
 
+	if perf.UseCuda != "" {
+		cmd = append(cmd, "--use_cuda="+perf.UseCuda)
+	}
+
 	log.Debug(cmd)
 	//
 	if virt {
