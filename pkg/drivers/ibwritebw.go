@@ -117,6 +117,9 @@ func (i *ibWriteBw) Run(c *kubernetes.Clientset,
 			Stderr: &stderr,
 		})
 		if err != nil {
+			if outStr := strings.TrimSpace(stdout.String()); outStr != "" {
+				log.Errorf("ib_write_bw output: %s", outStr)
+			}
 			if errStr := strings.TrimSpace(stderr.String()); errStr != "" {
 				log.Errorf("ib_write_bw stderr: %s", errStr)
 			}
