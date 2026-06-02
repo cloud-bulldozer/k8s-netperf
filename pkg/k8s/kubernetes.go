@@ -660,12 +660,18 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfVmDataPorts []int32
 	var err error
 
-	// Build SR-IOV resource requests if needed
-	var sriovResources corev1.ResourceList
+	// Build extended resource requests (SR-IOV VFs, GPUs)
+	var extendedResources corev1.ResourceList
 	if s.SriovNetwork != "" {
-		sriovResources = corev1.ResourceList{
+		extendedResources = corev1.ResourceList{
 			corev1.ResourceName("openshift.io/" + s.SriovNetwork): resource.MustParse("1"),
 		}
+	}
+	if s.UseCuda != "" {
+		if extendedResources == nil {
+			extendedResources = corev1.ResourceList{}
+		}
+		extendedResources[corev1.ResourceName("nvidia.com/gpu")] = resource.MustParse("1")
 	}
 
 	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
@@ -702,7 +708,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
-			ResourceRequests:   sriovResources,
+			ResourceRequests:   extendedResources,
 			Privileged:         s.Privileged,
 			Annotations:        s.Annotations,
 			WorkloadLabels:     s.Labels,
@@ -794,7 +800,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
 			NetworkAnnotations: networkAnnotations,
-			ResourceRequests:   sriovResources,
+			ResourceRequests:   extendedResources,
 			Privileged:         s.Privileged,
 			Annotations:        s.Annotations,
 			WorkloadLabels:     s.Labels,
@@ -976,7 +982,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
-		ResourceRequests:   sriovResources,
+		ResourceRequests:   extendedResources,
 		Privileged:         s.Privileged,
 		Annotations:        s.Annotations,
 		WorkloadLabels:     s.Labels,
@@ -1153,7 +1159,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
 		NetworkAnnotations: networkAnnotations,
-		ResourceRequests:   sriovResources,
+		ResourceRequests:   extendedResources,
 		Privileged:         s.Privileged,
 		Annotations:        s.Annotations,
 		WorkloadLabels:     s.Labels,
