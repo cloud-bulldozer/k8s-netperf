@@ -902,6 +902,8 @@ func executeWorkload(nc config.Config,
 		npr.LossSummary = append(npr.LossSummary, float64(nr.LossPercent))
 		npr.RetransmitSummary = append(npr.RetransmitSummary, nr.Retransmits)
 		npr.ThroughputSummary = append(npr.ThroughputSummary, nr.Throughput)
+		npr.LatencyAvgSummary = append(npr.LatencyAvgSummary, nr.Latency)
+		npr.Latency50Summary = append(npr.Latency50Summary, nr.Latency50ptile)
 		npr.LatencySummary = append(npr.LatencySummary, nr.Latency99ptile)
 	}
 	npr.EndTime = time.Now()

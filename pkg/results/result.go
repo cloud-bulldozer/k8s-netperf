@@ -37,7 +37,9 @@ type Data struct {
 	Service           bool
 	AcrossAZ          bool
 	ThroughputSummary []float64
-	LatencySummary    []float64
+	LatencyAvgSummary []float64
+	Latency50Summary  []float64
+	LatencySummary    []float64 // 99%tile latency summary
 	LossSummary       []float64
 	RetransmitSummary []float64
 	ClientMetrics     metrics.NodeCPU
@@ -304,6 +306,21 @@ func ShowRRResult(s ScenarioResults) {
 
 // ShowLatencyResult accepts NetPerfResults to display to the user via stdout
 func ShowLatencyResult(s ScenarioResults) {
+
+	if checkResults(s, "STREAM_LAT") {
+		logging.Debug("Rendering TCP_STREAM_LAT Avg, P50 and P99 Latency results")
+		table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Virt mode", "Service", "External Server", "UDN Info", "Bridge Info", "SR-IOV Info", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg Latency", "Avg 50%tile value", "Avg 99%tile value"})
+		for _, r := range s.Results {
+			if strings.Contains(r.Profile, "STREAM_LAT") {
+				avg, _ := Average(r.LatencyAvgSummary)
+				p50, _ := Average(r.Latency50Summary)
+				p99, _ := Average(r.LatencySummary)
+				table.Append([]string{"Stream Latency Results", r.Driver, r.Profile, strconv.Itoa(r.Parallelism), strconv.FormatBool(r.HostNetwork), strconv.FormatBool(r.Virt), strconv.FormatBool(r.Service), fmt.Sprintf("%t", r.ExternalServer), r.UdnInfo, r.BridgeInfo, r.SriovInfo, strconv.Itoa(r.MessageSize), strconv.Itoa(r.Burst), strconv.FormatBool(r.SameNode), strconv.Itoa(r.Duration), strconv.Itoa(r.Samples), fmt.Sprintf("%f (%s)", avg, "usec"), fmt.Sprintf("%f (%s)", p50, "usec"), fmt.Sprintf("%f (%s)", p99, "usec")})
+			}
+		}
+		table.Render()
+	}
+
 	if checkResults(s, "RR") {
 		logging.Debug("Rendering RR P99 Latency results")
 		table := initTable([]string{"Result Type", "Driver", "Scenario", "Parallelism", "Host Network", "Virt mode", "Service", "External Server", "UDN Info", "Bridge Info", "SR-IOV Info", "Macvlan Info", "Message Size", "Burst", "Same node", "Duration", "Samples", "Avg 99%tile value"})
