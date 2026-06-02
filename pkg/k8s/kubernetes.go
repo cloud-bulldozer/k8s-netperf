@@ -1061,6 +1061,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 		}
 		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F -D %d", device, gid, ibDuration)
+		if s.UseCuda != "" {
+			ibWriteCmd += " --use_cuda=" + s.UseCuda
+		}
 		ibWriteCmd = fmt.Sprintf("while true; do %s; sleep 1; done", ibWriteCmd)
 		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
 	}

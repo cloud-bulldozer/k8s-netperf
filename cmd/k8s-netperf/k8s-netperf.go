@@ -44,6 +44,7 @@ var (
 	iperf3            bool
 	uperf             bool
 	ibWriteBw         string
+	useCuda           string
 	udnl2             bool
 	udnl3             bool
 	cudn              string
@@ -110,6 +111,9 @@ var rootCmd = &cobra.Command{
 		}
 		if cudn != "" && (udnl2 || udnl3) {
 			log.Fatal("flags --cudn and --udnl2/--udnl3 are mutually exclusive; please set only one")
+		}
+		if useCuda != "" && !ibWriteBwEnabled {
+			log.Fatalf("😭 --use-cuda requires --ib-write-bw flag")
 		}
 		if ibWriteBwEnabled && (!privileged || !hostNetOnly) {
 			log.Fatalf("😭 ib_write_bw driver requires both --privileged and --hostNet flags")
@@ -241,6 +245,7 @@ var rootCmd = &cobra.Command{
 			MacvlanNetwork:  macvlan,
 			Cudn:            cudn != "",
 			IbWriteBwParams: ibWriteBw,
+			UseCuda:         useCuda,
 			Sockets:         sockets,
 			Cores:           cores,
 			Threads:         threads,
@@ -919,6 +924,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&iperf3, "iperf", false, "Use iperf3 as load driver (default false)")
 	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (default false)")
 	rootCmd.Flags().StringVar(&ibWriteBw, "ib-write-bw", "", "Use ib_write_bw as load driver, requires nic:gid format (e.g., mlx5_0:0, requires --hostNet)")
+	rootCmd.Flags().StringVar(&useCuda, "use-cuda", "", "CUDA device ID for GPUDirect RDMA testing (requires --ib-write-bw)")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf (default true)")
 	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout (default false)")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")
