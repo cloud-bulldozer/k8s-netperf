@@ -798,17 +798,21 @@ func executeWorkload(nc config.Config,
 		log.Debugf("Using SR-IOV network IP: %s", serverIP)
 		npr.SriovInfo = fmt.Sprintf("sriov/%s", s.SriovNetwork)
 	} else if s.BridgeNetwork != "" {
-		// For regular pods, extract bridge IP from network status
-		serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
-		if err != nil {
-			log.Errorf("Failed to extract bridge IP: %v", err)
-			// Fall back to default IP
-			serverIP = s.Server.Items[0].Status.PodIP
+		if virt {
+			// VMs use static bridge IPs from bridgeNetwork.json (loaded via parseNetworkConfig when --vm --bridge)
+			if s.BridgeServerNetwork == "" {
+				log.Fatal("bridge server network not configured: ensure bridgeNetwork.json is valid when using --vm --bridge")
+			}
+			serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
+			npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
+		} else {
+			serverIP, err = k8s.ExtractBridgeIp(s.Server.Items[0], s.BridgeNetwork, s.BridgeNamespace)
+			if err != nil {
+				log.Fatalf("Failed to extract bridge IP: %v", err)
+			}
+			npr.BridgeInfo = fmt.Sprintf("%s/%s", s.BridgeNamespace, s.BridgeNetwork)
 		}
-		log.Debugf("Using bridge network IP: %s (interface: net1)", serverIP)
-
-		// Set bridge info similar to UdnInfo
-		npr.BridgeInfo = fmt.Sprintf("%s/%s", s.BridgeNamespace, s.BridgeNetwork)
+		log.Debugf("Using bridge network IP: %s", serverIP)
 	} else if s.MacvlanNetwork != "" {
 		serverIP, err = k8s.ExtractMacvlanIp(s.Server.Items[0])
 		if err != nil {
@@ -816,10 +820,6 @@ func executeWorkload(nc config.Config,
 		}
 		log.Debugf("Using MACVLAN network IP: %s", serverIP)
 		npr.MacvlanInfo = fmt.Sprintf("macvlan/%s", s.MacvlanNetwork)
-	} else if s.BridgeServerNetwork != "" {
-		// For VMs, use static bridge IP from JSON config
-		serverIP = strings.Split(s.BridgeServerNetwork, "/")[0]
-		npr.BridgeInfo = fmt.Sprintf("VM Bridge (%s)", serverIP)
 	} else {
 		if virt {
 			serverIP = s.VMServer.Items[0].Status.PodIP
