@@ -1052,7 +1052,16 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 		device := strings.TrimSpace(parts[0])
 		gid := strings.TrimSpace(parts[1])
-		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F", device, gid)
+		// perftest requires server and client to use identical -D values
+		ibDuration := 10
+		for _, cfg := range s.Configs {
+			if strings.EqualFold(cfg.Profile, "UDP_STREAM") {
+				ibDuration = cfg.Duration
+				break
+			}
+		}
+		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F -D %d", device, gid, ibDuration)
+		ibWriteCmd = fmt.Sprintf("while true; do %s; sleep 1; done", ibWriteCmd)
 		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
 	}
 

@@ -26,7 +26,14 @@ jobs:
           sudo apt-get install -y \
             qemu-system-x86 \
             qemu-utils \
-            genisoimage
+            genisoimage \
+            gdisk
+
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - name: Boot Fedora Cloud Image with QEMU and install Podman + RDMA + Kind
         run: |
@@ -47,6 +54,15 @@ jobs:
           # Resize the qcow2 image to 10GB (default 5GB is too small for packages + Kind)
           echo "Resizing disk image to 10GB..."
           qemu-img resize fedora-cloud.qcow2 10G
+
+          # Fix GPT backup header — qemu-img resize moves the disk end past
+          # the backup GPT table, causing kernel warnings and slow partition
+          # discovery that can exceed systemd's 45-second device timeout.
+          echo "Fixing GPT backup header..."
+          sudo modprobe nbd max_part=8
+          sudo qemu-nbd --connect=/dev/nbd0 /tmp/fedora-cloud.qcow2
+          sudo sgdisk -e /dev/nbd0
+          sudo qemu-nbd --disconnect /dev/nbd0
 
           # Create cloud-init configuration for automated setup
           mkdir -p /tmp/cloud-init
@@ -81,7 +97,7 @@ jobs:
             '  - trap "echo CLOUD_INIT_FAILED; sync; poweroff" ERR' \
             '  - dnf install -y kernel-modules-extra-$(uname -r)' \
             '  - mkdir -p /mnt/cdrom' \
-            '  - mount /dev/sr0 /mnt/cdrom || mount /dev/sr1 /mnt/cdrom || mount /dev/sdb /mnt/cdrom || { echo "❌ Failed to mount cloud-init ISO"; echo "FAST_FAIL_MOUNT_ERROR"; poweroff; exit 1; }' \
+            '  - mount /dev/sr0 /mnt/cdrom || mount /dev/cdrom /mnt/cdrom || { echo "❌ Failed to mount cloud-init ISO"; echo "FAST_FAIL_MOUNT_ERROR"; poweroff; exit 1; }' \
             '  - cp /mnt/cdrom/kind-config.yaml /tmp/' \
             '  - cp /mnt/cdrom/k8s-netperf /usr/local/bin/' \
             '  - chmod +x /usr/local/bin/k8s-netperf' \
@@ -126,13 +142,22 @@ jobs:
           # Boot QEMU with cloud image in background
           echo "Starting QEMU VM..."
           touch /tmp/vm-output.log
+
+          ACCEL="tcg"
+          CPU_MODEL="max"
+          if [ -e /dev/kvm ]; then
+            echo "KVM available, using hardware acceleration"
+            ACCEL="kvm"
+            CPU_MODEL="host"
+          fi
+
           qemu-system-x86_64 \
-            -machine accel=tcg \
-            -cpu max \
+            -machine accel=${ACCEL} \
+            -cpu ${CPU_MODEL} \
             -m 7168 \
             -smp 2 \
-            -drive file=/tmp/fedora-cloud.qcow2,format=qcow2 \
-            -drive file=/tmp/cloud-init.iso,format=raw \
+            -drive file=/tmp/fedora-cloud.qcow2,format=qcow2,if=virtio \
+            -cdrom /tmp/cloud-init.iso \
             -netdev user,id=net0,dns=8.8.8.8 \
             -device e1000,netdev=net0 \
             -nographic \
