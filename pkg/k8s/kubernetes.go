@@ -180,15 +180,24 @@ func buildSriovNetworkAnnotations() map[string]string {
 	return annotations
 }
 
-// ReadNamespaceFromFile reads a namespace YAML file and returns the namespace name.
-func ReadNamespaceFromFile(filePath string) (string, error) {
+// parseNamespaceFromFile reads and unmarshals a namespace YAML file.
+func parseNamespaceFromFile(filePath string) (*corev1.Namespace, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", fmt.Errorf("unable to read namespace file %s: %v", filePath, err)
+		return nil, fmt.Errorf("unable to read namespace file %s: %v", filePath, err)
 	}
 	var ns corev1.Namespace
 	if err := yaml.Unmarshal(data, &ns); err != nil {
-		return "", fmt.Errorf("unable to parse namespace file %s: %v", filePath, err)
+		return nil, fmt.Errorf("unable to parse namespace file %s: %v", filePath, err)
+	}
+	return &ns, nil
+}
+
+// ReadNamespaceFromFile reads a namespace YAML file and returns the namespace name.
+func ReadNamespaceFromFile(filePath string) (string, error) {
+	ns, err := parseNamespaceFromFile(filePath)
+	if err != nil {
+		return "", err
 	}
 	if ns.Name == "" {
 		return "", fmt.Errorf("namespace file %s must have metadata.name set", filePath)
@@ -198,16 +207,12 @@ func ReadNamespaceFromFile(filePath string) (string, error) {
 
 // createNamespaceFromFile reads a namespace YAML file and creates the namespace.
 func createNamespaceFromFile(client *kubernetes.Clientset, filePath string) error {
-	data, err := os.ReadFile(filePath)
+	ns, err := parseNamespaceFromFile(filePath)
 	if err != nil {
-		return fmt.Errorf("unable to read namespace file %s: %v", filePath, err)
-	}
-	var ns corev1.Namespace
-	if err := yaml.Unmarshal(data, &ns); err != nil {
-		return fmt.Errorf("unable to parse namespace file %s: %v", filePath, err)
+		return err
 	}
 	log.Infof("🔨 Creating namespace %s from file: %s", ns.Name, filePath)
-	_, err = client.CoreV1().Namespaces().Create(context.TODO(), &ns, metav1.CreateOptions{})
+	_, err = client.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
 	return err
 }
 
@@ -822,9 +827,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		return err
 	}
 	ncount := len(nodes.Items)
-	log.Debugf("Number of nodes with role worker: %d", ncount)
+	log.Debugf("Number of nodes matching selector %q: %d", nodeCountSelector, ncount)
 	if !s.NodeLocal && ncount < 2 {
-		return fmt.Errorf("not enough nodes with label worker= to execute test (current number of nodes: %d)", ncount)
+		return fmt.Errorf("not enough nodes matching selector %q to execute test (current number of nodes: %d)", nodeCountSelector, ncount)
 	}
 
 	clientRoleAffinity := []corev1.PodAffinityTerm{
@@ -945,9 +950,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 			// Create uperf-histogram service
 			uperfLatSVC := ServiceParams{
-				Name:      "uperf-histogram-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
+				Name:      runName("uperf-histogram-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(serverRole, rid),
 				CtlPort:   UperfLatServerCtlPort,
 				DataPorts: []int32{UperfLatServerDataPort},
 			}
@@ -970,9 +975,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			}
 			//
 			uperfLatSVC := ServiceParams{
-				Name:      "uperf-vm-histogram-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
+				Name:      runName("uperf-vm-histogram-service", rid),
+				Namespace: namespace,
+				Labels:    runLabels(vmServerRole, rid),
 				CtlPort:   UperfLatServerCtlPort,
 				DataPorts: []int32{UperfLatVmServerDataPort},
 			}

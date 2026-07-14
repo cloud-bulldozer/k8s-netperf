@@ -42,10 +42,10 @@ Ensure your `kubeconfig` is properly set to the cluster you would like to run `k
 The namespace can be created in three ways:
 
 - **Automatically** (default) -- k8s-netperf creates it with default labels.
-- **From a file** -- pass `--namespace-file namespace.yaml` to create it from your own YAML manifest (e.g. with custom labels or annotations). The `metadata.name` in the file must match `--namespace`.
+- **From a file** -- pass `--namespace-file namespace.yaml` to create it from your own YAML manifest (e.g. with custom labels or annotations). The `metadata.name` in the file takes precedence over `--namespace`; if `--namespace` is also set explicitly, it must match.
 - **Manually** -- create the namespace yourself before running k8s-netperf with `--clean=false` so it is not deleted on startup.
 
-The service account and hostnetwork role binding are always created automatically.
+The service account and hostnetwork role binding are always created automatically, so you do not need to create them yourself.
 
 > *Note: When `--clean=true` (the default), k8s-netperf deletes the namespace at startup to remove leftover resources from previous runs, then recreates it. Pass `--clean=false` to skip this.*
 
@@ -67,22 +67,13 @@ $ k8s-netperf --namespace shared-perf --clean=false --tag experimental ...
 
 Use `--uuid` to fix the run ID if you want predictable resource names. Otherwise k8s-netperf generates a fresh UUID per run.
 
-```shell
-$ kubectl create ns netperf
-$ kubectl create sa -n netperf netperf
-```
+The namespace and service account are created automatically, so no manual `kubectl create ns`/`kubectl create sa` is needed. On OpenShift you still grant the required SCCs to the netperf service account.
 
 If you run with `--all`, you will need to allow `hostNetwork` for the netperf sa.
 
 Example
 ```shell
 $ oc adm policy add-scc-to-user hostnetwork -z netperf
-```
-
-Additional setup:
-```shell
-$ kubectl create ns netperf
-$ kubectl create sa netperf -n netperf
 ```
 
 Additional setup for the `--ib-write-bw` flag:
@@ -132,14 +123,14 @@ Flags:
       --sriov string                SR-IOV PF interface name (e.g., ens1f0). Requires SR-IOV operator
       --sriov-node-selector string  Node role label for SR-IOV node selector (default "worker")
       --namespace string            Kubernetes namespace for netperf resources (default "netperf")
-      --namespace-file string       Path to a YAML file defining the namespace to create (namespace name is read from the file)
+      --namespace-file string       Path to a YAML file defining the namespace to create; metadata.name takes precedence over --namespace (must match if --namespace is also set)
       --node-selector strings       Node selector as key=value to control pod scheduling and node count checks (can be repeated)
       --toleration strings          Toleration key to add to netperf pods (can be repeated)
-      --auto-tolerate               Automatically add tolerations for taints found on netperf=server and netperf=client nodes
+      --auto-tolerate               Automatically add tolerations for taints found on nodes matching --node-selector (or worker nodes by default)
       --tag strings                 Tags to attach to indexed results for filtering in dashboards (can be repeated)
       --prom string                 Prometheus URL
       --uuid string                 User provided UUID
-      --search string               OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port
+      --search string               OpenSearch URL (basic auth supported; avoid embedding credentials in the URL on shared hosts - see Flag Details)
       --index string                OpenSearch Index to save the results to (default "k8s-netperf")
       --metrics                     Show all system metrics retrieved from prom
       --tcp-tolerance float         Allowed %diff from hostNetwork to podNetwork (default 10)
@@ -163,12 +154,12 @@ Flags:
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 - `--ib-write-bw $NIC:$GID` will enable the ib-write-bw load driver for any stream UDP_STREAM tests. ib_write_bw doesn't have CRR test-type.
 - `--namespace` sets the Kubernetes namespace where all netperf resources (deployments, services, service accounts) are created. Defaults to `netperf`.
-- `--namespace-file` path to a YAML file defining the namespace. The namespace name is read from the file's `metadata.name` and used automatically. Allows custom labels, annotations, or other metadata on the namespace.
+- `--namespace-file` path to a YAML file defining the namespace. The namespace name is read from the file's `metadata.name` and takes precedence over `--namespace`; if `--namespace` is also set explicitly it must match. Allows custom labels, annotations, or other metadata on the namespace.
 - `--node-selector key=value` sets node label requirements for pod scheduling. When provided, replaces the default `node-role.kubernetes.io/worker=` selector. Also used for node count validation and zone detection. Can be repeated for multiple selectors.
-- `--toleration key` adds a `NoSchedule` toleration (with `Exists` operator) for the given taint key to all netperf pods. Can be repeated.
-- `--auto-tolerate` queries nodes labeled `netperf=server` and `netperf=client`, collects their taints, and automatically adds matching tolerations to all pods. Disabled by default. Deduplicates against any manual `--toleration` keys.
+- `--toleration key` adds a toleration (with `Exists` operator and no effect, so it matches taints with any effect) for the given taint key to all netperf pods. Can be repeated.
+- `--auto-tolerate` queries the same nodes targeted by `--node-selector` (or worker nodes by default), collects their taints, and automatically adds matching tolerations to all pods. Disabled by default. Deduplicates against any manual `--toleration` keys.
 - `--tag` attaches labels to indexed results (OpenSearch, JSON, CSV) for filtering and comparing different configurations in dashboards. Can be repeated (e.g. `--tag baseline --tag cluster-a`).
 - `--csv` archives results in CSV files. Enabled by default in human-readable mode. Automatically disabled when `--json` or `--search` is used, unless `--csv` is explicitly passed.
-- `--search` OpenSearch URL for indexing results. When set, CSV generation is skipped unless `--csv` is explicitly passed.
+- `--search` OpenSearch URL for indexing results. When set, CSV generation is skipped unless `--csv` is explicitly passed. Basic auth is supported, but **do not embed credentials in the URL on shared systems** — command-line arguments are visible in the process list (`ps`) and shell history. Prefer a network path that does not require inline credentials (e.g. a proxy or an unauthenticated in-cluster endpoint).
 
 > *Note: On OpenShift, Prometheus is auto-discovered via the monitoring route. On non-OpenShift clusters, pass the Prometheus URL via `--prom`. If the OpenShift route is not reachable, it might be necessary to `port-forward` the service and pass the URL via `--prom`.*
