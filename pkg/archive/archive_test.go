@@ -19,7 +19,7 @@ func TestBuildDocsMapsCPUCollectionFlags(t *testing.T) {
 				RetransmitSummary:  []float64{0},
 			},
 		},
-	}, "test-uuid")
+	}, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("BuildDocs returned unexpected error: %v", err)
 	}
