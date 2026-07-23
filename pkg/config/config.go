@@ -61,6 +61,9 @@ type PerfScenarios struct {
 	BridgeClientNetwork string
 	SriovNetwork        string
 	MacvlanNetwork      string
+	LocalnetPhysicalNetwork string
+	LocalnetServerNetwork   string
+	LocalnetClientNetwork   string
 	IbWriteBwParams     string
 	Sockets             uint32
 	Cores               uint32
@@ -96,6 +99,11 @@ type PerfScenarios struct {
 type BridgeNetworkConfig struct {
 	BridgeServerNetwork string `json:"bridgeServerNetwork"`
 	BridgeClientNetwork string `json:"bridgeClientNetwork"`
+}
+
+type LocalnetNetworkConfig struct {
+	LocalnetServerNetwork string `json:"localnetServerNetwork"`
+	LocalnetClientNetwork string `json:"localnetClientNetwork"`
 }
 
 // Tests we will support in k8s-netperf
