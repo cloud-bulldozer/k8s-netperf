@@ -473,6 +473,7 @@ func DeployLocalnetCUDN(dynamicClient *dynamic.DynamicClient, physicalNetworkNam
 	}
 	return nil
 }
+
 // Create a NetworkAttachcmentDefinition object for a bridge connection
 func DeployNADBridge(dyn *dynamic.DynamicClient, bridgeName string) error {
 	nadBridge := &unstructured.Unstructured{
@@ -1365,7 +1366,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
-	        perf.LocalnetPhysicalNetwork != "", perf.LocalnetServerNetwork,
+		perf.LocalnetPhysicalNetwork != "", perf.LocalnetServerNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
@@ -1394,7 +1395,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
-	        perf.LocalnetPhysicalNetwork != "", perf.LocalnetClientNetwork,
+		perf.LocalnetPhysicalNetwork != "", perf.LocalnetClientNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err

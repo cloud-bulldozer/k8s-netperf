@@ -257,24 +257,24 @@ var rootCmd = &cobra.Command{
 			cleanup(client, rconfig)
 		}
 		s := config.PerfScenarios{
-			HostNetwork:     full || hostNetOnly,
-			HostNetworkOnly: hostNetOnly,
-			NodeLocal:       nl,
-			AcrossAZ:        acrossAZ,
-			RestConfig:      *rconfig,
-			Configs:         cfg,
-			ClientSet:       client,
-			BridgeNetwork:   bridge,
-			BridgeNamespace: bridgeNamespace,
-			SriovNetwork:    sriov,
-			MacvlanNetwork:  macvlan,
+			HostNetwork:             full || hostNetOnly,
+			HostNetworkOnly:         hostNetOnly,
+			NodeLocal:               nl,
+			AcrossAZ:                acrossAZ,
+			RestConfig:              *rconfig,
+			Configs:                 cfg,
+			ClientSet:               client,
+			BridgeNetwork:           bridge,
+			BridgeNamespace:         bridgeNamespace,
+			SriovNetwork:            sriov,
+			MacvlanNetwork:          macvlan,
 			LocalnetPhysicalNetwork: localnet,
-			Cudn:            cudn != "",
-			IbWriteBwParams: ibWriteBw,
-			Sockets:         sockets,
-			Cores:           cores,
-			Threads:         threads,
-			Privileged:      privileged,
+			Cudn:                    cudn != "",
+			IbWriteBwParams:         ibWriteBw,
+			Sockets:                 sockets,
+			Cores:                   cores,
+			Threads:                 threads,
+			Privileged:              privileged,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -905,7 +905,7 @@ func executeWorkload(nc config.Config,
 		serverIP = strings.Split(s.LocalnetServerNetwork, "/")[0]
 		log.Debugf("Using localnet network IP: %s", serverIP)
 		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetPhysicalNetwork)
-         } else {
+	} else {
 		if virt {
 			serverIP = s.VMServer.Items[0].Status.PodIP
 		} else {
