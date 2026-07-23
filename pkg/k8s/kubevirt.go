@@ -162,7 +162,8 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
-	cudn bool, sriovNetwork string, sockets uint32, cores uint32, threads uint32) (string, error) {
+	cudn bool, localnet bool, localnetNetwork string, sriovNetwork string, sockets uint32, cores uint32, threads uint32) (string, error) {
+	log.Debugf("CreateVMClient: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
 		"role": name,
@@ -280,6 +281,25 @@ ethernets:
 ethernets:
   eth1:
     dhcp4: true`
+	} else if localnet {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "secondary-localnet",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "secondary-localnet",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + LocalnetCudnName,
+				},
+			},
+		})
+		netData = fmt.Sprintf(`version: 2
+ethernets:
+  eth1:
+    addresses: [ %s ]`, localnetNetwork)
 	} else if sriovNetwork != "" {
 		interfaces = append(interfaces, v1.Interface{
 			Name: "sriov-netperf",
@@ -318,7 +338,9 @@ ethernets:
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
+	localnet bool, localnetNetwork string,
 	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	log.Debugf("CreateVMServer: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
 		"role": role,
@@ -437,6 +459,25 @@ ethernets:
 ethernets:
   eth1:
     dhcp4: true`
+	} else if localnet {
+		interfaces = append(interfaces, v1.Interface{
+			Name: "secondary-localnet",
+			InterfaceBindingMethod: v1.InterfaceBindingMethod{
+				Bridge: &v1.InterfaceBridge{},
+			},
+		})
+		networks = append(networks, v1.Network{
+			Name: "secondary-localnet",
+			NetworkSource: v1.NetworkSource{
+				Multus: &v1.MultusNetwork{
+					NetworkName: namespace + "/" + LocalnetCudnName,
+				},
+			},
+		})
+		netData = fmt.Sprintf(`version: 2
+ethernets:
+  eth1:
+    addresses: [ %s ]`, localnetNetwork)
 	} else if sriovNetwork != "" {
 		interfaces = append(interfaces, v1.Interface{
 			Name: "sriov-netperf",

@@ -62,6 +62,8 @@ var (
 	sriov             string
 	sriovNodeSelector string
 	macvlan           string
+	localnet          string
+	localnetConfig    string
 	promURL           string
 	id                string
 	searchURL         string
@@ -156,6 +158,33 @@ var rootCmd = &cobra.Command{
 		if macvlan != "" && vm {
 			log.Fatalf("😭 --macvlan cannot be used with --vm")
 		}
+		if localnet != "" && !vm {
+			log.Fatalf("😭 --localnet requires --vm")
+		}
+		if localnet != "" && pod {
+			log.Fatalf("😭 --localnet requires --pod=false")
+		}
+		if localnet != "" && bridge != "" {
+			log.Fatalf("😭 --localnet and --bridge are mutually exclusive")
+		}
+		if localnet != "" && sriov != "" {
+			log.Fatalf("😭 --localnet and --sriov are mutually exclusive")
+		}
+		if localnet != "" && macvlan != "" {
+			log.Fatalf("😭 --localnet and --macvlan are mutually exclusive")
+		}
+		if localnet != "" && ibWriteBwEnabled {
+			log.Fatalf("😭 --localnet and --ib-write-bw are mutually exclusive")
+		}
+		if localnet != "" && cudn != "" {
+			log.Fatalf("😭 --localnet and --cudn are mutually exclusive")
+		}
+		if localnet != "" && (udnl2 || udnl3) {
+			log.Fatalf("😭 --localnet cannot be used with UDN flags (--udnl2, --udnl3)")
+		}
+		if localnet != "" && hostNetOnly {
+			log.Fatalf("😭 --localnet cannot be used with --hostNet")
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -228,23 +257,24 @@ var rootCmd = &cobra.Command{
 			cleanup(client, rconfig)
 		}
 		s := config.PerfScenarios{
-			HostNetwork:     full || hostNetOnly,
-			HostNetworkOnly: hostNetOnly,
-			NodeLocal:       nl,
-			AcrossAZ:        acrossAZ,
-			RestConfig:      *rconfig,
-			Configs:         cfg,
-			ClientSet:       client,
-			BridgeNetwork:   bridge,
-			BridgeNamespace: bridgeNamespace,
-			SriovNetwork:    sriov,
-			MacvlanNetwork:  macvlan,
-			Cudn:            cudn != "",
-			IbWriteBwParams: ibWriteBw,
-			Sockets:         sockets,
-			Cores:           cores,
-			Threads:         threads,
-			Privileged:      privileged,
+			HostNetwork:             full || hostNetOnly,
+			HostNetworkOnly:         hostNetOnly,
+			NodeLocal:               nl,
+			AcrossAZ:                acrossAZ,
+			RestConfig:              *rconfig,
+			Configs:                 cfg,
+			ClientSet:               client,
+			BridgeNetwork:           bridge,
+			BridgeNamespace:         bridgeNamespace,
+			SriovNetwork:            sriov,
+			MacvlanNetwork:          macvlan,
+			LocalnetPhysicalNetwork: localnet,
+			Cudn:                    cudn != "",
+			IbWriteBwParams:         ibWriteBw,
+			Sockets:                 sockets,
+			Cores:                   cores,
+			Threads:                 threads,
+			Privileged:              privileged,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -344,6 +374,18 @@ var rootCmd = &cobra.Command{
 				s.BridgeServerNetwork, s.BridgeClientNetwork, err = parseNetworkConfig(bridgeNetwork)
 				if err != nil {
 					log.Error(err)
+				}
+			}
+			if localnet != "" {
+				s.LocalnetServerNetwork, s.LocalnetClientNetwork, err = parseLocalnetNetworkConfig(localnetConfig)
+				if err != nil {
+					log.Error(err)
+				}
+				log.Debugf("Localnet parsed: serverNetwork=%s, clientNetwork=%s", s.LocalnetServerNetwork, s.LocalnetClientNetwork)
+				err = k8s.DeployLocalnetCUDN(s.DClient, localnet)
+				if err != nil {
+					log.Error(err)
+					os.Exit(1)
 				}
 			}
 			if s.Udn {
@@ -684,6 +726,16 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 			log.Error(err)
 		}
 	}
+	if localnet != "" {
+		dynClient, err := dynamic.NewForConfig(rconfig)
+		if err != nil {
+			log.Error(err)
+		}
+		err = k8s.DestroyCUdn(dynClient, k8s.LocalnetCudnName)
+		if err != nil {
+			log.Error(err)
+		}
+	}
 	err := k8s.DestroyNamespace(client)
 	if err != nil {
 		log.Error(err)
@@ -727,6 +779,32 @@ func parseNetworkConfig(jsonFile string) (string, string, error) {
 
 	// Return the extracted IPs
 	return serverIP, clientIP, nil
+}
+
+func parseLocalnetNetworkConfig(jsonFile string) (string, string, error) {
+	file, err := os.Open(jsonFile)
+	if err != nil {
+		return "", "", fmt.Errorf("error opening file: %v", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Warnf("Error closing file: %v", err)
+		}
+	}()
+
+	log.Debugf("Reading localnet configuration from JSON file: %s", jsonFile)
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	var netConfig config.LocalnetNetworkConfig
+	err = encodeJson.Unmarshal(content, &netConfig)
+	if err != nil {
+		return "", "", fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	return netConfig.LocalnetServerNetwork, netConfig.LocalnetClientNetwork, nil
 }
 
 // executeWorkload runs the workload and returns (result.Data, bool).
@@ -820,6 +898,13 @@ func executeWorkload(nc config.Config,
 		}
 		log.Debugf("Using MACVLAN network IP: %s", serverIP)
 		npr.MacvlanInfo = fmt.Sprintf("macvlan/%s", s.MacvlanNetwork)
+	} else if s.LocalnetPhysicalNetwork != "" {
+		if s.LocalnetServerNetwork == "" {
+			log.Fatal("localnet server network not configured: ensure localnetNetwork.json is valid when using --localnet")
+		}
+		serverIP = strings.Split(s.LocalnetServerNetwork, "/")[0]
+		log.Debugf("Using localnet network IP: %s", serverIP)
+		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetPhysicalNetwork)
 	} else {
 		if virt {
 			serverIP = s.VMServer.Items[0].Status.PodIP
@@ -944,6 +1029,8 @@ func main() {
 	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
 	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
 	rootCmd.Flags().StringVar(&macvlan, "macvlan", "", "MACVLAN master interface name (e.g., eth0). Creates a MACVLAN NetworkAttachmentDefinition.")
+	rootCmd.Flags().StringVar(&localnet, "localnet", "", "OVN localnet physical network name (e.g., physnet). VM-only. Creates a Localnet CUDN. Requires --vm --pod=false and OVN-K bridge mapping.")
+	rootCmd.Flags().StringVar(&localnetConfig, "localnet-config", "localnetNetwork.json", "JSON file with static IPs for localnet server/client (default localnetNetwork.json)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
 	rootCmd.Flags().StringVar(&searchURL, "search", "", "OpenSearch URL, if you have auth, pass in the format of https://user:pass@url:port")

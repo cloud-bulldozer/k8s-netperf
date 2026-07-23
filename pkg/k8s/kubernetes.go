@@ -104,6 +104,7 @@ const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const UdnName = "udn-primary-netperf"
 const CudnName = "cudn-secondary-netperf"
+const LocalnetCudnName = "cudn-localnet-netperf"
 const SriovNadName = "sriov-netperf"
 const SriovPolicyName = "sriov-netperf-policy"
 const sriovOperatorNamespace = "openshift-sriov-network-operator"
@@ -425,6 +426,50 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 	_, err := dynamicClient.Resource(gvr).Create(context.TODO(), cudnObj, metav1.CreateOptions{})
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// DeployLocalnetCUDN creates a ClusterUserDefinedNetwork with topology: Localnet.
+func DeployLocalnetCUDN(dynamicClient *dynamic.DynamicClient, physicalNetworkName string) error {
+	log.Infof("Deploying localnet CUDN for physical network: %s", physicalNetworkName)
+	if physicalNetworkName == "" {
+		return fmt.Errorf("physicalNetworkName cannot be empty")
+	}
+	cudnObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.ovn.org/v1",
+			"kind":       "ClusterUserDefinedNetwork",
+			"metadata": map[string]interface{}{
+				"name": LocalnetCudnName,
+			},
+			"spec": map[string]interface{}{
+				"namespaceSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"netperf": "test-namespace",
+					},
+				},
+				"network": map[string]interface{}{
+					"topology": "Localnet",
+					"localnet": map[string]interface{}{
+						"role":                "Secondary",
+						"physicalNetworkName": physicalNetworkName,
+						"ipam": map[string]interface{}{
+							"mode": "Disabled",
+						},
+					},
+				},
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "clusteruserdefinednetworks",
+	}
+	_, err := dynamicClient.Resource(gvr).Create(context.TODO(), cudnObj, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to create localnet CUDN: %v", err)
 	}
 	return nil
 }
@@ -1321,6 +1366,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+		perf.LocalnetPhysicalNetwork != "", perf.LocalnetServerNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
@@ -1349,6 +1395,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+		perf.LocalnetPhysicalNetwork != "", perf.LocalnetClientNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
