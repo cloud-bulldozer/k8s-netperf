@@ -30,7 +30,7 @@ func TestBuildDocsArchivesFullClusterMetadata(t *testing.T) {
 				RetransmitSummary: []float64{0},
 			},
 		},
-	}, "test-uuid")
+	}, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("BuildDocs returned unexpected error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestBuildDocsArchivesResultBooleans(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			docs, err := BuildDocs(result.ScenarioResults{
 				Results: []result.Data{tt.result},
-			}, "test-uuid")
+			}, "test-uuid", nil)
 			if err != nil {
 				t.Fatalf("BuildDocs returned unexpected error: %v", err)
 			}
