@@ -389,7 +389,7 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 			"spec": map[string]interface{}{
 				"namespaceSelector": map[string]interface{}{
 					"matchLabels": map[string]interface{}{
-				        namespace: netperfNamespaceLabel,
+						namespace: netperfNamespaceLabel,
 					},
 				},
 				"network": map[string]interface{}{
@@ -432,9 +432,9 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 }
 
 // DeployLocalnetCUDN creates a ClusterUserDefinedNetwork with topology: Localnet.
-func DeployLocalnetCUDN(dynamicClient *dynamic.DynamicClient,  externalNetworkName string) error {
-	log.Infof("Deploying localnet CUDN for external network: %s",  externalNetworkName)
-	if  externalNetworkName == "" {
+func DeployLocalnetCUDN(dynamicClient *dynamic.DynamicClient, externalNetworkName string) error {
+	log.Infof("Deploying localnet CUDN for external network: %s", externalNetworkName)
+	if externalNetworkName == "" {
 		return fmt.Errorf("externalNetworkName cannot be empty")
 	}
 	cudnObj := &unstructured.Unstructured{
