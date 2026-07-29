@@ -61,7 +61,7 @@ type PerfScenarios struct {
 	BridgeClientNetwork     string
 	SriovNetwork            string
 	MacvlanNetwork          string
-	LocalnetPhysicalNetwork string
+	LocalnetNetwork         string
 	LocalnetServerNetwork   string
 	LocalnetClientNetwork   string
 	IbWriteBwParams         string

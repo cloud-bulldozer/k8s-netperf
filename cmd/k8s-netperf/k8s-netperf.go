@@ -268,7 +268,7 @@ var rootCmd = &cobra.Command{
 			BridgeNamespace:         bridgeNamespace,
 			SriovNetwork:            sriov,
 			MacvlanNetwork:          macvlan,
-			LocalnetPhysicalNetwork: localnet,
+			LocalnetNetwork:         localnet,
 			Cudn:                    cudn != "",
 			IbWriteBwParams:         ibWriteBw,
 			Sockets:                 sockets,
@@ -898,13 +898,13 @@ func executeWorkload(nc config.Config,
 		}
 		log.Debugf("Using MACVLAN network IP: %s", serverIP)
 		npr.MacvlanInfo = fmt.Sprintf("macvlan/%s", s.MacvlanNetwork)
-	} else if s.LocalnetPhysicalNetwork != "" {
+	} else if s.LocalnetNetwork != "" {
 		if s.LocalnetServerNetwork == "" {
 			log.Fatal("localnet server network not configured: ensure localnetNetwork.json is valid when using --localnet")
 		}
 		serverIP = strings.Split(s.LocalnetServerNetwork, "/")[0]
 		log.Debugf("Using localnet network IP: %s", serverIP)
-		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetPhysicalNetwork)
+		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetNetwork)
 	} else {
 		if virt {
 			serverIP = s.VMServer.Items[0].Status.PodIP
@@ -1029,7 +1029,7 @@ func main() {
 	rootCmd.Flags().StringVar(&sriov, "sriov", "", "SR-IOV PF interface name (e.g., ens1f0). Creates SriovNetworkNodePolicy and SriovNetwork CRs. Requires SR-IOV operator.")
 	rootCmd.Flags().StringVar(&sriovNodeSelector, "sriov-node-selector", "worker", "Node role label for SR-IOV node selector (default worker)")
 	rootCmd.Flags().StringVar(&macvlan, "macvlan", "", "MACVLAN master interface name (e.g., eth0). Creates a MACVLAN NetworkAttachmentDefinition.")
-	rootCmd.Flags().StringVar(&localnet, "localnet", "", "OVN localnet physical network name (e.g., physnet). VM-only. Creates a Localnet CUDN. Requires --vm --pod=false and OVN-K bridge mapping.")
+	rootCmd.Flags().StringVar(&localnet, "localnet", "", "OVN localnet external network name (e.g., physnet). VM-only. Creates a Localnet CUDN. Requires --vm --pod=false and OVN-K bridge mapping.")
 	rootCmd.Flags().StringVar(&localnetConfig, "localnet-config", "localnetNetwork.json", "JSON file with static IPs for localnet server/client (default localnetNetwork.json)")
 	rootCmd.Flags().StringVar(&promURL, "prom", "", "Prometheus URL")
 	rootCmd.Flags().StringVar(&id, "uuid", "", "User provided UUID")
