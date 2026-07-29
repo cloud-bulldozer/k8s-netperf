@@ -151,6 +151,39 @@ By default, it will read the `bridgeNetwork.json` file from the git repository. 
 k8s-netperf --vm --bridge br0 --bridgeNetwork /path/to/my/bridgeConfig.json
 ```
 
+## Using OVN Localnet
+When using `--localnet`, k8s-netperf creates a Localnet ClusterUserDefinedNetwork (C-UDN) and attaches a secondary interface to the VMs for the test. The value passed to `--localnet` must match the OVN-K external / physical network name configured in a NodeNetworkConfigurationPolicy bridge mapping. NMState operator is required. Localnet is VM-only (`--vm --pod=false`).
+
+For example, map the localnet name `physnet` to the OVS bridge `br-ex`:
+```yaml
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: mapping-localnet
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
+  desiredState:
+    ovn:
+      bridge-mappings:
+      - localnet: physnet
+        bridge: br-ex
+        state: present
+```
+
+Then you can launch a test using the localnet interface:
+```bash
+./bin/amd64/k8s-netperf --vm --pod=false --localnet physnet
+```
+
+By default, it will read the `localnetNetwork.json` file from the git repository. If the default IP addresses (192.168.200.10/24 and 192.168.200.11/24) are not available for your setup, it is possible to change it by passing a JSON file as a parameter with `--localnet-config`, like follow:
+```bash
+k8s-netperf --vm --pod=false --localnet physnet --localnet-config /path/to/my/localnetConfig.json
+```
+
+> Note: `--localnet` is mutually exclusive with `--bridge`, `--sriov`, `--macvlan`, `--ib-write-bw`, `--hostNet` and UDN flags (`--udnl2`, `--udnl3`, `--cudn`).
+
+
 ## Privileged pods
 
 If your use case requires running pods with privileged security context, use the `--privileged` flag:
