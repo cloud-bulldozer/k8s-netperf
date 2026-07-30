@@ -119,7 +119,7 @@ jobs:
             '  - curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"' \
             '  - chmod +x /usr/local/bin/kubectl' \
             '  - kubectl label node kind-control-plane node-role.kubernetes.io/worker=""' \
-            '  - k8s-netperf --config /tmp/roce.yml --privileged --ib-write-bw rxe0:1 --hostNet --local' \
+            '  - k8s-netperf --config /tmp/roce.yml --privileged --ib-write-bw rxe0:1 --hostNet --local --debug' \
             '  - echo "=== RDMA + Podman + Kind + k8s-netperf completed successfully! ==="' \
             '  - echo "✅ RDMA device created"' \
             '  - echo "✅ Podman available"' \

@@ -62,6 +62,7 @@ type PerfScenarios struct {
 	SriovNetwork        string
 	MacvlanNetwork      string
 	IbWriteBwParams     string
+	UseCuda             string
 	Sockets             uint32
 	Cores               uint32
 	Threads             uint32
