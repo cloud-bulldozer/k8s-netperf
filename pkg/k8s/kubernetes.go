@@ -109,7 +109,7 @@ const SriovNadName = "sriov-netperf"
 const SriovPolicyName = "sriov-netperf-policy"
 const sriovOperatorNamespace = "openshift-sriov-network-operator"
 const MacvlanNadName = "macvlan-netperf"
-const netperfNamespaceLabel = "test-namespace"
+const netperfNamespaceLabel = "k8s-netperf"
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
