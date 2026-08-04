@@ -5,6 +5,7 @@ import (
 	encodeJson "encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -379,9 +380,12 @@ var rootCmd = &cobra.Command{
 			if localnet != "" {
 				s.LocalnetServerNetwork, s.LocalnetClientNetwork, err = parseLocalnetNetworkConfig(localnetConfig)
 				if err != nil {
-					log.Error(err)
+				    log.Fatalf("Failed to parse localnet config: %v", err)
 				}
 				log.Debugf("Localnet parsed: serverNetwork=%s, clientNetwork=%s", s.LocalnetServerNetwork, s.LocalnetClientNetwork)
+				if s.DClient == nil {
+					log.Fatal("Failed to create dynamic client for localnet CUDN deployment")
+				}
 				err = k8s.DeployLocalnetCUDN(s.DClient, localnet)
 				if err != nil {
 					log.Error(err)
@@ -729,11 +733,12 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 	if localnet != "" {
 		dynClient, err := dynamic.NewForConfig(rconfig)
 		if err != nil {
+		    log.Errorf("Skipping localnet CUDN cleanup: failed to create dynamic client: %v", err)
+		} else {
+		   err = k8s.DestroyCUdn(dynClient, k8s.LocalnetCudnName)
+		   if err != nil {
 			log.Error(err)
-		}
-		err = k8s.DestroyCUdn(dynClient, k8s.LocalnetCudnName)
-		if err != nil {
-			log.Error(err)
+		   }
 		}
 	}
 	err := k8s.DestroyNamespace(client)
@@ -803,8 +808,24 @@ func parseLocalnetNetworkConfig(jsonFile string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("error parsing JSON: %v", err)
 	}
+	if err := validateCIDR(netConfig.LocalnetServerNetwork, "localnetServerNetwork"); err != nil {
+		return "", "", err
+	}
+	if err := validateCIDR(netConfig.LocalnetClientNetwork, "localnetClientNetwork"); err != nil {
+		return "", "", err
+	}
 
 	return netConfig.LocalnetServerNetwork, netConfig.LocalnetClientNetwork, nil
+}
+
+func validateCIDR(value, field string) error {
+	if value == "" {
+		return fmt.Errorf("%s must not be empty", field)
+	}
+	if _, _, err := net.ParseCIDR(value); err != nil {
+		return fmt.Errorf("%s must be a valid CIDR (got %q): %w", field, value, err)
+	}
+	return nil
 }
 
 // executeWorkload runs the workload and returns (result.Data, bool).
@@ -823,6 +844,14 @@ func executeWorkload(nc config.Config,
 	if serverIPAddr != "" {
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
+	} else if s.LocalnetNetwork != "" {
+		// Prefer localnet over Service so service-enabled configs still exercise the localnet interface.
+		if s.LocalnetServerNetwork == "" {
+			log.Fatal("localnet server network not configured: ensure localnetNetwork.json is valid when using --localnet")
+		}
+		serverIP = strings.Split(s.LocalnetServerNetwork, "/")[0]
+		log.Debugf("Using localnet network IP: %s", serverIP)
+		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetNetwork)
 	} else if nc.Service {
 		switch driverName {
 		case "iperf3":
@@ -898,13 +927,6 @@ func executeWorkload(nc config.Config,
 		}
 		log.Debugf("Using MACVLAN network IP: %s", serverIP)
 		npr.MacvlanInfo = fmt.Sprintf("macvlan/%s", s.MacvlanNetwork)
-	} else if s.LocalnetNetwork != "" {
-		if s.LocalnetServerNetwork == "" {
-			log.Fatal("localnet server network not configured: ensure localnetNetwork.json is valid when using --localnet")
-		}
-		serverIP = strings.Split(s.LocalnetServerNetwork, "/")[0]
-		log.Debugf("Using localnet network IP: %s", serverIP)
-		npr.LocalnetInfo = fmt.Sprintf("localnet/%s", s.LocalnetNetwork)
 	} else {
 		if virt {
 			serverIP = s.VMServer.Items[0].Status.PodIP
