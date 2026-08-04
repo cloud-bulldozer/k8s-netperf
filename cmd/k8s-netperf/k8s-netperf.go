@@ -380,7 +380,7 @@ var rootCmd = &cobra.Command{
 			if localnet != "" {
 				s.LocalnetServerNetwork, s.LocalnetClientNetwork, err = parseLocalnetNetworkConfig(localnetConfig)
 				if err != nil {
-				    log.Fatalf("Failed to parse localnet config: %v", err)
+					log.Fatalf("Failed to parse localnet config: %v", err)
 				}
 				log.Debugf("Localnet parsed: serverNetwork=%s, clientNetwork=%s", s.LocalnetServerNetwork, s.LocalnetClientNetwork)
 				if s.DClient == nil {
@@ -733,12 +733,12 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 	if localnet != "" {
 		dynClient, err := dynamic.NewForConfig(rconfig)
 		if err != nil {
-		    log.Errorf("Skipping localnet CUDN cleanup: failed to create dynamic client: %v", err)
+			log.Errorf("Skipping localnet CUDN cleanup: failed to create dynamic client: %v", err)
 		} else {
-		   err = k8s.DestroyCUdn(dynClient, k8s.LocalnetCudnName)
-		   if err != nil {
-			log.Error(err)
-		   }
+			err = k8s.DestroyCUdn(dynClient, k8s.LocalnetCudnName)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 	}
 	err := k8s.DestroyNamespace(client)
