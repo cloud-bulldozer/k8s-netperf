@@ -104,10 +104,12 @@ const hostNetClientRole = "host-client"
 const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const UdnName = "udn-primary-netperf"
 const CudnName = "cudn-secondary-netperf"
+const LocalnetCudnName = "cudn-localnet-netperf"
 const SriovNadName = "sriov-netperf"
 const SriovPolicyName = "sriov-netperf-policy"
 const sriovOperatorNamespace = "openshift-sriov-network-operator"
 const MacvlanNadName = "macvlan-netperf"
+const netperfNamespaceLabel = "k8s-netperf"
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
@@ -248,7 +250,7 @@ func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 				Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
 		} else {
 			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
-				Labels: map[string]string{"netperf": "test-namespace"}}}, metav1.CreateOptions{})
+				Labels: map[string]string{namespace: netperfNamespaceLabel}}}, metav1.CreateOptions{})
 		}
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create namespace: %v", err)
@@ -387,7 +389,7 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 			"spec": map[string]interface{}{
 				"namespaceSelector": map[string]interface{}{
 					"matchLabels": map[string]interface{}{
-						"netperf": "test-namespace",
+						namespace: netperfNamespaceLabel,
 					},
 				},
 				"network": map[string]interface{}{
@@ -425,6 +427,50 @@ func DeployCUDN(dynamicClient *dynamic.DynamicClient, cudn string) error {
 	_, err := dynamicClient.Resource(gvr).Create(context.TODO(), cudnObj, metav1.CreateOptions{})
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// DeployLocalnetCUDN creates a ClusterUserDefinedNetwork with topology: Localnet.
+func DeployLocalnetCUDN(dynamicClient *dynamic.DynamicClient, externalNetworkName string) error {
+	log.Infof("Deploying localnet CUDN for external network: %s", externalNetworkName)
+	if externalNetworkName == "" {
+		return fmt.Errorf("externalNetworkName cannot be empty")
+	}
+	cudnObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k8s.ovn.org/v1",
+			"kind":       "ClusterUserDefinedNetwork",
+			"metadata": map[string]interface{}{
+				"name": LocalnetCudnName,
+			},
+			"spec": map[string]interface{}{
+				"namespaceSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						namespace: netperfNamespaceLabel,
+					},
+				},
+				"network": map[string]interface{}{
+					"topology": "Localnet",
+					"localnet": map[string]interface{}{
+						"role":                "Secondary",
+						"physicalNetworkName": externalNetworkName,
+						"ipam": map[string]interface{}{
+							"mode": "Disabled",
+						},
+					},
+				},
+			},
+		},
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    "k8s.ovn.org",
+		Version:  "v1",
+		Resource: "clusteruserdefinednetworks",
+	}
+	_, err := dynamicClient.Resource(gvr).Create(context.TODO(), cudnObj, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to create localnet CUDN: %v", err)
 	}
 	return nil
 }
@@ -1321,6 +1367,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 // launchServerVM will create the ServerVM with the specific node and pod affinity.
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+		perf.LocalnetNetwork != "", perf.LocalnetServerNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err
@@ -1349,6 +1396,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 // launchClientVM will create the ClientVM with the specific node and pod affinity.
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
+		perf.LocalnetNetwork != "", perf.LocalnetClientNetwork,
 		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
 	if err != nil {
 		return err

@@ -62,6 +62,7 @@ type Doc struct {
 	BridgeInfo         string           `json:"bridgeInfo"`
 	SriovInfo          string           `json:"sriovInfo"`
 	MacvlanInfo        string           `json:"macvlanInfo"`
+	LocalnetInfo       string           `json:"localnetInfo"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -141,6 +142,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			BridgeInfo:         r.BridgeInfo,
 			SriovInfo:          r.SriovInfo,
 			MacvlanInfo:        r.MacvlanInfo,
+			LocalnetInfo:       r.LocalnetInfo,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
@@ -189,6 +191,7 @@ func commonCsvHeaderFields() []string {
 		"Bridge Info",
 		"SR-IOV Info",
 		"Macvlan Info",
+		"Localnet Info",
 		"Duration",
 		"Parallelism",
 		"# of Samples",
@@ -217,6 +220,7 @@ func commonCsvDataFields(row result.Data) []string {
 		fmt.Sprint(row.BridgeInfo),
 		fmt.Sprint(row.SriovInfo),
 		fmt.Sprint(row.MacvlanInfo),
+		fmt.Sprint(row.LocalnetInfo),
 		strconv.Itoa(row.Duration),
 		strconv.Itoa(row.Parallelism),
 		strconv.Itoa(row.Samples),
