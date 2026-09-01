@@ -7,7 +7,7 @@ require (
 	github.com/cloud-bulldozer/go-commons/v2 v2.3.4
 	github.com/google/uuid v1.6.0
 	github.com/melbahja/goph v1.4.0
-	github.com/montanaflynn/stats v0.7.0
+	github.com/montanaflynn/stats v0.12.5
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/prometheus/common v0.67.5
 	github.com/sirupsen/logrus v1.9.4
