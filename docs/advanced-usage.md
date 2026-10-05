@@ -24,6 +24,20 @@ If the two above are in place, users can orhestrate k8s-netperf to launch VMs by
 k8s-netperf --vm
 ```
 
+## Pod RuntimeClass (e.g., Kata)
+
+For pod benchmarks, `--runtime-class NAME` sets the pod `runtimeClassName`, for example:
+
+```bash
+k8s-netperf --runtime-class kata
+```
+
+`--runtime-class` is pod-only and cannot be used with `--pod=false` or `--hostNet`.
+When running all scenarios with `--all`, k8s-netperf applies the runtime class only to
+pod-network workloads; host-network workloads always use the cluster's default runtime.
+If the RuntimeClass does not exist on the cluster, the run fails fast with the
+deployment admission error.
+
 ## Using User Defined Network - UDN (only on OCP 4.18 and above)
 To run k8s-netperf using a UDN primary network for the test instead of the default network of OVN-k:
 

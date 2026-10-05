@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,6 +44,7 @@ type DeploymentParams struct {
 	Port               int
 	NetworkAnnotations map[string]string
 	ResourceRequests   corev1.ResourceList
+	RuntimeClass       string
 }
 
 // ServiceParams describes the service specific details
@@ -110,6 +112,7 @@ const SriovPolicyName = "sriov-netperf-policy"
 const sriovOperatorNamespace = "openshift-sriov-network-operator"
 const MacvlanNadName = "macvlan-netperf"
 const netperfNamespaceLabel = "k8s-netperf"
+const deploymentReadyTimeout = 11 * time.Minute
 
 // ValidateBridgeNetwork validates that the specified bridge namespace and NetworkAttachmentDefinition exist
 func ValidateBridgeNetwork(client *kubernetes.Clientset, dyn dynamic.Interface, bridgeNetwork, bridgeNamespace string) error {
@@ -703,6 +706,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
 		}
+		if !cdp.HostNetwork {
+			cdp.RuntimeClass = s.RuntimeClass
+		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
@@ -792,6 +798,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
+		}
+		if !cdp.HostNetwork {
+			cdp.RuntimeClass = s.RuntimeClass
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -972,6 +981,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
+		RuntimeClass:       s.RuntimeClass,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
@@ -1149,6 +1159,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		if s.HostNetwork {
 			sdp.HostNetwork = true
 		}
+	}
+	if !sdp.HostNetwork {
+		sdp.RuntimeClass = s.RuntimeClass
 	}
 	if z != "" {
 		var affinity corev1.NodeAffinity
@@ -1469,27 +1482,81 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (corev1
 	return pods, nil
 }
 
-// WaitForReady accepts the client and deployment params to determine which pods to watch.
-// It will return a bool based on if the pods ever become ready before we move on.
-func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
+// WaitForReady waits for a Deployment to have a ready replica or report a failure.
+func WaitForReady(c kubernetes.Interface, dp DeploymentParams) (bool, error) {
 	log.Infof("⏰ Checking for %s Pods to become ready...", dp.Name)
-	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), deploymentReadyTimeout)
+	defer cancel()
+
+	deployments := c.AppsV1().Deployments(dp.Namespace)
+	deployment, err := deployments.Get(ctx, dp.Name, metav1.GetOptions{})
+	if err != nil {
+		return false, err
+	}
+	if err := deploymentFailureError(deployment, dp); err != nil {
+		return false, err
+	}
+	if deployment.Status.ReadyReplicas == 1 {
+		return true, nil
+	}
+
+	dw, err := deployments.Watch(ctx, metav1.ListOptions{
+		FieldSelector:   "metadata.name=" + dp.Name,
+		ResourceVersion: deployment.ResourceVersion,
+	})
 	if err != nil {
 		return false, err
 	}
 	defer dw.Stop()
-	for event := range dw.ResultChan() {
-		d, ok := event.Object.(*appsv1.Deployment)
-		if !ok {
-			log.Error("❌ Issue with the Deployment")
-		}
-		if d.Name == dp.Name {
+	for {
+		select {
+		case <-ctx.Done():
+			return false, deploymentReadyTimeoutError(dp)
+		case event, ok := <-dw.ResultChan():
+			if !ok {
+				return false, fmt.Errorf("deployment watch closed before deployment %q became ready", dp.Name)
+			}
+			if event.Type == watch.Error {
+				return false, fmt.Errorf("watching deployment %q: %w", dp.Name, apierrors.FromObject(event.Object))
+			}
+			if event.Type == watch.Deleted {
+				return false, fmt.Errorf("deployment %q in namespace %q was deleted before becoming ready", dp.Name, dp.Namespace)
+			}
+			d, ok := event.Object.(*appsv1.Deployment)
+			if !ok {
+				log.Error("❌ Issue with the Deployment")
+				continue
+			}
+			if d.Name != dp.Name {
+				continue
+			}
+			if err := deploymentFailureError(d, dp); err != nil {
+				return false, err
+			}
 			if d.Status.ReadyReplicas == 1 {
 				return true, nil
 			}
 		}
 	}
-	return false, fmt.Errorf("❌ Deployment had issues")
+}
+
+func deploymentReadyTimeoutError(dp DeploymentParams) error {
+	return fmt.Errorf("timed out waiting %s for deployment %q in namespace %q to become ready with image %q; inspect pod events for image pull failures", deploymentReadyTimeout, dp.Name, dp.Namespace, dp.Image)
+}
+
+func deploymentFailureError(d *appsv1.Deployment, dp DeploymentParams) error {
+	for _, condition := range d.Status.Conditions {
+		switch {
+		case condition.Type == appsv1.DeploymentReplicaFailure && condition.Status == corev1.ConditionTrue:
+			if dp.RuntimeClass != "" && strings.Contains(strings.ToLower(condition.Message), "runtimeclass") {
+				return fmt.Errorf("deployment %q failed to create pod workload with runtime class %q (%s): %s", d.Name, dp.RuntimeClass, condition.Reason, condition.Message)
+			}
+			return fmt.Errorf("deployment %q failed to create pods (%s): %s", d.Name, condition.Reason, condition.Message)
+		case condition.Type == appsv1.DeploymentProgressing && condition.Status == corev1.ConditionFalse:
+			return fmt.Errorf("deployment %q did not become ready (%s): %s; workload may be unschedulable", d.Name, condition.Reason, condition.Message)
+		}
+	}
+	return nil
 }
 
 func areNodesLabeled(c *kubernetes.Clientset) bool {
@@ -1564,7 +1631,10 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	}
 	log.Infof("🚀 Starting Deployment for: %s in namespace: %s", dp.Name, dp.Namespace)
 	dc := client.AppsV1().Deployments(dp.Namespace)
+	return dc.Create(context.TODO(), newDeployment(dp), metav1.CreateOptions{})
+}
 
+func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 	// Add containers to deployment
 	var cmdContainers []corev1.Container
 	for i := 0; i < len(dp.Commands); i++ {
@@ -1621,6 +1691,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 					TerminationGracePeriodSeconds: ptr.To(int64(1)),
 					ServiceAccountName:            sa,
 					HostNetwork:                   dp.HostNetwork,
+					RuntimeClassName:              deploymentRuntimeClassName(dp),
 					Containers:                    cmdContainers,
 					Affinity: &corev1.Affinity{
 						NodeAffinity:    &dp.NodeAffinity,
@@ -1631,7 +1702,24 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			},
 		},
 	}
-	return dc.Create(context.TODO(), deployment, metav1.CreateOptions{})
+	return deployment
+}
+
+func runtimeClassName(name string) *string {
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+// deploymentRuntimeClassName applies runtime classes only to pod-network workloads.
+// BuildSUT keeps host-network DeploymentParams free of a runtime class; this guard also
+// protects callers that construct DeploymentParams directly.
+func deploymentRuntimeClassName(dp DeploymentParams) *string {
+	if dp.HostNetwork {
+		return nil
+	}
+	return runtimeClassName(dp.RuntimeClass)
 }
 
 // GetPodNodeInfo collects the node information for a node running a pod with a specific label

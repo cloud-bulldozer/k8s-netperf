@@ -109,6 +109,7 @@ Flags:
       --csv                       Archive results, cluster and benchmark metrics in CSV files (default true)
       --serverIP string           External Server IP Address
       --privileged                Run pods with privileged security context
+      --runtime-class string      RuntimeClass for benchmark pods
   -h, --help                      help for k8s-netperf
 ```
 
@@ -124,5 +125,7 @@ Flags:
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 - `--ib-write-bw $NIC:$GID` will enable the ib-write-bw load driver for any stream UDP_STREAM tests. ib_write_bw doesn't have CRR test-type.
+- `--runtime-class NAME` sets `spec.runtimeClassName` on benchmark pod-network workloads (e.g., `kata`). It requires pod execution and is rejected with `--pod=false` or `--hostNet`. Host-network workloads always use the cluster's default runtime.
+- Deployment readiness is bounded by an 11-minute timeout; failures such as an unavailable RuntimeClass or unschedulable workload abort the run with the deployment condition reason and message.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*
