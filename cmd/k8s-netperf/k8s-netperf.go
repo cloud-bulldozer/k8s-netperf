@@ -199,6 +199,10 @@ var rootCmd = &cobra.Command{
 			uid = u.String()
 		}
 
+		if json {
+			log.SetError()
+		}
+
 		if debug {
 			log.SetDebug()
 		}
