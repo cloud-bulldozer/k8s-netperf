@@ -115,7 +115,7 @@ Flags:
 ## Flag Details
 
 - `--across` will force the client to be across availability zones from the server
-- `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. Only output to the screen will be the result JSON or errors.
+- `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. It also writes the same complete payload, including TCP retransmissions and UDP loss, to `result-<timestamp>.json`. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
 - `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
 - `--prom` accepts a string (URL). Example  http://localhost:9090

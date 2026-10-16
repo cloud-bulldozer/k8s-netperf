@@ -1027,7 +1027,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&uperf, "uperf", false, "Use uperf as load driver (default false)")
 	rootCmd.Flags().StringVar(&ibWriteBw, "ib-write-bw", "", "Use ib_write_bw as load driver, requires nic:gid format (e.g., mlx5_0:0, requires --hostNet)")
 	rootCmd.Flags().BoolVar(&clean, "clean", true, "Clean-up resources created by k8s-netperf (default true)")
-	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout (default false)")
+	rootCmd.Flags().BoolVar(&json, "json", false, "Instead of human-readable output, return JSON to stdout and archive it to a file (default false)")
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")
 	rootCmd.Flags().BoolVar(&pod, "pod", true, "Run tests using pods (default true)")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Run tests using Virtual Machines (default false)")

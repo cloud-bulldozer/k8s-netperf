@@ -109,6 +109,8 @@ k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drive
 ### Output to CSV
 `k8s-netperf` will write a csv file, after it has completed the desired performance tests.
 
+When `--json` is passed, `k8s-netperf` also writes `result-<timestamp>.json`. The file contains the same payload written to stdout, including averaged throughput, latency, TCP retransmissions, UDP loss, system metrics, node information, and topology metadata.
+
 Example output:
 ```csv
 Driver,Profile,Same node,Host Network,Service,External Server,Duration,Parallelism,# of Samples,Message Size,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
