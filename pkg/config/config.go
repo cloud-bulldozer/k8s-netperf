@@ -48,7 +48,10 @@ type PerfScenarios struct {
 	Configs               []Config
 	Pod                   bool
 	VM                    bool
+	PodImage              string
 	VMImage               string
+	OfflineDataVolume     string
+	OfflineDataVolumeNS   string
 	VMHost                string
 	VMName                string
 	UseVirtctl            bool
@@ -69,6 +72,7 @@ type PerfScenarios struct {
 	Cores                 uint32
 	Threads               uint32
 	RequestedDrivers      []string
+	RunUUID               string
 	ServerNodeInfo        metrics.NodeInfo
 	ClientNodeInfo        metrics.NodeInfo
 	Client                apiv1.PodList
