@@ -24,6 +24,17 @@ If the two above are in place, users can orhestrate k8s-netperf to launch VMs by
 k8s-netperf --vm
 ```
 
+## Workload annotations and labels
+
+Use `--annotation KEY=VALUE` repeatedly to add the same annotations to every benchmark pod template or VMI. k8s-netperf rejects empty, malformed, duplicate, and tool-managed annotation keys so it can preserve its Istio and network configuration.
+
+Use `--label KEY=VALUE` repeatedly to add labels to every benchmark pod template or VMI. Label keys and values must be valid Kubernetes labels. Empty, malformed, or duplicate labels are rejected before resources are created. The `app` and `role` labels are managed by k8s-netperf for workload and service selection, so they cannot be supplied with `--label`.
+
+```bash
+k8s-netperf --label example.com/team=networking --label environment=staging \
+  --annotation example.com/policy-test=enabled
+```
+
 ## Using User Defined Network - UDN (only on OCP 4.18 and above)
 To run k8s-netperf using a UDN primary network for the test instead of the default network of OVN-k:
 
