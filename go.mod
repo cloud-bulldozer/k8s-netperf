@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
-	github.com/cloud-bulldozer/go-commons/v2 v2.3.4
+	github.com/cloud-bulldozer/go-commons/v2 v2.3.9
 	github.com/google/uuid v1.6.0
 	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.7.0
