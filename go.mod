@@ -11,7 +11,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/prometheus/common v0.67.5
 	github.com/sirupsen/logrus v1.9.4
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.47.0
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
