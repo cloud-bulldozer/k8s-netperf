@@ -79,6 +79,7 @@ var (
 	cores             uint32
 	threads           uint32
 	privileged        bool
+	runtimeClass      string
 )
 
 var rootCmd = &cobra.Command{
@@ -102,6 +103,9 @@ var rootCmd = &cobra.Command{
 		ibWriteBwEnabled := cmd.Flags().Changed("ib-write-bw")
 		if ibWriteBwEnabled && strings.TrimSpace(ibWriteBw) == "" {
 			log.Fatalf("😭 --ib-write-bw requires nic:gid parameter (e.g., --ib-write-bw=mlx5_0:0)")
+		}
+		if err := validateRuntimeClass(runtimeClass, cmd.Flags().Changed("runtime-class"), pod, hostNetOnly); err != nil {
+			log.Fatal(err)
 		}
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
@@ -276,6 +280,7 @@ var rootCmd = &cobra.Command{
 			Cores:           cores,
 			Threads:         threads,
 			Privileged:      privileged,
+			RuntimeClass:    runtimeClass,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -681,6 +686,23 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// validateRuntimeClass validates that a RuntimeClass selection applies to pod-network workloads only.
+func validateRuntimeClass(runtimeClass string, runtimeClassSet bool, pod bool, hostNetOnly bool) error {
+	if !runtimeClassSet {
+		return nil
+	}
+	if strings.TrimSpace(runtimeClass) == "" {
+		return fmt.Errorf("--runtime-class requires a non-empty value for pod workloads")
+	}
+	if !pod {
+		return fmt.Errorf("--runtime-class applies to pod workloads; --pod=false disables pod execution")
+	}
+	if hostNetOnly {
+		return fmt.Errorf("--runtime-class cannot be used with --hostNet; runtime classes apply only to pod-network workloads")
+	}
+	return nil
+}
+
 func applyClusterDistribution(pcon *metrics.PromConnect, distribution string) {
 	switch distribution {
 	case ocpmetadata.DistributionOpenShift:
@@ -1063,6 +1085,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files (default true)")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
 	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context (default false)")
+	rootCmd.Flags().StringVar(&runtimeClass, "runtime-class", "", "RuntimeClass for benchmark pods")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)

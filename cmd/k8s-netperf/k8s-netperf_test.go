@@ -125,3 +125,29 @@ func TestShouldDiscoverPrometheus(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRuntimeClass(t *testing.T) {
+	testCases := []struct {
+		name            string
+		runtimeClass    string
+		runtimeClassSet bool
+		pod             bool
+		hostNetOnly     bool
+		wantErr         bool
+	}{
+		{name: "pod runtime class", runtimeClass: "kata", runtimeClassSet: true, pod: true},
+		{name: "empty runtime class", runtimeClassSet: true, pod: true, wantErr: true},
+		{name: "runtime class with pods disabled", runtimeClass: "kata", runtimeClassSet: true, wantErr: true},
+		{name: "runtime class with host network only", runtimeClass: "kata", runtimeClassSet: true, pod: true, hostNetOnly: true, wantErr: true},
+		{name: "runtime class not set"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateRuntimeClass(tc.runtimeClass, tc.runtimeClassSet, tc.pod, tc.hostNetOnly)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateRuntimeClass() error = %v, wantErr %t", err, tc.wantErr)
+			}
+		})
+	}
+}
