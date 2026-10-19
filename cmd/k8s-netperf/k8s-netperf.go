@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -79,6 +80,8 @@ var (
 	cores             uint32
 	threads           uint32
 	privileged        bool
+	annotations       []string
+	workloadLabels    []string
 )
 
 var rootCmd = &cobra.Command{
@@ -102,6 +105,14 @@ var rootCmd = &cobra.Command{
 		ibWriteBwEnabled := cmd.Flags().Changed("ib-write-bw")
 		if ibWriteBwEnabled && strings.TrimSpace(ibWriteBw) == "" {
 			log.Fatalf("😭 --ib-write-bw requires nic:gid parameter (e.g., --ib-write-bw=mlx5_0:0)")
+		}
+		workloadAnnotations, err := parseAnnotations(annotations)
+		if err != nil {
+			log.Fatal(err)
+		}
+		labels, err := parseLabels(workloadLabels)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
@@ -276,6 +287,8 @@ var rootCmd = &cobra.Command{
 			Cores:           cores,
 			Threads:         threads,
 			Privileged:      privileged,
+			Annotations:     workloadAnnotations,
+			Labels:          labels,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
@@ -681,6 +694,64 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+var managedAnnotationKeys = map[string]struct{}{
+	"sidecar.istio.io/inject":           {},
+	"k8s.v1.cni.cncf.io/networks":       {},
+	"k8s.v1.cni.cncf.io/network-status": {},
+	"k8s.ovn.org/pod-networks":          {},
+}
+
+// managedLabelKeys are used to locate benchmark workloads and must remain under tool control.
+var managedLabelKeys = map[string]struct{}{
+	"app":  {},
+	"role": {},
+}
+
+func parseLabels(values []string) (map[string]string, error) {
+	labels := make(map[string]string, len(values))
+	for _, value := range values {
+		key, labelValue, found := strings.Cut(value, "=")
+		if !found || strings.TrimSpace(key) == "" || strings.TrimSpace(labelValue) == "" {
+			return nil, fmt.Errorf("invalid --label value %q; expected non-empty KEY=VALUE", value)
+		}
+		if validationErrors := validation.IsQualifiedName(key); len(validationErrors) != 0 {
+			return nil, fmt.Errorf("invalid --label key %q: %s", key, strings.Join(validationErrors, ", "))
+		}
+		if validationErrors := validation.IsValidLabelValue(labelValue); len(validationErrors) != 0 {
+			return nil, fmt.Errorf("invalid --label value %q: %s", labelValue, strings.Join(validationErrors, ", "))
+		}
+		if _, managed := managedLabelKeys[key]; managed {
+			return nil, fmt.Errorf("--label key %q is managed by k8s-netperf", key)
+		}
+		if _, duplicate := labels[key]; duplicate {
+			return nil, fmt.Errorf("duplicate --label key %q", key)
+		}
+		labels[key] = labelValue
+	}
+	return labels, nil
+}
+
+func parseAnnotations(values []string) (map[string]string, error) {
+	annotations := make(map[string]string, len(values))
+	for _, value := range values {
+		key, annotationValue, found := strings.Cut(value, "=")
+		if !found || strings.TrimSpace(key) == "" || strings.TrimSpace(annotationValue) == "" {
+			return nil, fmt.Errorf("invalid --annotation value %q; expected non-empty KEY=VALUE", value)
+		}
+		if validationErrors := validation.IsQualifiedName(key); len(validationErrors) != 0 {
+			return nil, fmt.Errorf("invalid --annotation key %q: %s", key, strings.Join(validationErrors, ", "))
+		}
+		if _, managed := managedAnnotationKeys[key]; managed {
+			return nil, fmt.Errorf("--annotation key %q is managed by k8s-netperf", key)
+		}
+		if _, duplicate := annotations[key]; duplicate {
+			return nil, fmt.Errorf("duplicate --annotation key %q", key)
+		}
+		annotations[key] = annotationValue
+	}
+	return annotations, nil
+}
+
 func applyClusterDistribution(pcon *metrics.PromConnect, distribution string) {
 	switch distribution {
 	case ocpmetadata.DistributionOpenShift:
@@ -1063,6 +1134,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files (default true)")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
 	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context (default false)")
+	rootCmd.Flags().StringArrayVar(&annotations, "annotation", nil, "Add KEY=VALUE annotation to benchmark pods and VMIs (repeatable)")
+	rootCmd.Flags().StringArrayVar(&workloadLabels, "label", nil, "Add KEY=VALUE label to benchmark pods and VMIs (repeatable)")
 	rootCmd.Flags().SortFlags = false
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)

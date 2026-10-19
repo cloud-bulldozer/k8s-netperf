@@ -7,6 +7,93 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 )
 
+func TestParseAnnotations(t *testing.T) {
+	testCases := []struct {
+		name    string
+		values  []string
+		want    map[string]string
+		wantErr bool
+	}{
+		{name: "multiple annotations", values: []string{"example.com/one=value", "example.com/two=value=with=equals"}, want: map[string]string{"example.com/one": "value", "example.com/two": "value=with=equals"}},
+		{name: "missing separator", values: []string{"example.com/key"}, wantErr: true},
+		{name: "empty key", values: []string{"=value"}, wantErr: true},
+		{name: "empty value", values: []string{"example.com/key="}, wantErr: true},
+		{name: "whitespace-only key", values: []string{"   =value"}, wantErr: true},
+		{name: "whitespace-only value", values: []string{"example.com/key=   "}, wantErr: true},
+		{name: "malformed key", values: []string{"not a key=value"}, wantErr: true},
+		{name: "duplicate key", values: []string{"example.com/key=one", "example.com/key=two"}, wantErr: true},
+		{name: "managed istio key", values: []string{"sidecar.istio.io/inject=false"}, wantErr: true},
+		{name: "managed network key", values: []string{"k8s.v1.cni.cncf.io/networks=netperf/network"}, wantErr: true},
+		{name: "managed generated network status key", values: []string{"k8s.v1.cni.cncf.io/network-status=netperf/network"}, wantErr: true},
+		{name: "managed ovn network key", values: []string{"k8s.ovn.org/pod-networks=netperf/network"}, wantErr: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseAnnotations(tc.values)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("parseAnnotations() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseAnnotations() error = %v", err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("parseAnnotations() = %#v, want %#v", got, tc.want)
+			}
+			for key, want := range tc.want {
+				if got[key] != want {
+					t.Errorf("parseAnnotations()[%q] = %q, want %q", key, got[key], want)
+				}
+			}
+		})
+	}
+}
+
+func TestParseLabels(t *testing.T) {
+	testCases := []struct {
+		name    string
+		values  []string
+		want    map[string]string
+		wantErr bool
+	}{
+		{name: "multiple labels", values: []string{"example.com/team=networking", "environment=test"}, want: map[string]string{"example.com/team": "networking", "environment": "test"}},
+		{name: "missing separator", values: []string{"example.com/team"}, wantErr: true},
+		{name: "empty key", values: []string{"=value"}, wantErr: true},
+		{name: "empty value", values: []string{"example.com/team="}, wantErr: true},
+		{name: "invalid key", values: []string{"not a key=value"}, wantErr: true},
+		{name: "invalid value", values: []string{"example.com/team=not a value"}, wantErr: true},
+		{name: "duplicate key", values: []string{"example.com/team=one", "example.com/team=two"}, wantErr: true},
+		{name: "managed role selector", values: []string{"role=server"}, wantErr: true},
+		{name: "managed app selector", values: []string{"app=server"}, wantErr: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseLabels(tc.values)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("parseLabels() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLabels() error = %v", err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("parseLabels() = %#v, want %#v", got, tc.want)
+			}
+			for key, want := range tc.want {
+				if got[key] != want {
+					t.Errorf("parseLabels()[%q] = %q, want %q", key, got[key], want)
+				}
+			}
+		})
+	}
+}
+
 func TestApplyClusterDistributionSetsPrometheusFlags(t *testing.T) {
 	testCases := []struct {
 		name       string

@@ -45,6 +45,8 @@ type PerfScenarios struct {
 	HostNetworkOnly       bool
 	ExternalServer        bool
 	Privileged            bool
+	Annotations           map[string]string
+	Labels                map[string]string
 	Configs               []Config
 	Pod                   bool
 	VM                    bool

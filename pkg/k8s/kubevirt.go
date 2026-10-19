@@ -162,7 +162,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
 	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
-	cudn bool, localnet bool, localnetNetwork string, sriovNetwork string, sockets uint32, cores uint32, threads uint32) (string, error) {
+	cudn bool, localnet bool, localnetNetwork string, sriovNetwork string, sockets uint32, cores uint32, threads uint32, annotations, workloadLabels map[string]string) (string, error) {
 	log.Debugf("CreateVMClient: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
@@ -316,7 +316,7 @@ ethernets:
 			},
 		})
 	}
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
+	_, err = CreateVMI(kclient, name, mergeLabels(label, workloadLabels), b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads, annotations)
 	if err != nil {
 		return "", err
 	}
@@ -339,7 +339,7 @@ ethernets:
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
 	localnet bool, localnetNetwork string,
-	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32, annotations, workloadLabels map[string]string) (*v1.VirtualMachineInstance, error) {
 	log.Debugf("CreateVMServer: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
@@ -494,13 +494,20 @@ ethernets:
 			},
 		})
 	}
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
+	return CreateVMI(client, name, mergeLabels(label, workloadLabels), b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads, annotations)
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
 	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
-	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32, annotations map[string]string) (*v1.VirtualMachineInstance, error) {
+	vmi := newVMI(name, label, b64data, podAff, nodeAff, vmimage, interfaces, networks, netDatab64, sriovNetwork, sockets, cores, threads, annotations)
+	return client.VirtualMachineInstances(namespace).Create(context.TODO(), vmi, metav1.CreateOptions{})
+}
+
+func newVMI(name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
+	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32, annotations map[string]string) *v1.VirtualMachineInstance {
 	delSeconds := int64(0)
 	mutliQ := true
 	resourceRequests := corev1.ResourceList{
@@ -510,15 +517,16 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 	if sriovNetwork != "" {
 		resourceRequests[corev1.ResourceName("openshift.io/"+sriovNetwork)] = resource.MustParse("1")
 	}
-	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
+	vmi := &v1.VirtualMachineInstance{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: v1.GroupVersion.String(),
 			Kind:       "VirtualMachineInstance",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    label,
+			Name:        name,
+			Namespace:   namespace,
+			Labels:      label,
+			Annotations: annotations,
 		},
 		Spec: v1.VirtualMachineInstanceSpec{
 			Affinity: &corev1.Affinity{
@@ -571,11 +579,8 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 				},
 			},
 		},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		return vmi, err
 	}
-	return vmi, nil
+	return vmi
 }
 
 // WaitForVMI will wait until the resource is in Running state.

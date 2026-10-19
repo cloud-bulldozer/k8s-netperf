@@ -109,6 +109,8 @@ Flags:
       --csv                       Archive results, cluster and benchmark metrics in CSV files (default true)
       --serverIP string           External Server IP Address
       --privileged                Run pods with privileged security context
+      --annotation stringArray    Add KEY=VALUE annotation to benchmark pods and VMIs (repeatable)
+      --label stringArray         Add KEY=VALUE label to benchmark pods and VMIs (repeatable)
   -h, --help                      help for k8s-netperf
 ```
 
@@ -124,5 +126,7 @@ Flags:
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 - `--ib-write-bw $NIC:$GID` will enable the ib-write-bw load driver for any stream UDP_STREAM tests. ib_write_bw doesn't have CRR test-type.
+- `--annotation KEY=VALUE` adds an annotation to every benchmark pod template and VMI. Repeat the option to stack multiple annotations; values may contain `=`. Empty, malformed, duplicate, and k8s-netperf-managed keys (Istio and network configuration annotations) are rejected before workloads are created.
+- `--label KEY=VALUE` adds a label to every benchmark pod template and VMI. Repeat the option to stack multiple labels. Keys and values must be valid Kubernetes labels; empty, malformed, or duplicate labels are rejected. The `app` and `role` labels are managed by k8s-netperf for workload and service selection and cannot be supplied.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*

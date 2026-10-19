@@ -42,6 +42,8 @@ type DeploymentParams struct {
 	NodeAffinity       corev1.NodeAffinity
 	Port               int
 	NetworkAnnotations map[string]string
+	Annotations        map[string]string
+	WorkloadLabels     map[string]string
 	ResourceRequests   corev1.ResourceList
 }
 
@@ -702,6 +704,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
+			Annotations:        s.Annotations,
+			WorkloadLabels:     s.Labels,
 		}
 
 		cdp.NodeAffinity = corev1.NodeAffinity{
@@ -792,6 +796,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
+			Annotations:        s.Annotations,
+			WorkloadLabels:     s.Labels,
 		}
 		if z != "" && numNodes > 1 {
 			cdp.NodeAffinity = corev1.NodeAffinity{
@@ -972,21 +978,25 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
+		Annotations:        s.Annotations,
+		WorkloadLabels:     s.Labels,
 	}
 	cdpAcross.PodAntiAffinity = corev1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 	}
 
 	cdpHostAcross := DeploymentParams{
-		Name:        "client-host",
-		Namespace:   "netperf",
-		Replicas:    1,
-		HostNetwork: true,
-		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetClientRole},
-		Commands:    [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
-		Port:        NetperfServerCtlPort,
-		Privileged:  s.Privileged,
+		Name:           "client-host",
+		Namespace:      "netperf",
+		Replicas:       1,
+		HostNetwork:    true,
+		Image:          k8sNetperfImage,
+		Labels:         map[string]string{"role": hostNetClientRole},
+		Commands:       [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
+		Port:           NetperfServerCtlPort,
+		Privileged:     s.Privileged,
+		Annotations:    s.Annotations,
+		WorkloadLabels: s.Labels,
 	}
 	if z != "" {
 		if numNodes > 1 {
@@ -1118,15 +1128,17 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	}
 
 	sdpHost := DeploymentParams{
-		Name:        "server-host",
-		Namespace:   "netperf",
-		Replicas:    1,
-		HostNetwork: true,
-		Image:       k8sNetperfImage,
-		Labels:      map[string]string{"role": hostNetServerRole},
-		Commands:    dpCommands,
-		Port:        NetperfServerCtlPort,
-		Privileged:  s.Privileged,
+		Name:           "server-host",
+		Namespace:      "netperf",
+		Replicas:       1,
+		HostNetwork:    true,
+		Image:          k8sNetperfImage,
+		Labels:         map[string]string{"role": hostNetServerRole},
+		Commands:       dpCommands,
+		Port:           NetperfServerCtlPort,
+		Privileged:     s.Privileged,
+		Annotations:    s.Annotations,
+		WorkloadLabels: s.Labels,
 	}
 	// Start netperf server
 	sdp := DeploymentParams{
@@ -1140,6 +1152,8 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
+		Annotations:        s.Annotations,
+		WorkloadLabels:     s.Labels,
 	}
 	if s.NodeLocal {
 		sdp.PodAffinity = corev1.PodAffinity{
@@ -1368,7 +1382,7 @@ func ExtractUdnIp(pod corev1.Pod, networkName string) (string, error) {
 func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	_, err := CreateVMServer(perf.KClient, name, name, *podAff, *nodeAff, perf.VMImage, perf.BridgeServerNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.LocalnetNetwork != "", perf.LocalnetServerNetwork,
-		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
+		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads, perf.Annotations, perf.Labels)
 	if err != nil {
 		return err
 	}
@@ -1397,7 +1411,7 @@ func launchServerVM(perf *config.PerfScenarios, name string, podAff *corev1.PodA
 func launchClientVM(perf *config.PerfScenarios, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity) error {
 	host, err := CreateVMClient(perf.KClient, perf.ClientSet, perf.DClient, name, podAff, nodeAff, perf.VMImage, perf.BridgeClientNetwork, perf.Udn, perf.UdnPluginBinding, perf.Cudn,
 		perf.LocalnetNetwork != "", perf.LocalnetClientNetwork,
-		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads)
+		perf.SriovNetwork, perf.Sockets, perf.Cores, perf.Threads, perf.Annotations, perf.Labels)
 	if err != nil {
 		return err
 	}
@@ -1558,13 +1572,37 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	d, err := client.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err == nil {
 		if d.Status.ReadyReplicas > 0 {
+			if !deploymentTemplateMetadataMatches(d, dp) {
+				return nil, fmt.Errorf("deployment %q already exists with different annotations or labels; rerun with --clean to recreate the workload", dp.Name)
+			}
 			log.Info("♻️  Using existing Deployment")
 			return d, nil
 		}
 	}
 	log.Infof("🚀 Starting Deployment for: %s in namespace: %s", dp.Name, dp.Namespace)
 	dc := client.AppsV1().Deployments(dp.Namespace)
+	return dc.Create(context.TODO(), newDeployment(dp), metav1.CreateOptions{})
+}
 
+// deploymentTemplateMetadataMatches reports whether an existing Deployment's
+// pod template already carries every requested annotation and label. Reusing a
+// Deployment whose template lacks them would silently drop --annotation/--label
+// values requested for the run.
+func deploymentTemplateMetadataMatches(d *appsv1.Deployment, dp DeploymentParams) bool {
+	for key, value := range dp.Annotations {
+		if d.Spec.Template.Annotations[key] != value {
+			return false
+		}
+	}
+	for key, value := range dp.WorkloadLabels {
+		if d.Spec.Template.Labels[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 	// Add containers to deployment
 	var cmdContainers []corev1.Container
 	for i := 0; i < len(dp.Commands); i++ {
@@ -1595,10 +1633,12 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 		cmdContainers = append(cmdContainers, container)
 	}
 
-	// Merge network annotations with default annotations
-	annotations := map[string]string{
-		"sidecar.istio.io/inject": "true",
+	// Apply tool-managed annotations last so callers cannot override required behavior.
+	annotations := make(map[string]string, len(dp.Annotations)+len(dp.NetworkAnnotations)+1)
+	for k, v := range dp.Annotations {
+		annotations[k] = v
 	}
+	annotations["sidecar.istio.io/inject"] = "true"
 	for k, v := range dp.NetworkAnnotations {
 		annotations[k] = v
 	}
@@ -1614,7 +1654,7 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      dp.Labels,
+					Labels:      mergeLabels(dp.Labels, dp.WorkloadLabels),
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -1631,7 +1671,20 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			},
 		},
 	}
-	return dc.Create(context.TODO(), deployment, metav1.CreateOptions{})
+	return deployment
+}
+
+// mergeLabels returns a copy of custom labels with managed labels applied last.
+// This keeps selectors stable even if a caller bypasses CLI validation.
+func mergeLabels(managed, custom map[string]string) map[string]string {
+	labels := make(map[string]string, len(managed)+len(custom))
+	for key, value := range custom {
+		labels[key] = value
+	}
+	for key, value := range managed {
+		labels[key] = value
+	}
+	return labels
 }
 
 // GetPodNodeInfo collects the node information for a node running a pod with a specific label
