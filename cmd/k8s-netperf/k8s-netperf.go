@@ -55,6 +55,8 @@ var (
 	pod               bool
 	vm                bool
 	vmimage           string
+	image             string
+	offlineDataVolume string
 	useVirtctl        bool
 	debug             bool
 	bridge            string
@@ -102,6 +104,10 @@ var rootCmd = &cobra.Command{
 		ibWriteBwEnabled := cmd.Flags().Changed("ib-write-bw")
 		if ibWriteBwEnabled && strings.TrimSpace(ibWriteBw) == "" {
 			log.Fatalf("😭 --ib-write-bw requires nic:gid parameter (e.g., --ib-write-bw=mlx5_0:0)")
+		}
+		offlineDataVolumeNS, offlineDataVolumeName, err := validateAirGappedOptions(image, cmd.Flags().Changed("image"), vmimage, cmd.Flags().Changed("vm-image"), offlineDataVolume, vm)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
@@ -255,30 +261,44 @@ var rootCmd = &cobra.Command{
 			log.Warnf("Cluster metadata client unavailable: %v", err)
 		}
 		if clean {
-			cleanup(client, rconfig)
+			cleanup(client, rconfig, offlineDataVolumeNS == "netperf")
 		}
 		s := config.PerfScenarios{
-			HostNetwork:     full || hostNetOnly,
-			HostNetworkOnly: hostNetOnly,
-			NodeLocal:       nl,
-			AcrossAZ:        acrossAZ,
-			RestConfig:      *rconfig,
-			Configs:         cfg,
-			ClientSet:       client,
-			BridgeNetwork:   bridge,
-			BridgeNamespace: bridgeNamespace,
-			SriovNetwork:    sriov,
-			MacvlanNetwork:  macvlan,
-			LocalnetNetwork: localnet,
-			Cudn:            cudn != "",
-			IbWriteBwParams: ibWriteBw,
-			Sockets:         sockets,
-			Cores:           cores,
-			Threads:         threads,
-			Privileged:      privileged,
+			HostNetwork:         full || hostNetOnly,
+			HostNetworkOnly:     hostNetOnly,
+			NodeLocal:           nl,
+			AcrossAZ:            acrossAZ,
+			RestConfig:          *rconfig,
+			Configs:             cfg,
+			ClientSet:           client,
+			BridgeNetwork:       bridge,
+			BridgeNamespace:     bridgeNamespace,
+			SriovNetwork:        sriov,
+			MacvlanNetwork:      macvlan,
+			LocalnetNetwork:     localnet,
+			Cudn:                cudn != "",
+			IbWriteBwParams:     ibWriteBw,
+			Sockets:             sockets,
+			Cores:               cores,
+			Threads:             threads,
+			Privileged:          privileged,
+			PodImage:            image,
+			OfflineDataVolume:   offlineDataVolumeName,
+			OfflineDataVolumeNS: offlineDataVolumeNS,
+			RunUUID:             uid,
 		}
 		if serverIPAddr != "" {
 			s.ExternalServer = true
+		}
+		if s.OfflineDataVolume != "" {
+			dynClient, err := dynamic.NewForConfig(rconfig)
+			if err != nil {
+				log.Fatal(err)
+			}
+			s.DClient = dynClient
+			if err := k8s.ValidateOfflineDataVolume(context.Background(), s.DClient, s.OfflineDataVolumeNS, s.OfflineDataVolume); err != nil {
+				log.Fatal(err)
+			}
 		}
 		// Get node count
 		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
@@ -542,6 +562,15 @@ var rootCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 			s.VMClientExecutor = vmClient
+			if s.OfflineDataVolume != "" {
+				if err := k8s.ValidateOfflineVMPrerequisites(vmClient, s.RequestedDrivers, s.Configs); err != nil {
+					log.Fatal(err)
+				}
+				vmServer := k8s.NewVirtctlClient("vm-server", "netperf")
+				if err := k8s.ValidateOfflineVMServerPrerequisites(vmServer, s.RequestedDrivers, s.Configs); err != nil {
+					log.Fatal(err)
+				}
+			}
 
 			for _, nc := range s.Configs {
 				// Determine the metric for the test
@@ -671,7 +700,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		if clean {
-			cleanup(client, rconfig)
+			cleanup(client, rconfig, s.OfflineDataVolumeNS == "netperf")
 		}
 		// Cleanup extracted virtctl binary if any
 		if err := virtctl.CleanupExtractedBinary(); err != nil {
@@ -679,6 +708,30 @@ var rootCmd = &cobra.Command{
 		}
 		os.Exit(retCode)
 	},
+}
+
+// validateAirGappedOptions validates complete image overrides and offline VM disk selection.
+func validateAirGappedOptions(image string, imageSet bool, vmImage string, vmImageSet bool, offlineDataVolume string, vm bool) (string, string, error) {
+	if imageSet && strings.TrimSpace(image) == "" {
+		return "", "", fmt.Errorf("--image requires a non-empty complete image reference")
+	}
+	if vmImageSet && strings.TrimSpace(vmImage) == "" {
+		return "", "", fmt.Errorf("--vm-image requires a non-empty complete image reference")
+	}
+	if offlineDataVolume == "" {
+		return "", "", nil
+	}
+	if !vm {
+		return "", "", fmt.Errorf("--offline-data-volume applies to VM workloads; enable --vm")
+	}
+	if vmImageSet {
+		return "", "", fmt.Errorf("--offline-data-volume and an explicitly selected --vm-image are mutually exclusive")
+	}
+	ns, name, found := strings.Cut(offlineDataVolume, "/")
+	if !found || strings.TrimSpace(ns) == "" || strings.TrimSpace(name) == "" || strings.Contains(name, "/") {
+		return "", "", fmt.Errorf("--offline-data-volume must use NAMESPACE/NAME")
+	}
+	return ns, name, nil
 }
 
 func applyClusterDistribution(pcon *metrics.PromConnect, distribution string) {
@@ -709,7 +762,7 @@ func shouldDiscoverPrometheus(distribution, promURL string, metadataAgentAvailab
 	}
 }
 
-func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
+func cleanup(client *kubernetes.Clientset, rconfig *rest.Config, preserveOfflineSource bool) {
 	if cudn != "" {
 		dynClient, err := dynamic.NewForConfig(rconfig)
 		if err != nil {
@@ -741,7 +794,17 @@ func cleanup(client *kubernetes.Clientset, rconfig *rest.Config) {
 			}
 		}
 	}
-	err := k8s.DestroyNamespace(client)
+	var err error
+	if preserveOfflineSource {
+		dynClient, dynErr := dynamic.NewForConfig(rconfig)
+		if dynErr != nil {
+			log.Errorf("Skipping offline clone cleanup: failed to create dynamic client: %v", dynErr)
+		} else {
+			err = k8s.DestroyBenchmarkResources(client, dynClient)
+		}
+	} else {
+		err = k8s.DestroyNamespace(client)
+	}
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)
@@ -1031,7 +1094,9 @@ func main() {
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")
 	rootCmd.Flags().BoolVar(&pod, "pod", true, "Run tests using pods (default true)")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Run tests using Virtual Machines (default false)")
+	rootCmd.Flags().StringVar(&image, "image", "", "Complete benchmark pod image reference")
 	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image (default quay.io/containerdisks/fedora:39)")
+	rootCmd.Flags().StringVar(&offlineDataVolume, "offline-data-volume", "", "Offline VM source DataVolume in NAMESPACE/NAME")
 	rootCmd.Flags().BoolVar(&useVirtctl, "use-virtctl", false, "Use virtctl ssh for VM connections instead of traditional SSH (default false)")
 	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM (default 2)")
 	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM (default 2)")

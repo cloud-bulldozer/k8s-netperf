@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,11 +18,12 @@ import (
 	"github.com/melbahja/goph"
 	"golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	v1 "kubevirt.io/api/core/v1"
@@ -30,6 +32,16 @@ import (
 var (
 	sshPort = uint(32022)
 	retry   = 30
+	// vmiStartTimeout bounds all VMI startup waits, including asynchronous PVC cloning.
+	vmiStartTimeout  = 10 * time.Minute
+	vmiPVCBackoff    = time.Second
+	vmiPVCMaxBackoff = 30 * time.Second
+
+	offlineVMPrerequisiteTimeout    = 10 * time.Minute
+	offlineVMPrerequisiteBackoff    = time.Second
+	offlineVMPrerequisiteMaxBackoff = 30 * time.Second
+	virtctlSSHRetries               = 3
+	virtctlSSHRetryDelay            = 5 * time.Second
 )
 
 // connect will attempt to connect via ssh to the guest. The VM can take a while for sshkeys to be injected
@@ -92,6 +104,7 @@ func createCommService(client *kubernetes.Clientset, label map[string]string, na
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels:    benchmarkResourceLabels(label),
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -113,12 +126,6 @@ func createCommService(client *kubernetes.Clientset, label map[string]string, na
 
 // exposeService will create a route for the ssh nodeport service.
 func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicClient, svcName string) (string, error) {
-	gvr := schema.GroupVersionResource{
-		Group:    "route.openshift.io",
-		Version:  "v1",
-		Resource: "routes",
-	}
-
 	route := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "route.openshift.io/v1",
@@ -126,6 +133,7 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 			"metadata": map[string]interface{}{
 				"name":      fmt.Sprintf("svc-%s-route", svcName),
 				"namespace": namespace,
+				"labels":    map[string]interface{}{benchmarkManagedLabel: "true"},
 			},
 			"spec": map[string]interface{}{
 				"port": map[string]interface{}{
@@ -140,11 +148,11 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 			},
 		},
 	}
-	route, err := dynamicClient.Resource(gvr).Namespace(namespace).Create(context.TODO(), route, metav1.CreateOptions{})
+	route, err := dynamicClient.Resource(routeGVR).Namespace(namespace).Create(context.TODO(), route, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to create route: %v", err)
 	}
-	retrievedRoute, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(context.TODO(), route.GetName(), metav1.GetOptions{})
+	retrievedRoute, err := dynamicClient.Resource(routeGVR).Namespace(namespace).Get(context.TODO(), route.GetName(), metav1.GetOptions{})
 	if err != nil {
 		log.Fatalf("error retrieving route: %v", err)
 	}
@@ -161,8 +169,8 @@ func exposeService(client *kubernetes.Clientset, dynamicClient *dynamic.DynamicC
 
 // CreateVMClient takes in the affinity rules and deploys the VMI
 func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Clientset,
-	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string,
-	cudn bool, localnet bool, localnetNetwork string, sriovNetwork string, sockets uint32, cores uint32, threads uint32) (string, error) {
+	dyn *dynamic.DynamicClient, name string, podAff *corev1.PodAntiAffinity, nodeAff *corev1.NodeAffinity, vmimage, diskDataVolume, bridgeNetwork string, udn bool, udnPluginBinding string,
+	cudn bool, localnet bool, localnetNetwork string, sriovNetwork string, sockets uint32, cores uint32, threads uint32, requestedDrivers []string, configs []config.Config) (string, error) {
 	log.Debugf("CreateVMClient: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
@@ -176,7 +184,7 @@ func CreateVMClient(kclient *kubevirtv1.KubevirtV1Client, client *kubernetes.Cli
 	if err != nil {
 		return "", err
 	}
-	netData := "{}"
+	netData := ""
 	data := fmt.Sprintf(`#cloud-config
 users:
   - name: fedora
@@ -205,6 +213,9 @@ runcmd:
   - curl -o /usr/bin/super-netperf https://raw.githubusercontent.com/cloud-bulldozer/k8s-netperf/main/containers/super-netperf
   - chmod 0777 /usr/bin/super-netperf
 `, ssh)
+	if diskDataVolume != "" {
+		data = offlineClientCloudInit(string(ssh), requestedDrivers, configs)
+	}
 	interfaces := []v1.Interface{
 		{
 			Name: "default",
@@ -316,7 +327,7 @@ ethernets:
 			},
 		})
 	}
-	_, err = CreateVMI(kclient, name, label, b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
+	_, err = CreateVMI(kclient, name, benchmarkResourceLabels(label), b64.StdEncoding.EncodeToString([]byte(data)), *podAff, *nodeAff, vmimage, diskDataVolume, interfaces, networks, networkDataBase64(netData), sriovNetwork, sockets, cores, threads)
 	if err != nil {
 		return "", err
 	}
@@ -337,15 +348,15 @@ ethernets:
 
 // CreateVMServer will take the pod and node affinity and deploy the VMI
 func CreateVMServer(client *kubevirtv1.KubevirtV1Client, name string, role string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
+	nodeAff corev1.NodeAffinity, vmimage, diskDataVolume, bridgeNetwork string, udn bool, udnPluginBinding string, cudn bool,
 	localnet bool, localnetNetwork string,
-	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32, requestedDrivers []string, configs []config.Config) (*v1.VirtualMachineInstance, error) {
 	log.Debugf("CreateVMServer: localnet=%v, localnetNetwork=%s", localnet, localnetNetwork)
 	label := map[string]string{
 		"app":  name,
 		"role": role,
 	}
-	netData := "{}"
+	netData := ""
 	dirname, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -383,6 +394,9 @@ runcmd:
   - iperf3 -s -p %d &
   - netserver &
 `, string(ssh), UperfServerCtlPort, IperfServerCtlPort)
+	if diskDataVolume != "" {
+		data = offlineServerCloudInit(string(ssh), requestedDrivers, configs)
+	}
 	interfaces := []v1.Interface{
 		{
 			Name: "default",
@@ -494,13 +508,158 @@ ethernets:
 			},
 		})
 	}
-	return CreateVMI(client, name, label, b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, interfaces, networks, b64.StdEncoding.EncodeToString([]byte(netData)), sriovNetwork, sockets, cores, threads)
+	return CreateVMI(client, name, benchmarkResourceLabels(label), b64.StdEncoding.EncodeToString([]byte(data)), podAff, nodeAff, vmimage, diskDataVolume, interfaces, networks, networkDataBase64(netData), sriovNetwork, sockets, cores, threads)
+}
+
+func networkDataBase64(networkData string) string {
+	if strings.TrimSpace(networkData) == "" || strings.TrimSpace(networkData) == "{}" {
+		return ""
+	}
+	return b64.StdEncoding.EncodeToString([]byte(networkData))
+}
+
+func offlineClientCloudInit(sshKey string, drivers []string, configs []config.Config) string {
+	return fmt.Sprintf(`#cloud-config
+ssh_pwauth: false
+disable_root: true
+users:
+  - name: fedora
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: true
+    ssh_authorized_keys:
+      - %s
+runcmd:
+  - sh -c 'install -d /etc/ssh/sshd_config.d; printf "PasswordAuthentication no\\nPermitRootLogin no\\n" > /etc/ssh/sshd_config.d/99-k8s-netperf-security.conf; systemctl reload sshd || true'
+  - sh -c '%s'
+`, sshKey, offlinePrerequisiteCommand(false, drivers, configs))
+}
+
+func offlineServerCloudInit(sshKey string, drivers []string, configs []config.Config) string {
+	commands := []string{
+		`sh -c 'install -d /etc/ssh/sshd_config.d; printf "PasswordAuthentication no\nPermitRootLogin no\n" > /etc/ssh/sshd_config.d/99-k8s-netperf-security.conf; systemctl reload sshd || true'`,
+		fmt.Sprintf("sh -c '%s'", offlinePrerequisiteCommand(true, drivers, configs)),
+	}
+	if containsDriver(drivers, "uperf") {
+		if requiresUperfHistogram(configs) {
+			commands = append(commands, fmt.Sprintf("/opt/uperf-histogram/bin/uperf -s -v -P %d &", UperfLatServerCtlPort))
+		}
+		if requiresRegularUperf(configs) {
+			commands = append(commands, fmt.Sprintf("uperf -s -v -P %d &", UperfServerCtlPort))
+		}
+	}
+	if containsDriver(drivers, "iperf3") {
+		commands = append(commands, fmt.Sprintf("iperf3 -s -p %d &", IperfServerCtlPort))
+	}
+	if containsDriver(drivers, "netperf") {
+		commands = append(commands, "netserver &")
+	}
+	return fmt.Sprintf(`#cloud-config
+ssh_pwauth: false
+disable_root: true
+users:
+  - name: fedora
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: true
+    ssh_authorized_keys:
+      - %s
+%s`, sshKey, cloudInitCommands(commands))
+}
+
+func offlinePrerequisiteCommand(server bool, drivers []string, configs []config.Config) string {
+	tools := offlineVMTools(server, drivers, configs)
+	checks := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool == "/opt/uperf-histogram/bin/uperf" {
+			checks = append(checks, fmt.Sprintf("test -x %s || { echo offline-prerequisite-missing:%s; exit 1; }", tool, tool))
+			continue
+		}
+		checks = append(checks, fmt.Sprintf("command -v %s || { echo offline-prerequisite-missing:%s; exit 1; }", tool, tool))
+	}
+	return strings.Join(checks, "; ")
+}
+
+func cloudInitCommands(commands []string) string {
+	var b strings.Builder
+	b.WriteString("runcmd:\n")
+	for _, command := range commands {
+		fmt.Fprintf(&b, "  - %s\n", command)
+	}
+	return b.String()
+}
+
+func offlineVMTools(server bool, drivers []string, configs []config.Config) []string {
+	tools := make([]string, 0, len(drivers)+1)
+	for _, driver := range drivers {
+		switch driver {
+		case "netperf":
+			if server {
+				tools = append(tools, "netserver")
+			} else {
+				tools = append(tools, "netperf", "super-netperf")
+			}
+		case "iperf3":
+			tools = append(tools, "iperf3")
+		case "uperf":
+			if requiresUperfHistogram(configs) {
+				tools = append(tools, "/opt/uperf-histogram/bin/uperf")
+			}
+			if requiresRegularUperf(configs) {
+				tools = append(tools, "uperf")
+			}
+		}
+	}
+	return tools
+}
+
+func containsDriver(drivers []string, wanted string) bool {
+	for _, driver := range drivers {
+		if driver == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func requiresUperfHistogram(configs []config.Config) bool {
+	for _, cfg := range configs {
+		if cfg.Profile == "TCP_STREAM_LAT" {
+			return true
+		}
+	}
+	return false
+}
+
+func requiresRegularUperf(configs []config.Config) bool {
+	if len(configs) == 0 {
+		return true
+	}
+	for _, cfg := range configs {
+		if cfg.Profile != "TCP_STREAM_LAT" {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateVMI creates the desired Virtual Machine instance with the cloud-init config with affinity.
 func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
-	nodeAff corev1.NodeAffinity, vmimage string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
+	nodeAff corev1.NodeAffinity, vmimage, diskDataVolume string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
 	sriovNetwork string, sockets uint32, cores uint32, threads uint32) (*v1.VirtualMachineInstance, error) {
+	vmi := newVMI(name, label, b64data, podAff, nodeAff, vmimage, diskDataVolume, interfaces, networks, netDatab64, sriovNetwork, sockets, cores, threads)
+	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), vmi, metav1.CreateOptions{})
+	if err != nil {
+		return vmi, err
+	}
+	return vmi, nil
+}
+
+func newVMI(name string, label map[string]string, b64data string, podAff corev1.PodAntiAffinity,
+	nodeAff corev1.NodeAffinity, vmimage, diskDataVolume string, interfaces []v1.Interface, networks []v1.Network, netDatab64 string,
+	sriovNetwork string, sockets uint32, cores uint32, threads uint32) *v1.VirtualMachineInstance {
 	delSeconds := int64(0)
 	mutliQ := true
 	resourceRequests := corev1.ResourceList{
@@ -510,7 +669,11 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 	if sriovNetwork != "" {
 		resourceRequests[corev1.ResourceName("openshift.io/"+sriovNetwork)] = resource.MustParse("1")
 	}
-	vmi, err := client.VirtualMachineInstances(namespace).Create(context.TODO(), &v1.VirtualMachineInstance{
+	diskSource := v1.VolumeSource{ContainerDisk: &v1.ContainerDiskSource{Image: vmimage}}
+	if diskDataVolume != "" {
+		diskSource = v1.VolumeSource{DataVolume: &v1.DataVolumeSource{Name: diskDataVolume}}
+	}
+	vmi := &v1.VirtualMachineInstance{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: v1.GroupVersion.String(),
 			Kind:       "VirtualMachineInstance",
@@ -553,12 +716,8 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 			Networks: networks,
 			Volumes: []v1.Volume{
 				{
-					Name: "disk0",
-					VolumeSource: v1.VolumeSource{
-						ContainerDisk: &v1.ContainerDiskSource{
-							Image: vmimage,
-						},
-					},
+					Name:         "disk0",
+					VolumeSource: diskSource,
 				},
 				{
 					Name: "cloudinit",
@@ -571,34 +730,146 @@ func CreateVMI(client *kubevirtv1.KubevirtV1Client, name string, label map[strin
 				},
 			},
 		},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		return vmi, err
 	}
-	return vmi, nil
+	return vmi
 }
 
 // WaitForVMI will wait until the resource is in Running state.
-func WaitForVMI(client *kubevirtv1.KubevirtV1Client, name string) error {
+func WaitForVMI(client kubevirtv1.KubevirtV1Interface, name string) error {
 	log.Infof("⏰ Wating for VMI (%s) to be in state running", name)
-	vmw, err := client.VirtualMachineInstances(namespace).Watch(context.TODO(), metav1.ListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), vmiStartTimeout)
+	defer cancel()
+	vmiClient := client.VirtualMachineInstances(namespace)
+	vmi, err := vmiClient.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get VMI %s: %w", name, err)
+	}
+	if vmi.Status.Phase == v1.Running {
+		return nil
+	}
+	if err := vmiStartError(vmi); err != nil {
+		return err
+	}
+	if hasFailedPVCNotFound(vmi) {
+		return waitForFailedPVCNotFound(ctx, name, func(ctx context.Context) (*v1.VirtualMachineInstance, error) {
+			return vmiClient.Get(ctx, name, metav1.GetOptions{})
+		}, sleepWithContext)
+	}
+
+	vmw, err := vmiClient.Watch(ctx, metav1.ListOptions{ResourceVersion: vmi.ResourceVersion})
 	if err != nil {
 		return err
 	}
 	defer vmw.Stop()
-	for event := range vmw.ResultChan() {
-		d, ok := event.Object.(*v1.VirtualMachineInstance)
-		if !ok {
-			return fmt.Errorf("unable to watch VMI %s", name)
+	for {
+		select {
+		case event, ok := <-vmw.ResultChan():
+			if !ok {
+				if err := ctx.Err(); err != nil {
+					return fmt.Errorf("timed out waiting for VMI %s to run: %w", name, err)
+				}
+				return fmt.Errorf("VMI watch closed before %s was running", name)
+			}
+			if event.Type == watch.Error {
+				return fmt.Errorf("watching VMI %q: %w", name, apierrors.FromObject(event.Object))
+			}
+			if event.Type == watch.Deleted {
+				return fmt.Errorf("VMI %q was deleted before it was running", name)
+			}
+			d, ok := event.Object.(*v1.VirtualMachineInstance)
+			if !ok {
+				return fmt.Errorf("unable to watch VMI %s", name)
+			}
+			if d.Name == name {
+				log.Debugf("Found in state (%s)", d.Status.Phase)
+				if d.Status.Phase == v1.Running {
+					return nil
+				}
+				if err := vmiStartError(d); err != nil {
+					return err
+				}
+				if hasFailedPVCNotFound(d) {
+					return waitForFailedPVCNotFound(ctx, name, func(ctx context.Context) (*v1.VirtualMachineInstance, error) {
+						return vmiClient.Get(ctx, name, metav1.GetOptions{})
+					}, sleepWithContext)
+				}
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for VMI %s to run: %w", name, ctx.Err())
 		}
-		if d.Name == name {
-			log.Debugf("Found in state (%s)", d.Status.Phase)
-			if d.Status.Phase == "Running" {
-				return nil
+	}
+}
+
+// waitForFailedPVCNotFound polls after a missing clone PVC is reported. KubeVirt
+// retries this condition asynchronously, so watching alone can leave us waiting
+// on an update that never arrives. The caller owns the context deadline.
+func waitForFailedPVCNotFound(ctx context.Context, name string, get func(context.Context) (*v1.VirtualMachineInstance, error), sleep func(context.Context, time.Duration) error) error {
+	delay := vmiPVCBackoff
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("timed out waiting for VMI %s to run: %w", name, err)
+		}
+		vmi, err := get(ctx)
+		if err != nil {
+			return fmt.Errorf("get VMI %s: %w", name, err)
+		}
+		if vmi.Status.Phase == v1.Running {
+			return nil
+		}
+		if err := vmiStartError(vmi); err != nil {
+			return err
+		}
+		if err := sleep(ctx, delay); err != nil {
+			return fmt.Errorf("timed out waiting for VMI %s to run: %w", name, err)
+		}
+
+		if delay < vmiPVCMaxBackoff {
+			delay *= 2
+			if delay > vmiPVCMaxBackoff {
+				delay = vmiPVCMaxBackoff
 			}
 		}
 	}
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func vmiStartError(vmi *v1.VirtualMachineInstance) error {
+	if vmi.Status.Phase == v1.Failed {
+		if vmi.Status.Reason != "" {
+			return fmt.Errorf("VMI %s failed to start: %s", vmi.Name, vmi.Status.Reason)
+		}
+		return fmt.Errorf("VMI %s failed to start", vmi.Name)
+	}
+	for _, condition := range vmi.Status.Conditions {
+		if condition.Type == v1.VirtualMachineInstanceSynchronized && condition.Status == corev1.ConditionFalse {
+			if strings.EqualFold(condition.Reason, "FailedPvcNotfound") {
+				continue
+			}
+			return fmt.Errorf("VMI %s failed to synchronize: %s: %s", vmi.Name, condition.Reason, condition.Message)
+		}
+	}
 	return nil
+}
+
+func hasFailedPVCNotFound(vmi *v1.VirtualMachineInstance) bool {
+	for _, condition := range vmi.Status.Conditions {
+		if condition.Type == v1.VirtualMachineInstanceSynchronized &&
+			condition.Status == corev1.ConditionFalse &&
+			strings.EqualFold(condition.Reason, "FailedPvcNotfound") {
+			return true
+		}
+	}
+	return false
 }
 
 // VirtctlClient implements VMExecutor interface using virtctl ssh
@@ -632,6 +903,11 @@ func NewVirtctlClient(vmName, namespace string) *VirtctlClient {
 
 // Run executes a command on the VM using virtctl ssh
 func (v *VirtctlClient) Run(command string) ([]byte, error) {
+	return v.RunContext(context.Background(), command)
+}
+
+// RunContext executes a command on the VM using virtctl ssh until ctx is canceled.
+func (v *VirtctlClient) RunContext(ctx context.Context, command string) ([]byte, error) {
 	virtctlPath, err := virtctl.GetVirtctlPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get virtctl binary: %v", err)
@@ -641,18 +917,76 @@ func (v *VirtctlClient) Run(command string) ([]byte, error) {
 		return nil, fmt.Errorf("unable to retrieve users homedir: %v", err)
 	}
 	identityFile := fmt.Sprintf("%s/.ssh/id_rsa", dir)
-	log.Debugf("Running command %s against %s", command, v.vmName)
-	cmd := exec.Command(virtctlPath, "ssh", "--namespace", v.namespace, "--local-ssh-opts", "-o StrictHostKeyChecking=no", "--local-ssh-opts", "-o UserKnownHostsFile=/dev/null", "--identity-file", identityFile, "-c", command, fmt.Sprintf("fedora@vmi/%s", v.vmName))
-	log.Debugf("Command: %s", cmd.String())
-	stdout, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return stdout, fmt.Errorf("failed to run command: %v, stderr: %s", err, string(exitErr.Stderr))
+	log.Debugf("Running virtctl SSH command against VMI %s in namespace %s: %s", v.vmName, v.namespace, command)
+	args := virtctlSSHArgs(v.namespace, identityFile, command, v.vmName)
+	stdout, err := runVirtctlSSHWithRetries(ctx, func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, virtctlPath, args...)
+		log.Debugf("Command: %s", cmd.String())
+		stdout, err := cmd.Output()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return stdout, &virtctlSSHError{err: exitErr, stderr: string(exitErr.Stderr)}
+			}
+			return stdout, fmt.Errorf("failed to run command: %v", err)
 		}
-		return stdout, fmt.Errorf("failed to run command: %v", err)
+		return stdout, nil
+	}, sleepWithContext)
+	if err != nil {
+		return stdout, err
 	}
 	log.Debugf("Output: %s", string(stdout))
 	return stdout, nil
+}
+
+type virtctlSSHError struct {
+	err    error
+	stderr string
+}
+
+func (e *virtctlSSHError) Error() string {
+	return fmt.Sprintf("failed to run command: %v, stderr: %s", e.err, e.stderr)
+}
+
+func (e *virtctlSSHError) Unwrap() error {
+	return e.err
+}
+
+func virtctlSSHArgs(namespace, identityFile, command, vmName string) []string {
+	return []string{
+		"ssh", "--namespace", namespace,
+		"--known-hosts", "/dev/null",
+		"--local-ssh-opts", "-o BatchMode=yes",
+		"--local-ssh-opts", "-o StrictHostKeyChecking=no",
+		"--local-ssh-opts", "-o UserKnownHostsFile=/dev/null",
+		"--local-ssh-opts", "-o GlobalKnownHostsFile=/dev/null",
+		"--identity-file", identityFile,
+		"-c", command,
+		fmt.Sprintf("fedora@vmi/%s", vmName),
+	}
+}
+
+func runVirtctlSSHWithRetries(ctx context.Context, run func() ([]byte, error), sleep func(context.Context, time.Duration) error) ([]byte, error) {
+	var stdout []byte
+	var err error
+	for attempt := 0; attempt <= virtctlSSHRetries; attempt++ {
+		if err = ctx.Err(); err != nil {
+			return stdout, err
+		}
+		log.Debugf("Starting virtctl ssh attempt %d/%d", attempt+1, virtctlSSHRetries+1)
+		stdout, err = run()
+		if err == nil {
+			log.Debugf("virtctl ssh attempt %d/%d succeeded", attempt+1, virtctlSSHRetries+1)
+			return stdout, nil
+		}
+		if attempt == virtctlSSHRetries {
+			break
+		}
+		log.Debugf("virtctl ssh attempt %d/%d failed: %v; retrying in %s", attempt+1, virtctlSSHRetries+1, err, virtctlSSHRetryDelay)
+		if sleepErr := sleep(ctx, virtctlSSHRetryDelay); sleepErr != nil {
+			return stdout, sleepErr
+		}
+	}
+	return stdout, fmt.Errorf("virtctl ssh failed after %d retries: %w", virtctlSSHRetries, err)
 }
 
 // Close is a no-op for compatibility with VMExecutor interface
@@ -715,4 +1049,98 @@ func ConnectToVM(conf *config.PerfScenarios) (config.VMExecutor, error) {
 		}
 		return &SSHClientWrapper{Client: sshClient}, nil
 	}
+}
+
+// ValidateOfflineVMPrerequisites confirms that requested benchmark client tools are present in an offline guest.
+// It never installs missing software; the prepared DataVolume is the sole source of guest dependencies.
+func ValidateOfflineVMPrerequisites(executor config.VMExecutor, drivers []string, configs []config.Config) error {
+	return validateOfflineVMPrerequisites(executor, "client", false, drivers, configs)
+}
+
+// ValidateOfflineVMServerPrerequisites confirms that requested benchmark server tools are present in an offline guest.
+func ValidateOfflineVMServerPrerequisites(executor config.VMExecutor, drivers []string, configs []config.Config) error {
+	if virtctlExecutor, ok := executor.(*VirtctlClient); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), offlineVMPrerequisiteTimeout)
+		defer cancel()
+		return waitForOfflineVMServerPrerequisites(ctx, virtctlExecutor.RunContext, drivers, configs, sleepWithContext)
+	}
+	return validateOfflineVMPrerequisites(executor, "server", true, drivers, configs)
+}
+
+func validateOfflineVMPrerequisites(executor config.VMExecutor, role string, server bool, drivers []string, configs []config.Config) error {
+	return validateOfflineVMPrerequisitesWithRun(func(_ context.Context, command string) ([]byte, error) {
+		return executor.Run(command)
+	}, context.Background(), role, server, drivers, configs)
+}
+
+func validateOfflineVMPrerequisitesWithRun(run func(context.Context, string) ([]byte, error), ctx context.Context, role string, server bool, drivers []string, configs []config.Config) error {
+	tools := offlineVMTools(server, drivers, configs)
+	if len(tools) == 0 {
+		return nil
+	}
+	command := offlinePrerequisiteCommand(server, drivers, configs)
+	if output, err := run(ctx, command); err != nil {
+		if tool := offlineMissingTool(string(output)); tool != "" {
+			return fmt.Errorf("offline VM %s prerequisite missing: %s", role, tool)
+		}
+		return fmt.Errorf("offline VM %s prerequisite validation failed; prepare the source DataVolume with required benchmark software: %w (output: %s)", role, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// waitForOfflineVMServerPrerequisites waits for cloud-final through virtctl before
+// checking server tools. A VMI can report Running while cloud-init is still
+// executing the commands that install or start those tools.
+func waitForOfflineVMServerPrerequisites(ctx context.Context, run func(context.Context, string) ([]byte, error), drivers []string, configs []config.Config, sleep func(context.Context, time.Duration) error) error {
+	if len(offlineVMTools(true, drivers, configs)) == 0 {
+		return nil
+	}
+	delay := offlineVMPrerequisiteBackoff
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("offline VM server prerequisite validation timed out waiting for cloud-init: %w", err)
+		}
+
+		if output, err := run(ctx, "cloud-init status --wait"); err == nil || cloudInitRecoverableError(output, err) {
+			if err != nil {
+				log.Warnf("cloud-init completed with recoverable errors on offline VM server: %v", err)
+			}
+			return validateOfflineVMPrerequisitesWithRun(run, ctx, "server", true, drivers, configs)
+		} else if tool := offlineMissingTool(string(output)); tool != "" {
+			return fmt.Errorf("offline VM server prerequisite missing: %s", tool)
+		} else if ctx.Err() != nil {
+			return fmt.Errorf("offline VM server prerequisite validation timed out waiting for cloud-init: %w", ctx.Err())
+		} else {
+			log.Debugf("Waiting for cloud-init on offline VM server: %v", err)
+		}
+
+		if err := sleep(ctx, delay); err != nil {
+			return fmt.Errorf("offline VM server prerequisite validation timed out waiting for cloud-init: %w", err)
+		}
+		if delay < offlineVMPrerequisiteMaxBackoff {
+			delay *= 2
+			if delay > offlineVMPrerequisiteMaxBackoff {
+				delay = offlineVMPrerequisiteMaxBackoff
+			}
+		}
+	}
+}
+
+func cloudInitRecoverableError(output []byte, err error) bool {
+	var virtctlErr *virtctlSSHError
+	if !errors.As(err, &virtctlErr) {
+		return false
+	}
+	var exitErr interface{ ExitCode() int }
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1 &&
+		(strings.Contains(string(output), "exit status 2") || strings.Contains(virtctlErr.stderr, "exit status 2"))
+}
+
+func offlineMissingTool(output string) string {
+	const marker = "offline-prerequisite-missing:"
+	_, tool, found := strings.Cut(strings.TrimSpace(output), marker)
+	if !found || len(strings.Fields(tool)) == 0 {
+		return ""
+	}
+	return strings.Fields(tool)[0]
 }

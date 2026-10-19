@@ -92,8 +92,8 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 			createdClient = true
 		}
 		for i := 0; i <= retry; i++ {
-			log.Debug("⏰ Waiting for netperf to be present on VM")
-			_, err = vmClient.Run("until which netperf; do sleep 30; done")
+			log.Debug("⏰ Waiting for netperf and super-netperf to be present on VM")
+			_, err = vmClient.Run("until command -v netperf && command -v super-netperf; do sleep 30; done")
 			if err == nil {
 				present = true
 				break
@@ -108,7 +108,7 @@ func (n *netperf) Run(c *kubernetes.Clientset, rc rest.Config, nc config.Config,
 					log.Warnf("Error closing VM client: %v", err)
 				}
 			}
-			return stdout, fmt.Errorf("netperf binary is not present on the VM")
+			return stdout, fmt.Errorf("netperf or super-netperf is not present on the VM")
 		}
 		var stdout []byte
 		ran := false

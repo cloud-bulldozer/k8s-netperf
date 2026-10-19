@@ -109,6 +109,8 @@ Flags:
       --csv                       Archive results, cluster and benchmark metrics in CSV files (default true)
       --serverIP string           External Server IP Address
       --privileged                Run pods with privileged security context
+      --image string              Complete benchmark pod image reference
+      --offline-data-volume string  Offline VM source DataVolume in NAMESPACE/NAME
   -h, --help                      help for k8s-netperf
 ```
 
@@ -124,5 +126,24 @@ Flags:
 - `--iperf` will enable the iperf3 load driver for any stream test (TCP_STREAM, UDP_STREAM). iperf3 doesn't have a RR or CRR test-type.
 - `--uperf` will enable the uperf load driver for any stream test (TCP_STREAM, UDP_STREAM). uperf doesn't have CRR test-type.
 - `--ib-write-bw $NIC:$GID` will enable the ib-write-bw load driver for any stream UDP_STREAM tests. ib_write_bw doesn't have CRR test-type.
+- `--image IMAGE` uses the complete pod image reference verbatim for every benchmark pod. Use this
+  for mirrors whose repository paths differ from upstream.
+- `--vm-image IMAGE` uses the complete container-disk image reference verbatim for online VM runs.
+- `--offline-data-volume NAMESPACE/NAME` uses a ready source DataVolume for VM benchmarks. It may be in
+  any namespace, cannot be combined with an explicitly selected `--vm-image`, and is preserved during
+  cleanup while only benchmark-owned clones are removed.
+
+## Air-gapped registry mirrors
+
+Mirror the required benchmark pod image and, for online VM runs, the VM container-disk image. Supply
+the complete final image references; k8s-netperf does not rewrite paths or fall back to public
+registries:
+
+```shell
+$ k8s-netperf --image mirror.example.local/bench/netperf:v1
+$ k8s-netperf --vm --pod=false --vm-image mirror.example.local/vm/fedora-netperf:v1
+```
+
+If an image cannot be pulled, Kubernetes reports the exact supplied reference in the workload event.
 
 > *Note: With OpenShift, we attempt to discover the OpenShift route. If that route is not reachable, it might be required to `port-forward` the service and pass that via the `--prom` option.*

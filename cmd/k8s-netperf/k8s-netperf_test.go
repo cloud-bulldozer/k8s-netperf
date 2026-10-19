@@ -7,6 +7,37 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/metrics"
 )
 
+func TestValidateAirGappedOptions(t *testing.T) {
+	tests := []struct {
+		name, image, vmImage, offline, wantNamespace, wantName string
+		imageSet, vmImageSet, vm                               bool
+		wantErr                                                bool
+	}{
+		{name: "image override is verbatim", image: "mirror.local/path/netperf:tag", imageSet: true, vm: true},
+		{name: "offline DataVolume", offline: "operator-images/prepared", vm: true, wantNamespace: "operator-images", wantName: "prepared"},
+		{name: "offline DataVolume requires VM", offline: "operator-images/prepared", wantErr: true},
+		{name: "offline DataVolume conflicts with explicit VM image", vmImage: "mirror.local/vm:tag", vmImageSet: true, offline: "operator-images/prepared", vm: true, wantErr: true},
+		{name: "malformed DataVolume", offline: "prepared", vm: true, wantErr: true},
+		{name: "DataVolume has empty namespace", offline: "/prepared", vm: true, wantErr: true},
+		{name: "DataVolume has empty name", offline: "operator-images/", vm: true, wantErr: true},
+		{name: "DataVolume has extra path separator", offline: "operator-images/prepared/extra", vm: true, wantErr: true},
+		{name: "benchmark namespace source allowed", offline: "netperf/prepared", vm: true, wantNamespace: "netperf", wantName: "prepared"},
+		{name: "empty explicit image", imageSet: true, vm: true, wantErr: true},
+		{name: "empty explicit VM image", vmImageSet: true, vm: true, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ns, name, err := validateAirGappedOptions(tc.image, tc.imageSet, tc.vmImage, tc.vmImageSet, tc.offline, tc.vm)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateAirGappedOptions() error = %v, wantErr %t", err, tc.wantErr)
+			}
+			if ns != tc.wantNamespace || name != tc.wantName {
+				t.Errorf("DataVolume = %s/%s, want %s/%s", ns, name, tc.wantNamespace, tc.wantName)
+			}
+		})
+	}
+}
+
 func TestApplyClusterDistributionSetsPrometheusFlags(t *testing.T) {
 	testCases := []struct {
 		name       string
