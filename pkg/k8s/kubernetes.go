@@ -269,7 +269,22 @@ func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 			return fmt.Errorf("😥 Unable to create service account: %v", err)
 		}
 	}
-	rBinding := &v1.RoleBinding{
+	rBinding := netperfRoleBinding()
+	_, err = client.RbacV1().RoleBindings(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
+	if err == nil {
+		log.Infof("♻️ Role binding already exists, reusing it")
+	} else {
+		_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
+		}
+	}
+	return nil
+}
+
+// netperfRoleBinding binds the netperf service account to the hostnetwork SCC role.
+func netperfRoleBinding() *v1.RoleBinding {
+	return &v1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      sa,
 			Namespace: namespace,
@@ -286,16 +301,6 @@ func BuildInfra(client *kubernetes.Clientset, udn bool) error {
 			},
 		},
 	}
-	_, err = client.RbacV1().RoleBindings(namespace).Get(context.TODO(), sa, metav1.GetOptions{})
-	if err == nil {
-		log.Infof("♻️ Role binding already exists, reusing it")
-	} else {
-		_, err = client.RbacV1().RoleBindings(namespace).Create(context.TODO(), rBinding, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("😥 Unable to create role-binding: %v", err)
-		}
-	}
-	return nil
 }
 
 // Create a User Defined Network for the tests
@@ -657,8 +662,6 @@ func DestroySriovResources(dyn *dynamic.DynamicClient) error {
 
 // BuildSUT Build the k8s env to run network performance tests
 func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
-	var netperfDataPorts []int32
-	var netperfVmDataPorts []int32
 	var err error
 
 	// Build SR-IOV resource requests if needed
@@ -826,140 +829,12 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
-	// Helper function to check if a driver is requested
-	containsDriver := func(drivers []string, driver string) bool {
-		for _, d := range drivers {
-			if d == driver {
-				return true
-			}
-		}
-		return false
-	}
-
 	// Debug: Print requested drivers in BuildSUT
 	log.Debugf("🔥 BuildSUT: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
 
-	// Create services only for requested drivers
-	if containsDriver(s.RequestedDrivers, "iperf3") {
-		if s.Pod {
-			// Create iperf service
-			iperfSVC := ServiceParams{
-				Name:      "iperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
-				CtlPort:   IperfServerCtlPort,
-				DataPorts: []int32{IperfServerDataPort},
-			}
-			s.IperfService, err = CreateService(iperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
-			}
-		}
-		if s.VM {
-			// Create iperf VM service
-			iperfSVC := ServiceParams{
-				Name:      "iperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
-				CtlPort:   IperfServerCtlPort,
-				DataPorts: []int32{IperfVmServerDataPort},
-			}
-			s.IperfVmService, err = CreateService(iperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
-			}
-		}
-	}
-
-	if containsDriver(s.RequestedDrivers, "uperf") {
-		if s.Pod {
-			// Create uperf service
-			uperfSVC := ServiceParams{
-				Name:      "uperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
-				CtlPort:   UperfServerCtlPort,
-				DataPorts: []int32{UperfServerDataPort},
-			}
-			s.UperfService, err = CreateService(uperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
-			}
-			// Create uperf-histogram service
-			uperfLatSVC := ServiceParams{
-				Name:      "uperf-histogram-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
-				CtlPort:   UperfLatServerCtlPort,
-				DataPorts: []int32{UperfLatServerDataPort},
-			}
-			s.UperfLatService, err = CreateService(uperfLatSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
-			}
-		}
-		if s.VM {
-			uperfSVC := ServiceParams{
-				Name:      "uperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
-				CtlPort:   UperfServerCtlPort,
-				DataPorts: []int32{UperfVmServerDataPort},
-			}
-			s.UperfVmService, err = CreateService(uperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
-			}
-			//
-			uperfLatSVC := ServiceParams{
-				Name:      "uperf-vm-histogram-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
-				CtlPort:   UperfLatServerCtlPort,
-				DataPorts: []int32{UperfLatVmServerDataPort},
-			}
-			s.UperfLatVmService, err = CreateService(uperfLatSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
-			}
-		}
-	}
-
-	if containsDriver(s.RequestedDrivers, "netperf") {
-		if s.Pod {
-			// Create netperf service
-			for i := 0; i < 16; i++ {
-				netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
-			}
-			netperfSVC := ServiceParams{
-				Name:      "netperf-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": serverRole},
-				CtlPort:   NetperfServerCtlPort,
-				DataPorts: netperfDataPorts,
-			}
-			s.NetperfService, err = CreateService(netperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
-			}
-		}
-		if s.VM {
-			// Create netperf VM service
-			for i := 0; i < 16; i++ {
-				netperfVmDataPorts = append(netperfVmDataPorts, NetperfServerDataPort+int32(i))
-			}
-			netperfSVC := ServiceParams{
-				Name:      "netperf-vm-service",
-				Namespace: "netperf",
-				Labels:    map[string]string{"role": vmServerRole},
-				CtlPort:   NetperfServerCtlPort,
-				DataPorts: netperfVmDataPorts,
-			}
-			s.NetperfVmService, err = CreateService(netperfSVC, client)
-			if err != nil {
-				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
-			}
-		}
+	err = createServices(context.TODO(), client, s, 0)
+	if err != nil {
+		return err
 	}
 	// Note: ib_write_bw doesn't need a service since it uses direct pod IP communication
 
@@ -1077,63 +952,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 
 	}
 
-	// Use separate containers for servers
-	var dpCommands [][]string
-
-	// Debug: Print requested drivers for server commands
-	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
-
-	// Add server commands only for requested drivers
-	if containsDriver(s.RequestedDrivers, "netperf") {
-		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
-	}
-	if containsDriver(s.RequestedDrivers, "iperf3") {
-		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
-	}
-	if containsDriver(s.RequestedDrivers, "uperf") {
-		// Check if any config uses TCP_STREAM_LAT profile
-		needsHistogram := false
-		for _, cfg := range s.Configs {
-			if cfg.Profile == "TCP_STREAM_LAT" {
-				needsHistogram = true
-				break
-			}
-		}
-
-		// Start uperf_histogram server only if TCP_STREAM_LAT is used
-		if needsHistogram {
-			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("/opt/uperf-histogram/bin/uperf -s -v -P %d && sleep 10000000", UperfLatServerCtlPort)})
-		}
-
-		// Always start regular uperf server for other profiles
-		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
-	}
-	if containsDriver(s.RequestedDrivers, "ib_write_bw") {
-		// Parse nic:gid parameters for ib_write_bw server
-		parts := strings.Split(s.IbWriteBwParams, ":")
-		if len(parts) != 2 {
-			log.Fatalf("Invalid ib-write-bw server config: %s", s.IbWriteBwParams)
-		}
-		device := strings.TrimSpace(parts[0])
-		gid := strings.TrimSpace(parts[1])
-		// perftest requires server and client to use identical -D values
-		ibDuration := 10
-		for _, cfg := range s.Configs {
-			if strings.EqualFold(cfg.Profile, "UDP_STREAM") {
-				ibDuration = cfg.Duration
-				break
-			}
-		}
-		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F -D %d", device, gid, ibDuration)
-		ibWriteCmd = fmt.Sprintf("while true; do %s; sleep 1; done", ibWriteCmd)
-		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
-	}
-
-	// Debug: Print final dpCommands
-	log.Debugf("🔥 Final dpCommands count: %d", len(dpCommands))
-	for i, cmd := range dpCommands {
-		log.Debugf("🔥 dpCommand[%d]: %v", i, cmd)
-	}
+	dpCommands := serverCommands(s)
 
 	sdpHost := DeploymentParams{
 		Name:           "server-host",
@@ -1869,7 +1688,22 @@ func GetPods(c *kubernetes.Clientset, label string) (corev1.PodList, error) {
 
 // CreateService will build a k8s service
 func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*corev1.Service, error) {
-	s, err := client.CoreV1().Services(sp.Namespace).Get(context.TODO(), sp.Name, metav1.GetOptions{})
+	return createService(context.TODO(), sp, client, 0)
+}
+
+// boundedCall bounds one API call by callTimeout; 0 leaves ctx unchanged.
+func boundedCall(ctx context.Context, callTimeout time.Duration) (context.Context, context.CancelFunc) {
+	if callTimeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, callTimeout)
+}
+
+// createService creates sp unless it exists. Each API call is bounded by callTimeout (0: unbounded).
+func createService(ctx context.Context, sp ServiceParams, client kubernetes.Interface, callTimeout time.Duration) (*corev1.Service, error) {
+	getCtx, cancel := boundedCall(ctx, callTimeout)
+	s, err := client.CoreV1().Services(sp.Namespace).Get(getCtx, sp.Name, metav1.GetOptions{})
+	cancel()
 	log.Debugf("Looking for service %s in namespace %s", sp.Name, sp.Namespace)
 	if err == nil {
 		log.Info("♻️  Using existing Service")
@@ -1917,7 +1751,9 @@ func CreateService(sp ServiceParams, client *kubernetes.Clientset) (*corev1.Serv
 			},
 		)
 	}
-	return sc.Create(context.TODO(), service, metav1.CreateOptions{})
+	createCtx, cancel := boundedCall(ctx, callTimeout)
+	defer cancel()
+	return sc.Create(createCtx, service, metav1.CreateOptions{})
 }
 
 // GetServices retrieve all services for a given namespoace, in this case for netperf
@@ -1982,4 +1818,206 @@ func DestroyCUdn(dynamicClient *dynamic.DynamicClient, cudn string) error {
 		PropagationPolicy:  &deletePolicy,
 		GracePeriodSeconds: &gracePeriod,
 	})
+}
+
+// createServices creates the pod and VM Services for the requested drivers; callTimeout 0 leaves calls unbounded, as in BuildSUT.
+func createServices(ctx context.Context, client kubernetes.Interface, s *config.PerfScenarios, callTimeout time.Duration) error {
+	var netperfDataPorts []int32
+	var netperfVmDataPorts []int32
+	var err error
+
+	// Create services only for requested drivers
+	if containsDriver(s.RequestedDrivers, "iperf3") {
+		if s.Pod {
+			// Create iperf service
+			iperfSVC := ServiceParams{
+				Name:      "iperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   IperfServerCtlPort,
+				DataPorts: []int32{IperfServerDataPort},
+			}
+			s.IperfService, err = createService(ctx, iperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+			}
+		}
+		if s.VM {
+			// Create iperf VM service
+			iperfSVC := ServiceParams{
+				Name:      "iperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   IperfServerCtlPort,
+				DataPorts: []int32{IperfVmServerDataPort},
+			}
+			s.IperfVmService, err = createService(ctx, iperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create iperf service: %v", err)
+			}
+		}
+	}
+
+	if containsDriver(s.RequestedDrivers, "uperf") {
+		if s.Pod {
+			// Create uperf service
+			uperfSVC := ServiceParams{
+				Name:      "uperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   UperfServerCtlPort,
+				DataPorts: []int32{UperfServerDataPort},
+			}
+			s.UperfService, err = createService(ctx, uperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+			}
+			// Create uperf-histogram service
+			uperfLatSVC := ServiceParams{
+				Name:      "uperf-histogram-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   UperfLatServerCtlPort,
+				DataPorts: []int32{UperfLatServerDataPort},
+			}
+			s.UperfLatService, err = createService(ctx, uperfLatSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
+			}
+		}
+		if s.VM {
+			uperfSVC := ServiceParams{
+				Name:      "uperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   UperfServerCtlPort,
+				DataPorts: []int32{UperfVmServerDataPort},
+			}
+			s.UperfVmService, err = createService(ctx, uperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf service: %v", err)
+			}
+			//
+			uperfLatSVC := ServiceParams{
+				Name:      "uperf-vm-histogram-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   UperfLatServerCtlPort,
+				DataPorts: []int32{UperfLatVmServerDataPort},
+			}
+			s.UperfLatVmService, err = createService(ctx, uperfLatSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create uperf-histogram service: %v", err)
+			}
+		}
+	}
+
+	if containsDriver(s.RequestedDrivers, "netperf") {
+		if s.Pod {
+			// Create netperf service
+			for i := 0; i < 16; i++ {
+				netperfDataPorts = append(netperfDataPorts, NetperfServerDataPort+int32(i))
+			}
+			netperfSVC := ServiceParams{
+				Name:      "netperf-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": serverRole},
+				CtlPort:   NetperfServerCtlPort,
+				DataPorts: netperfDataPorts,
+			}
+			s.NetperfService, err = createService(ctx, netperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+			}
+		}
+		if s.VM {
+			// Create netperf VM service
+			for i := 0; i < 16; i++ {
+				netperfVmDataPorts = append(netperfVmDataPorts, NetperfServerDataPort+int32(i))
+			}
+			netperfSVC := ServiceParams{
+				Name:      "netperf-vm-service",
+				Namespace: "netperf",
+				Labels:    map[string]string{"role": vmServerRole},
+				CtlPort:   NetperfServerCtlPort,
+				DataPorts: netperfVmDataPorts,
+			}
+			s.NetperfVmService, err = createService(ctx, netperfSVC, client, callTimeout)
+			if err != nil {
+				return fmt.Errorf("😥 Unable to create netperf service: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+// serverCommands returns one server container command per requested driver.
+func serverCommands(s *config.PerfScenarios) [][]string {
+	// Use separate containers for servers
+	var dpCommands [][]string
+
+	// Debug: Print requested drivers for server commands
+	log.Debugf("🔥 Server Commands: RequestedDrivers=%v, len=%d", s.RequestedDrivers, len(s.RequestedDrivers))
+
+	// Add server commands only for requested drivers
+	if containsDriver(s.RequestedDrivers, "netperf") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", "netserver && sleep 10000000"})
+	}
+	if containsDriver(s.RequestedDrivers, "iperf3") {
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("iperf3 -s -p %d && sleep 10000000", IperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "uperf") {
+		// Check if any config uses TCP_STREAM_LAT profile
+		needsHistogram := false
+		for _, cfg := range s.Configs {
+			if cfg.Profile == "TCP_STREAM_LAT" {
+				needsHistogram = true
+				break
+			}
+		}
+
+		// Start uperf_histogram server only if TCP_STREAM_LAT is used
+		if needsHistogram {
+			dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("/opt/uperf-histogram/bin/uperf -s -v -P %d && sleep 10000000", UperfLatServerCtlPort)})
+		}
+
+		// Always start regular uperf server for other profiles
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", fmt.Sprintf("uperf -s -v -P %d && sleep 10000000", UperfServerCtlPort)})
+	}
+	if containsDriver(s.RequestedDrivers, "ib_write_bw") {
+		// Parse nic:gid parameters for ib_write_bw server
+		parts := strings.Split(s.IbWriteBwParams, ":")
+		if len(parts) != 2 {
+			log.Fatalf("Invalid ib-write-bw server config: %s", s.IbWriteBwParams)
+		}
+		device := strings.TrimSpace(parts[0])
+		gid := strings.TrimSpace(parts[1])
+		// perftest requires server and client to use identical -D values
+		ibDuration := 10
+		for _, cfg := range s.Configs {
+			if strings.EqualFold(cfg.Profile, "UDP_STREAM") {
+				ibDuration = cfg.Duration
+				break
+			}
+		}
+		ibWriteCmd := fmt.Sprintf("stdbuf -oL -eL ib_write_bw -d %s -x %s -F -D %d", device, gid, ibDuration)
+		ibWriteCmd = fmt.Sprintf("while true; do %s; sleep 1; done", ibWriteCmd)
+		dpCommands = append(dpCommands, []string{"/bin/bash", "-c", ibWriteCmd})
+	}
+
+	// Debug: Print final dpCommands
+	log.Debugf("🔥 Final dpCommands count: %d", len(dpCommands))
+	for i, cmd := range dpCommands {
+		log.Debugf("🔥 dpCommand[%d]: %v", i, cmd)
+	}
+	return dpCommands
+}
+
+func containsDriver(drivers []string, driver string) bool {
+	for _, d := range drivers {
+		if d == driver {
+			return true
+		}
+	}
+	return false
 }

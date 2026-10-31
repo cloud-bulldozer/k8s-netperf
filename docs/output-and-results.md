@@ -111,6 +111,8 @@ k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drive
 
 When `--json` is passed, `k8s-netperf` also writes `result-<timestamp>.json`. The file contains the same payload written to stdout, including averaged throughput, latency, TCP retransmissions, UDP loss, system metrics, node information, and topology metadata.
 
+Every CSV and JSON/OpenSearch document also carries the cross-cluster fields: the CSV columns "Cross Cluster", "Cross Cluster Target" and "Server Cluster" follow "External Server", and the documents have `crossCluster`, `crossClusterTarget` and `serverCluster`. They are `false`, empty and `null` unless the run used `--server-kubeconfig`; see [Cross-Cluster Mode](cross-cluster.md#results).
+
 Example output:
 ```csv
 Driver,Profile,Same node,Host Network,Service,External Server,Duration,Parallelism,# of Samples,Message Size,Confidence metric - low,Confidence metric - high,Avg Throughput,Throughput Metric,99%tile Observed Latency,Latency Metric
