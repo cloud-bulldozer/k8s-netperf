@@ -65,6 +65,10 @@ type Doc struct {
 	SriovInfo          string           `json:"sriovInfo"`
 	MacvlanInfo        string           `json:"macvlanInfo"`
 	LocalnetInfo       string           `json:"localnetInfo"`
+	// Cross-cluster fields are always present: false, "" and null for same-cluster runs.
+	CrossCluster       bool                  `json:"crossCluster"`
+	CrossClusterTarget string                `json:"crossClusterTarget"`
+	ServerCluster      *result.ServerCluster `json:"serverCluster"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -145,6 +149,9 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			SriovInfo:          r.SriovInfo,
 			MacvlanInfo:        r.MacvlanInfo,
 			LocalnetInfo:       r.LocalnetInfo,
+			CrossCluster:       r.CrossCluster,
+			CrossClusterTarget: r.CrossClusterTarget,
+			ServerCluster:      sr.ServerCluster,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
@@ -189,6 +196,9 @@ func commonCsvHeaderFields() []string {
 		"VM mode",
 		"Service",
 		"External Server",
+		"Cross Cluster",
+		"Cross Cluster Target",
+		"Server Cluster",
 		"UDN Info",
 		"Bridge Info",
 		"SR-IOV Info",
@@ -204,8 +214,15 @@ func commonCsvHeaderFields() []string {
 	}
 }
 
-// Common csv data fields.
-func commonCsvDataFields(row result.Data) []string {
+func serverClusterAPI(r result.ScenarioResults) string {
+	if r.ServerCluster == nil {
+		return ""
+	}
+	return r.ServerCluster.APIServer
+}
+
+// Common csv data fields. serverAPI is the server cluster's API server, empty for same-cluster runs.
+func commonCsvDataFields(row result.Data, serverAPI string) []string {
 	var lo, hi float64
 	if row.Samples > 1 {
 		_, lo, hi = result.ConfidenceInterval(row.ThroughputSummary, 0.95)
@@ -218,6 +235,9 @@ func commonCsvDataFields(row result.Data) []string {
 		fmt.Sprint(row.Virt),
 		fmt.Sprint(row.Service),
 		fmt.Sprint(row.ExternalServer),
+		fmt.Sprint(row.CrossCluster),
+		row.CrossClusterTarget,
+		serverAPI,
 		fmt.Sprint(row.UdnInfo),
 		fmt.Sprint(row.BridgeInfo),
 		fmt.Sprint(row.SriovInfo),
@@ -233,12 +253,33 @@ func commonCsvDataFields(row result.Data) []string {
 	}
 }
 
+type promSideRows struct {
+	write   bool // any row for this side
+	nodeCPU bool
+	vswitch bool
+}
+
+// promRowsFor keeps every same-cluster row. Cross-cluster runs write a side's rows only if its Prometheus was
+// eligible and the metric collected, so missing metrics never look like measured zeros.
+func promRowsFor(r result.ScenarioResults, row result.Data) (client, server promSideRows) {
+	if !r.IsCrossCluster() {
+		all := promSideRows{write: true, nodeCPU: true, vswitch: true}
+		return all, all
+	}
+	client = promSideRows{write: r.ClientPromEligible, nodeCPU: row.ClientCPUCollected, vswitch: row.ClientVSwitchCollected}
+	server = promSideRows{write: r.ServerPromEligible, nodeCPU: row.ServerCPUCollected, vswitch: row.ServerVSwitchCollected}
+	return client, server
+}
+
 // Writes all the mertics to the archive.
-func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU, podMem []metrics.PodMem) error {
+func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, role string, row result.Data, podResults []metrics.PodCPU, podMem []metrics.PodMem, serverAPI string, rows promSideRows) error {
+	if !rows.write {
+		return nil
+	}
 	roleFieldData := []string{role}
 	for _, pod := range podResults {
 		if err := podarchive.Write(append(append(roleFieldData,
-			commonCsvDataFields(row)...),
+			commonCsvDataFields(row, serverAPI)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -247,7 +288,7 @@ func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, ro
 	}
 	for _, pod := range podMem {
 		if err := podmemarchive.Write(append(append(roleFieldData,
-			commonCsvDataFields(row)...),
+			commonCsvDataFields(row, serverAPI)...),
 			pod.Name,
 			fmt.Sprintf("%f", pod.Value),
 		)); err != nil {
@@ -259,14 +300,19 @@ func writeArchive(vswitch, cpuarchive, podarchive, podmemarchive *csv.Writer, ro
 	if role == "Server" {
 		cpu = row.ServerMetrics
 	}
-	if err := vswitch.Write(append(append(roleFieldData,
-		commonCsvDataFields(row)...),
-		fmt.Sprintf("%f", cpu.VSwitchCPU),
-		fmt.Sprintf("%f", cpu.VSwitchMem))); err != nil {
-		return fmt.Errorf("failed to write archive to file")
+	if rows.vswitch {
+		if err := vswitch.Write(append(append(roleFieldData,
+			commonCsvDataFields(row, serverAPI)...),
+			fmt.Sprintf("%f", cpu.VSwitchCPU),
+			fmt.Sprintf("%f", cpu.VSwitchMem))); err != nil {
+			return fmt.Errorf("failed to write archive to file")
+		}
+	}
+	if !rows.nodeCPU {
+		return nil
 	}
 	if err := cpuarchive.Write(append(append(roleFieldData,
-		commonCsvDataFields(row)...),
+		commonCsvDataFields(row, serverAPI)...),
 		fmt.Sprintf("%f", cpu.Idle),
 		fmt.Sprintf("%f", cpu.User),
 		fmt.Sprintf("%f", cpu.System),
@@ -362,11 +408,13 @@ func WritePromCSVResult(r result.ScenarioResults) error {
 	if err := vswitch.Write(vswtichdata); err != nil {
 		return fmt.Errorf("failed to write vswitch archive to file")
 	}
+	serverAPI := serverClusterAPI(r)
 	for _, row := range r.Results {
-		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Client", row, row.ClientPodCPU.Results, row.ClientPodMem.MemResults); err != nil {
+		clientRows, serverRows := promRowsFor(r, row)
+		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Client", row, row.ClientPodCPU.Results, row.ClientPodMem.MemResults, serverAPI, clientRows); err != nil {
 			return err
 		}
-		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Server", row, row.ServerPodCPU.Results, row.ServerPodMem.MemResults); err != nil {
+		if err := writeArchive(vswitch, cpuarchive, podarchive, podmemarchive, "Server", row, row.ServerPodCPU.Results, row.ServerPodMem.MemResults, serverAPI, serverRows); err != nil {
 			return err
 		}
 	}
@@ -396,7 +444,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "UDP_STREAM") {
 			loss, _ := result.Average(row.LossSummary)
 			header := []string{"UDP Percent Loss"}
-			data := append(header, commonCsvDataFields(row)...)
+			data := append(header, commonCsvDataFields(row, serverClusterAPI(r))...)
 			iperfdata = append(data, fmt.Sprintf("%f", loss))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -405,7 +453,7 @@ func WriteSpecificCSV(r result.ScenarioResults) error {
 		if strings.Contains(row.Profile, "TCP_STREAM") {
 			rt, _ := result.Average(row.RetransmitSummary)
 			header := []string{"TCP Retransmissions"}
-			data := append(header, commonCsvDataFields(row)...)
+			data := append(header, commonCsvDataFields(row, serverClusterAPI(r))...)
 			iperfdata = append(data, fmt.Sprintf("%f", rt))
 			if err := archive.Write(iperfdata); err != nil {
 				return fmt.Errorf("failed to write result archive to file")
@@ -469,7 +517,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
-		data := append(commonCsvDataFields(row),
+		data := append(commonCsvDataFields(row, serverClusterAPI(r)),
 			fmt.Sprintf("%f", avg),
 			row.Metric,
 			fmt.Sprint(lavg),

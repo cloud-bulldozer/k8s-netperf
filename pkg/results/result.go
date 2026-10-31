@@ -58,6 +58,26 @@ type Data struct {
 	MacvlanInfo        string
 	LocalnetInfo       string
 	Virt               bool
+	// CrossCluster is true when the server ran on another cluster than the client.
+	CrossCluster bool
+	// CrossClusterTarget is CrossClusterTargetPodIP or CrossClusterTargetServiceDNS in cross-cluster runs.
+	CrossClusterTarget string
+	// VSwitchCollected reports that both vSwitch queries returned series for that side.
+	ClientVSwitchCollected bool
+	ServerVSwitchCollected bool
+}
+
+// Cross-cluster target variants.
+const (
+	CrossClusterTargetPodIP      = "podIP"
+	CrossClusterTargetServiceDNS = "serviceDNS"
+)
+
+// ServerCluster identifies the cluster that hosted the server side of a cross-cluster run.
+type ServerCluster struct {
+	APIServer string                  `json:"apiServer"`
+	Domain    string                  `json:"domain"`
+	Metadata  ocpmeta.ClusterMetadata `json:"metadata"`
 }
 
 // ScenarioResults each scenario could have multiple results
@@ -67,6 +87,16 @@ type ScenarioResults struct {
 	Version   string
 	GitCommit string
 	Metadata
+	// ServerCluster is nil unless the run was cross-cluster.
+	ServerCluster *ServerCluster
+	// PromEligible reports, per side, that Prometheus was available and its series attributable.
+	ClientPromEligible bool
+	ServerPromEligible bool
+}
+
+// IsCrossCluster reports whether the run placed the server on another cluster.
+func (s ScenarioResults) IsCrossCluster() bool {
+	return s.ServerCluster != nil
 }
 
 // Metadata for the run

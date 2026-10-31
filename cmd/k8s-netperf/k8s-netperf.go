@@ -13,7 +13,6 @@ import (
 
 	"github.com/cloud-bulldozer/go-commons/v2/indexers"
 	ocpmetadata "github.com/cloud-bulldozer/go-commons/v2/ocp-metadata"
-	"github.com/cloud-bulldozer/go-commons/v2/prometheus"
 	cmdVersion "github.com/cloud-bulldozer/go-commons/v2/version"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/archive"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/config"
@@ -76,6 +75,9 @@ var (
 	csvArchive        bool
 	searchIndex       string
 	serverIPAddr      string
+	serverKubeconfig  string
+	serverDomain      string
+	serverPromURL     string
 	sockets           uint32
 	cores             uint32
 	threads           uint32
@@ -197,6 +199,11 @@ var rootCmd = &cobra.Command{
 		if localnet != "" && hostNetOnly {
 			log.Fatalf("😭 --localnet cannot be used with --hostNet")
 		}
+		crossCluster := serverKubeconfig != ""
+		xcDomain, err := validateCrossClusterFlags(crossClusterFlagsFromGlobals(ibWriteBwEnabled))
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		// If a specific driver is explicitly requested, disable the default netperf driver
 		if (iperf3 || uperf || ibWriteBwEnabled) && !cmd.Flags().Changed("netperf") {
@@ -239,6 +246,11 @@ var rootCmd = &cobra.Command{
 			}
 			cfg = cf
 		}
+		if crossCluster {
+			if err := validateCrossClusterConfigs(cfg, xcDomain, netperf); err != nil {
+				log.Fatal(err)
+			}
+		}
 		// Read in k8s config
 		kconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			clientcmd.NewDefaultClientConfigLoadingRules(),
@@ -265,7 +277,27 @@ var rootCmd = &cobra.Command{
 		} else {
 			log.Warnf("Cluster metadata client unavailable: %v", err)
 		}
-		if clean {
+		var server *serverCluster
+		var lifecycle *crossClusterLifecycle
+		if crossCluster {
+			server, err = connectServerCluster(serverKubeconfig)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if server.restConfig.Host == rconfig.Host {
+				log.Warnf("⚠️ --server-kubeconfig points at the same API server as the client cluster (%s): traffic will not leave that cluster", rconfig.Host)
+			}
+			lifecycle = startCrossCluster(client, server.clientSet, clean)
+			if clean {
+				defer func() {
+					if r := recover(); r != nil {
+						_ = lifecycle.StopAndClean()
+						lifecycle.waitIfSignaled()
+						panic(r)
+					}
+				}()
+			}
+		} else if clean {
 			cleanup(client, rconfig)
 		}
 		s := config.PerfScenarios{
@@ -293,43 +325,41 @@ var rootCmd = &cobra.Command{
 		if serverIPAddr != "" {
 			s.ExternalServer = true
 		}
-		// Get node count
-		nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
-		if err != nil {
-			log.Fatal(err)
-		}
-		if !s.NodeLocal && len(nodes.Items) < 2 {
-			log.Error("Node count too low to run pod to pod across nodes.")
-			log.Error("To run k8s-netperf on a single node deployment pass -local.")
-			log.Error("	$ k8s-netperf --local")
-			os.Exit(1)
-		}
-
-		pavail := true
-		var pcon metrics.PromConnect
-		if shouldDiscoverPrometheus(clusterInfo.Metadata.Distribution, promURL, metadataAgent != nil, clusterInfoDegraded) {
-			pcon, _ = metrics.Discover(metadataAgent)
-		}
-		if promURL != "" {
-			pcon.URL = promURL
-		}
-		applyClusterDistribution(&pcon, clusterInfo.Metadata.Distribution)
-		if pcon.URL == "" {
-			pavail = false
-			log.Warn("😥 Prometheus is not available")
+		if crossCluster {
+			s.CrossCluster = true
+			s.ServerDomain = xcDomain
+			s.ServerClientSet = server.clientSet
 		} else {
-			pcon.Client, err = prometheus.NewClient(pcon.URL, pcon.Token, "", "", pcon.SkipTLSVerify)
+			// Get node count
+			nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
 			if err != nil {
-				pavail = false
-				log.Warn("😥 Prometheus is not available")
+				log.Fatal(err)
+			}
+			if !s.NodeLocal && len(nodes.Items) < 2 {
+				log.Error("Node count too low to run pod to pod across nodes.")
+				log.Error("To run k8s-netperf on a single node deployment pass -local.")
+				log.Error("	$ k8s-netperf --local")
+				os.Exit(1)
 			}
 		}
 
+		pcon, pavail := connectPrometheus(metadataAgent, clusterInfo.Metadata.Distribution, clusterInfoDegraded, promURL, "")
+		serverPcon, serverPavail := pcon, pavail
+		if crossCluster {
+			serverPcon, serverPavail = connectPrometheus(server.metadataAgent, server.info.Metadata.Distribution, server.infoDegraded, serverPromURL, "server cluster")
+		}
+
 		// Build the namespace and create the sa account
-		err = k8s.BuildInfra(client, udnl2 || udnl3)
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+		if crossCluster {
+			if err := lifecycle.createInfra(); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			err = k8s.BuildInfra(client, udnl2 || udnl3)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
 		}
 
 		if udnl2 || udnl3 {
@@ -494,20 +524,32 @@ var rootCmd = &cobra.Command{
 		log.Debugf("🔥 netperf=%v, iperf3=%v, uperf=%v, ibWriteBw=%v", netperf, iperf3, uperf, ibWriteBwEnabled)
 
 		// Build the SUT (Deployments)
-		err = k8s.BuildSUT(client, &s)
+		if crossCluster {
+			err = lifecycle.create([]int{clientClusterIdx, serverClusterIdx}, func(ctx context.Context) error {
+				return k8s.BuildCrossClusterSUT(ctx, client, server.clientSet, &s)
+			})
+		} else {
+			err = k8s.BuildSUT(client, &s)
+		}
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
-		// If the client and server needs to be across zones
-		lz, zones, err := k8s.GetZone(client)
-		if s.NodeLocal || err != nil || len(zones) == 0 {
+		if crossCluster {
+			// Zone labels of independent clusters are not comparable.
 			acrossAZ = false
+			log.Infof("🌐 Cross-cluster run: client cluster %s (node %s), server cluster %s (node %s), Service domain %q", rconfig.Host, s.ClientNodeInfo.NodeName, server.restConfig.Host, s.ServerNodeInfo.NodeName, xcDomain)
 		} else {
-			nodesInZone := zones[lz]
-			acrossAZ = nodesInZone <= 1
+			// If the client and server needs to be across zones
+			lz, zones, err := k8s.GetZone(client)
+			if s.NodeLocal || err != nil || len(zones) == 0 {
+				acrossAZ = false
+			} else {
+				nodesInZone := zones[lz]
+				acrossAZ = nodesInZone <= 1
+			}
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
 
@@ -580,42 +622,75 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		if pavail {
+		// Each side is queried from its own cluster's Prometheus; same-cluster runs use one.
+		clientEligible, serverEligible := pavail, pavail
+		if crossCluster {
+			clientEligible, serverEligible = crossClusterPromEligibility(context.Background(), pavail, pcon.URL, serverPavail, serverPcon.URL, client, server.clientSet, s.ClientNodeInfo, s.ServerNodeInfo)
+		}
+		if clientEligible || serverEligible {
 			for i, npr := range sr.Results {
 				if len(npr.ClientNodeInfo.NodeName) > 0 && len(npr.ServerNodeInfo.NodeName) > 0 {
-					clientCPU, err := metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					if err != nil {
-						log.Warnf("Client node CPU metrics were not collected; archiving zero clientCPU with clientCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ClientNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
-					} else {
-						sr.Results[i].ClientMetrics = clientCPU
-						sr.Results[i].ClientCPUCollected = true
+					if clientEligible {
+						clientCPU, err := metrics.QueryNodeCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+						if err != nil {
+							log.Warnf("Client node CPU metrics were not collected; archiving zero clientCPU with clientCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ClientNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
+						} else {
+							sr.Results[i].ClientMetrics = clientCPU
+							sr.Results[i].ClientCPUCollected = true
+						}
 					}
-					serverCPU, err := metrics.QueryNodeCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					if err != nil {
-						log.Warnf("Server node CPU metrics were not collected; archiving zero serverCPU with serverCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ServerNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
-					} else {
-						sr.Results[i].ServerMetrics = serverCPU
-						sr.Results[i].ServerCPUCollected = true
+					if serverEligible {
+						serverCPU, err := metrics.QueryNodeCPU(npr.ServerNodeInfo, serverPcon, npr.StartTime, npr.EndTime)
+						if err != nil {
+							log.Warnf("Server node CPU metrics were not collected; archiving zero serverCPU with serverCPUCollected=false: node=%s profile=%s messageSize=%d parallelism=%d service=%t sameNode=%t: %v", npr.ServerNodeInfo.NodeName, npr.Profile, npr.MessageSize, npr.Parallelism, npr.Service, npr.SameNode, err)
+						} else {
+							sr.Results[i].ServerMetrics = serverCPU
+							sr.Results[i].ServerCPUCollected = true
+						}
 					}
-					metrics.VSwitchCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
-					metrics.VSwitchMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
-					metrics.VSwitchCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ServerMetrics)
-					metrics.VSwitchMem(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ServerMetrics)
-					sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					sr.Results[i].ClientPodMem, _ = metrics.TopPodMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
-					sr.Results[i].ServerPodMem, _ = metrics.TopPodMem(npr.ServerNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					if clientEligible {
+						vswitchCPU := metrics.VSwitchCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
+						vswitchMem := metrics.VSwitchMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime, &sr.Results[i].ClientMetrics)
+						sr.Results[i].ClientVSwitchCollected = vswitchCPU && vswitchMem
+					}
+					if serverEligible {
+						vswitchCPU := metrics.VSwitchCPU(npr.ServerNodeInfo, serverPcon, npr.StartTime, npr.EndTime, &sr.Results[i].ServerMetrics)
+						vswitchMem := metrics.VSwitchMem(npr.ServerNodeInfo, serverPcon, npr.StartTime, npr.EndTime, &sr.Results[i].ServerMetrics)
+						sr.Results[i].ServerVSwitchCollected = vswitchCPU && vswitchMem
+					}
+					if clientEligible {
+						sr.Results[i].ClientPodCPU, _ = metrics.TopPodCPU(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					}
+					if serverEligible {
+						sr.Results[i].ServerPodCPU, _ = metrics.TopPodCPU(npr.ServerNodeInfo, serverPcon, npr.StartTime, npr.EndTime)
+					}
+					if clientEligible {
+						sr.Results[i].ClientPodMem, _ = metrics.TopPodMem(npr.ClientNodeInfo, pcon, npr.StartTime, npr.EndTime)
+					}
+					if serverEligible {
+						sr.Results[i].ServerPodMem, _ = metrics.TopPodMem(npr.ServerNodeInfo, serverPcon, npr.StartTime, npr.EndTime)
+					}
 				}
 			}
 		}
+		sr.ClientPromEligible = clientEligible
+		sr.ServerPromEligible = serverEligible
 
 		sr.ClusterMetadata = clusterInfo.Metadata
+		if crossCluster {
+			sr.ServerCluster = &result.ServerCluster{
+				APIServer: server.restConfig.Host,
+				Domain:    xcDomain,
+				Metadata:  server.info.Metadata,
+			}
+		}
 
 		shortReg, _ := regexp.Compile(`([0-9]\.[0-9]+)-*`)
 		short := shortReg.FindString(sr.OCPVersion)
 		sr.OCPShortVersion = short
 
-		if pavail {
+		// Kernel and MTU come from an unfiltered query; skip them when Prometheus may hold two clusters.
+		if pavail && !crossCluster {
 			node := metrics.NodeDetails(pcon)
 			sr.Kernel = node.Metric.Kernel
 			mtu, err := metrics.NodeMTU(pcon)
@@ -644,7 +719,7 @@ var rootCmd = &cobra.Command{
 			if err := archive.WriteCSVResult(sr); err != nil {
 				log.Fatal(err)
 			}
-			if pavail {
+			if clientEligible || serverEligible {
 				if err := archive.WritePromCSVResult(sr); err != nil {
 					log.Fatal(err)
 				}
@@ -683,7 +758,14 @@ var rootCmd = &cobra.Command{
 				}
 			}
 		}
-		if clean {
+		if crossCluster {
+			if clean {
+				if err := lifecycle.StopAndClean(); err != nil {
+					retCode = 1
+				}
+				lifecycle.waitIfSignaled()
+			}
+		} else if clean {
 			cleanup(client, rconfig)
 		}
 		// Cleanup extracted virtctl binary if any
@@ -912,7 +994,14 @@ func executeWorkload(nc config.Config,
 	var driver drivers.Driver
 	npr := result.Data{}
 	npr.Virt = virt
-	if serverIPAddr != "" {
+	if s.CrossCluster {
+		serverIP, npr.CrossClusterTarget, err = crossClusterServerAddress(nc, s, driverName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		npr.CrossCluster = true
+		log.Infof("🎯 Cross-cluster target (%s) for %s: %s", npr.CrossClusterTarget, driverName, serverIP)
+	} else if serverIPAddr != "" {
 		serverIP = serverIPAddr
 		npr.ExternalServer = true
 	} else if s.LocalnetNetwork != "" {
@@ -1133,6 +1222,9 @@ func main() {
 	rootCmd.Flags().BoolVar(&version, "version", false, "k8s-netperf version")
 	rootCmd.Flags().BoolVar(&csvArchive, "csv", true, "Archive results, cluster and benchmark metrics in CSV files (default true)")
 	rootCmd.Flags().StringVar(&serverIPAddr, "serverIP", "", "External Server IP Address")
+	rootCmd.Flags().StringVar(&serverKubeconfig, "server-kubeconfig", "", "Kubeconfig of a second cluster to run the server side on (cross-cluster mode); the client stays on the default kubeconfig's cluster")
+	rootCmd.Flags().StringVar(&serverDomain, "server-domain", "", "DNS suffix the client cluster uses for the server cluster's Services; service: true entries target <svc>.netperf.svc.<domain> (requires --server-kubeconfig)")
+	rootCmd.Flags().StringVar(&serverPromURL, "server-prom", "", "Prometheus URL for the server cluster in cross-cluster mode (discovered on OpenShift)")
 	rootCmd.Flags().BoolVar(&privileged, "privileged", false, "Run pods with privileged security context (default false)")
 	rootCmd.Flags().StringArrayVar(&annotations, "annotation", nil, "Add KEY=VALUE annotation to benchmark pods and VMIs (repeatable)")
 	rootCmd.Flags().StringArrayVar(&workloadLabels, "label", nil, "Add KEY=VALUE label to benchmark pods and VMIs (repeatable)")

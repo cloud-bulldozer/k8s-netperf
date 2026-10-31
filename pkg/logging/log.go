@@ -89,3 +89,8 @@ func Fatal(args ...interface{}) {
 func Fatalf(format string, args ...interface{}) {
 	defaultLog.Fatalf(format, args...)
 }
+
+// RegisterExitHandler registers a function that Fatal and Fatalf run before exiting.
+func RegisterExitHandler(handler func()) {
+	logrus.RegisterExitHandler(handler)
+}
