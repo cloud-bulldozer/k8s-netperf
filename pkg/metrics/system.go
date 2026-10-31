@@ -308,7 +308,8 @@ func topPodCPUQuery(node NodeInfo, conn PromConnect) string {
 	return fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
 }
 
-// VSwitchCPU will return the vswitchd cpu usage for specific node
+// VSwitchCPU will return the vswitchd cpu usage for specific node.
+// It reports whether the query succeeded and returned at least one series.
 func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
 	query := vSwitchCPUQuery(node, conn)
 	logging.Debugf("Prom Query : %s", query)
@@ -321,7 +322,7 @@ func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 	for _, s := range v {
 		ndata.VSwitchCPU = avg(s.Values)
 	}
-	return true
+	return len(v) > 0
 }
 
 func vSwitchCPUQuery(node NodeInfo, conn PromConnect) string {
@@ -332,7 +333,8 @@ func vSwitchCPUQuery(node NodeInfo, conn PromConnect) string {
 	return fmt.Sprintf("irate(container_cpu_usage_seconds_total{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}[2m])*100", node.NodeName)
 }
 
-// VSwitchMem will return the vswitchd memory usage for specific node
+// VSwitchMem will return the vswitchd memory usage for specific node.
+// It reports whether the query succeeded and returned at least one series.
 func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time, ndata *NodeCPU) bool {
 	query := vSwitchMemQuery(node, conn)
 	logging.Debugf("Prom Query : %s", query)
@@ -345,7 +347,7 @@ func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 	for _, s := range v {
 		ndata.VSwitchMem = avg(s.Values)
 	}
-	return true
+	return len(v) > 0
 }
 
 func vSwitchMemQuery(node NodeInfo, conn PromConnect) string {

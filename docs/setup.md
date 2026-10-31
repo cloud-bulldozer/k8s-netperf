@@ -110,6 +110,9 @@ Flags:
       --version                   k8s-netperf version
       --csv                       Archive results, cluster and benchmark metrics in CSV files (default true)
       --serverIP string           External Server IP Address
+      --server-kubeconfig string  Kubeconfig of a second cluster to run the server side on (cross-cluster mode); the client stays on the default kubeconfig's cluster
+      --server-domain string      DNS suffix the client cluster uses for the server cluster's Services; service: true entries target <svc>.netperf.svc.<domain> (requires --server-kubeconfig)
+      --server-prom string        Prometheus URL for the server cluster in cross-cluster mode (discovered on OpenShift)
       --privileged                Run pods with privileged security context
       --annotation stringArray    Add KEY=VALUE annotation to benchmark pods and VMIs (repeatable)
       --label stringArray         Add KEY=VALUE label to benchmark pods and VMIs (repeatable)
@@ -124,6 +127,7 @@ Flags:
 - `--clean=true` will delete all the resources the project creates (deployments and services)
 - `--uuid` sets the run UUID written to the results; without it a random one is generated. The `netperf` namespace a run creates carries it in the annotation `k8s-netperf.cloud-bulldozer.io/run-uuid`, so a caller can recognize its own namespace, for example to clean up after `--clean=false`. An existing namespace (reused with `--clean=false`) is not annotated or changed. The mark identifies a run only if each run uses its own UUID.
 - `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
+- `--server-kubeconfig`, `--server-domain` and `--server-prom` run the client on the default kubeconfig's cluster and the server on another cluster. See [Cross-Cluster Mode](cross-cluster.md).
 - `--prom` accepts a string (URL). Example  http://localhost:9090
   - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.
