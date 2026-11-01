@@ -70,6 +70,7 @@ type PerfScenarios struct {
 	Sockets               uint32
 	Cores                 uint32
 	Threads               uint32
+	Compute               apiv1.ResourceList // --cpu/--memory, request and limit of every benchmark container
 	RequestedDrivers      []string
 	ServerNodeInfo        metrics.NodeInfo
 	ClientNodeInfo        metrics.NodeInfo

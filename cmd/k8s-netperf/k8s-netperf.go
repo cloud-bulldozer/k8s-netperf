@@ -27,6 +27,8 @@ import (
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
@@ -79,6 +81,8 @@ var (
 	sockets           uint32
 	cores             uint32
 	threads           uint32
+	podCPU            string
+	podMemory         string
 	privileged        bool
 	annotations       []string
 	workloadLabels    []string
@@ -117,6 +121,13 @@ var rootCmd = &cobra.Command{
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
 			log.Fatalf("😭 At least one driver needs to be enabled")
+		}
+		compute, err := parseCompute(podCPU, podMemory)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(compute) > 0 && !pod && serverIPAddr == "" {
+			log.Warn("⚠️  --cpu and --memory only apply to benchmark pods; VM workloads use --sockets, --cores and --threads")
 		}
 		// Validate mutually exclusive UDN flags
 		if udnl2 && udnl3 {
@@ -286,6 +297,7 @@ var rootCmd = &cobra.Command{
 			Sockets:         sockets,
 			Cores:           cores,
 			Threads:         threads,
+			Compute:         compute,
 			Privileged:      privileged,
 			Annotations:     workloadAnnotations,
 			Labels:          labels,
@@ -498,6 +510,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
+		if err := k8s.VerifyGuaranteedQoS(&s); err != nil {
+			log.Fatal(err)
+		}
 
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
@@ -705,6 +720,45 @@ var managedAnnotationKeys = map[string]struct{}{
 var managedLabelKeys = map[string]struct{}{
 	"app":  {},
 	"role": {},
+}
+
+// parseCompute returns the request and limit for every benchmark container. Both flags are
+// required: a pod is Guaranteed only when CPU and memory requests equal limits.
+func parseCompute(cpu, memory string) (corev1.ResourceList, error) {
+	if cpu == "" && memory == "" {
+		return nil, nil
+	}
+	if cpu == "" || memory == "" {
+		return nil, fmt.Errorf("--cpu and --memory must be set together; the Guaranteed QoS class needs both CPU and memory requests equal to limits")
+	}
+	compute := corev1.ResourceList{}
+	for _, r := range []struct {
+		flag, value string
+		name        corev1.ResourceName
+	}{{"--cpu", cpu, corev1.ResourceCPU}, {"--memory", memory, corev1.ResourceMemory}} {
+		quantity, err := resource.ParseQuantity(r.value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s %q: %v", r.flag, r.value, err)
+		}
+		if quantity.Sign() <= 0 {
+			return nil, fmt.Errorf("%s %q must be greater than zero", r.flag, r.value)
+		}
+		compute[r.name] = quantity
+	}
+	if !isWhole(compute[corev1.ResourceMemory]) {
+		return nil, fmt.Errorf("--memory %q must be a whole number of bytes", memory)
+	}
+	if cpuQuantity := compute[corev1.ResourceCPU]; cpuQuantity.Cmp(*resource.NewMilliQuantity(cpuQuantity.MilliValue(), cpuQuantity.Format)) != 0 {
+		return nil, fmt.Errorf("--cpu %q must be a whole number of millicores (1m is the finest CPU unit Kubernetes supports)", cpu)
+	}
+	if !isWhole(compute[corev1.ResourceCPU]) {
+		log.Warnf("⚠️  --cpu %s is not a whole number of CPUs: the pods are Guaranteed, but only whole CPUs are eligible for exclusive CPUs under the static CPU Manager policy", cpu)
+	}
+	return compute, nil
+}
+
+func isWhole(quantity resource.Quantity) bool {
+	return quantity.Cmp(*resource.NewQuantity(quantity.Value(), quantity.Format)) == 0
 }
 
 func parseLabels(values []string) (map[string]string, error) {
@@ -1107,6 +1161,8 @@ func main() {
 	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM (default 2)")
 	rootCmd.Flags().Uint32Var(&cores, "cores", 2, "Number of cores for VM (default 2)")
 	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM (default 1)")
+	rootCmd.Flags().StringVar(&podCPU, "cpu", "", "CPU request and limit for every benchmark pod container, e.g. 2 or 500m (requires --memory); requests equal to limits give the pods the Guaranteed QoS class")
+	rootCmd.Flags().StringVar(&podMemory, "memory", "", "Memory request and limit for every benchmark pod container, e.g. 2Gi (requires --cpu)")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones (default false)")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible) (default false)")
 	rootCmd.Flags().BoolVar(&hostNetOnly, "hostNet", false, "Run only hostNetwork tests (no podNetwork tests) (default false)")

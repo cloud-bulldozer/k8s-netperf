@@ -89,6 +89,8 @@ Flags:
       --sockets uint32            Number of Sockets for VM (default 2)
       --cores uint32              Number of cores for VM (default 2)
       --threads uint32            Number of threads for VM (default 1)
+      --cpu string                CPU request and limit for every benchmark pod container, e.g. 2 or 500m (requires --memory); requests equal to limits give the pods the Guaranteed QoS class
+      --memory string             Memory request and limit for every benchmark pod container, e.g. 2Gi (requires --cpu)
       --across                    Place the client and server across availability zones
       --all                       Run all tests scenarios - hostNet and podNetwork (if possible)
       --hostNet                   Run only hostNetwork tests (no podNetwork tests)
@@ -117,6 +119,7 @@ Flags:
 ## Flag Details
 
 - `--across` will force the client to be across availability zones from the server
+- `--cpu` and `--memory` set the same value as request and limit on every benchmark pod container, which gives the pods the Guaranteed QoS class. Both are required together. See [Guaranteed QoS pods](advanced-usage.md#guaranteed-qos-pods).
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. It also writes the same complete payload, including TCP retransmissions and UDP loss, to `result-<timestamp>.json`. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
 - `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
