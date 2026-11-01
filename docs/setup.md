@@ -85,6 +85,7 @@ Flags:
       --json                      Instead of human-readable output, return JSON to stdout
       --local                     Run network performance tests with Server-Pods/Client-Pods on the same Node
       --vm                        Launch Virtual Machines instead of pods for client/servers
+      --image string              Benchmark pod image; pin it by digest (repo@sha256:...) to run one known image, pulled only if the node lacks it (default "quay.io/cloud-bulldozer/k8s-netperf:latest")
       --vm-image string           Use specified VM image (default "quay.io/containerdisks/fedora:39")
       --sockets uint32            Number of Sockets for VM (default 2)
       --cores uint32              Number of cores for VM (default 2)
@@ -120,6 +121,7 @@ Flags:
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. It also writes the same complete payload, including TCP retransmissions and UDP loss, to `result-<timestamp>.json`. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
 - `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
+- `--image` sets the image of every benchmark pod. A digest-pinned image (`repo@sha256:...`) is pulled only if the node lacks it (`imagePullPolicy: IfNotPresent`); other references keep `imagePullPolicy: Always`. See [Pinning the benchmark image](advanced-usage.md#pinning-the-benchmark-image).
 - `--prom` accepts a string (URL). Example  http://localhost:9090
   - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
 - `--metrics` will enable displaying prometheus captured metrics to stdout. By default they will be written to a csv file.

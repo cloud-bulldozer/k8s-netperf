@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/cloud-bulldozer/go-commons/v2 v2.3.9
+	github.com/distribution/reference v0.5.0
 	github.com/google/uuid v1.6.0
 	github.com/melbahja/goph v1.4.0
 	github.com/montanaflynn/stats v0.12.5
@@ -110,6 +111,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opensearch-project/opensearch-go v1.1.0 // indirect
 	github.com/openshift/custom-resource-status v1.1.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

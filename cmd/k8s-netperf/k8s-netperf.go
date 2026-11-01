@@ -25,6 +25,7 @@ import (
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/sample"
 	"github.com/cloud-bulldozer/k8s-netperf/pkg/virtctl"
+	"github.com/distribution/reference"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,6 +56,7 @@ var (
 	hostNetOnly       bool
 	pod               bool
 	vm                bool
+	image             string
 	vmimage           string
 	useVirtctl        bool
 	debug             bool
@@ -113,6 +115,12 @@ var rootCmd = &cobra.Command{
 		labels, err := parseLabels(workloadLabels)
 		if err != nil {
 			log.Fatal(err)
+		}
+		if err := validateImage(image); err != nil {
+			log.Fatal(err)
+		}
+		if cmd.Flags().Changed("image") && !pod && serverIPAddr == "" {
+			log.Warn("⚠️  --image only applies to benchmark pods; VM workloads use --vm-image")
 		}
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
@@ -275,6 +283,7 @@ var rootCmd = &cobra.Command{
 			AcrossAZ:        acrossAZ,
 			RestConfig:      *rconfig,
 			Configs:         cfg,
+			Image:           image,
 			ClientSet:       client,
 			BridgeNetwork:   bridge,
 			BridgeNamespace: bridgeNamespace,
@@ -707,6 +716,14 @@ var managedLabelKeys = map[string]struct{}{
 	"role": {},
 }
 
+// validateImage fails a malformed --image early instead of leaving pods stuck pulling it.
+func validateImage(image string) error {
+	if _, err := reference.ParseNormalizedNamed(image); err != nil {
+		return fmt.Errorf("invalid --image %q: %v; expected repo[:tag] or repo@sha256:<digest>", image, err)
+	}
+	return nil
+}
+
 func parseLabels(values []string) (map[string]string, error) {
 	labels := make(map[string]string, len(values))
 	for _, value := range values {
@@ -1102,6 +1119,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&nl, "local", false, "Run network performance tests with Server-Pods/Client-Pods on the same Node (default false)")
 	rootCmd.Flags().BoolVar(&pod, "pod", true, "Run tests using pods (default true)")
 	rootCmd.Flags().BoolVar(&vm, "vm", false, "Run tests using Virtual Machines (default false)")
+	rootCmd.Flags().StringVar(&image, "image", k8s.DefaultImage, "Benchmark pod image; pin it by digest (repo@sha256:...) to run one known image, pulled only if the node lacks it")
 	rootCmd.Flags().StringVar(&vmimage, "vm-image", "quay.io/containerdisks/fedora:39", "Use specified VM image (default quay.io/containerdisks/fedora:39)")
 	rootCmd.Flags().BoolVar(&useVirtctl, "use-virtctl", false, "Use virtctl ssh for VM connections instead of traditional SSH (default false)")
 	rootCmd.Flags().Uint32Var(&sockets, "sockets", 2, "Number of Sockets for VM (default 2)")
