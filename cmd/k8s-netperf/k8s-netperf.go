@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	encodeJson "encoding/json"
 	"fmt"
@@ -1054,27 +1055,13 @@ func executeWorkload(nc config.Config,
 		nr, err = driver.ParseResults(&r, nc)
 		if err != nil {
 			log.Error(err)
-			try := 0
-			success := false
-			// Retry the current test.
-			for try < retry {
-				log.Warn("Rerunning test.")
-				r, err := driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s, virt)
-				if err != nil {
-					log.Error(err)
-					continue
-				}
-				nr, err = driver.ParseResults(&r, nc)
-				if err != nil {
-					log.Error(err)
-					try++
-				} else {
-					success = true
-					break
-				}
-			}
-			if !success {
-				log.Fatal("test was unsuccessful after retry.")
+			nr, err = rerunSample(retry, func() (bytes.Buffer, error) {
+				return driver.Run(s.ClientSet, s.RestConfig, nc, Client, serverIP, &s, virt)
+			}, func(r *bytes.Buffer) (sample.Sample, error) {
+				return driver.ParseResults(r, nc)
+			})
+			if err != nil {
+				log.Fatalf("%s %s test failed after %d retries: %v", driverName, nc.Profile, retry, err)
 			}
 		}
 		npr.LossSummary = append(npr.LossSummary, float64(nr.LossPercent))
@@ -1089,6 +1076,26 @@ func executeWorkload(nc config.Config,
 	npr.ServerNodeInfo = s.ServerNodeInfo
 
 	return npr, true
+}
+
+// rerunSample retries a sample up to attempts times. A failed run counts as an attempt,
+// so a run that keeps failing (for example on an unreachable cluster) cannot retry forever.
+func rerunSample(attempts int, run func() (bytes.Buffer, error), parse func(*bytes.Buffer) (sample.Sample, error)) (sample.Sample, error) {
+	var err error
+	for try := 0; try < attempts; try++ {
+		log.Warn("Rerunning test.")
+		var r bytes.Buffer
+		if r, err = run(); err != nil {
+			log.Error(err)
+			continue
+		}
+		var nr sample.Sample
+		if nr, err = parse(&r); err == nil {
+			return nr, nil
+		}
+		log.Error(err)
+	}
+	return sample.Sample{}, err
 }
 
 func main() {
