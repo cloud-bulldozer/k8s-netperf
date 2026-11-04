@@ -230,6 +230,21 @@ If your use case requires running pods with privileged security context, use the
 $ k8s-netperf --privileged
 ```
 
+## Guaranteed QoS pods
+
+By default benchmark pods set no CPU or memory requests or limits, so they run in the BestEffort QoS class and share CPUs with everything else on the node. `--cpu` and `--memory` set the same value as both request and limit on every benchmark pod container (clients and servers, pod network and host network), which gives the pods the Guaranteed QoS class:
+
+```
+$ k8s-netperf --cpu 2 --memory 2Gi
+```
+
+- Both flags are required together, and both must be positive Kubernetes quantities (`--cpu` in whole millicores, `--memory` in whole bytes). Invalid values fail the run before anything is created.
+- The values apply per container. A server pod runs one container per requested driver server (netserver, iperf3, uperf, ib_write_bw, plus the uperf histogram server for `TCP_STREAM_LAT`), so it requests the value times the number of server containers. Pods that do not fit on a node stay Pending.
+- On nodes with the static CPU Manager policy, Guaranteed containers with a whole number of CPUs are eligible for exclusive CPUs. A fractional `--cpu` such as `500m` still makes the pods Guaranteed, with a warning that their CPUs are shared.
+- After the pods are ready, k8s-netperf checks that each benchmark container requests and is limited to exactly these values, and that each benchmark pod reports the Guaranteed QoS class. It fails the run otherwise, for example when a mutating webhook changes the containers' resources or injects a sidecar without equal requests and limits.
+- With `--clean=false`, an existing workload is reused only when its rollout has finished and both its template and all of its pods have exactly these CPU and memory settings; otherwise the run stops and asks for a rerun with `--clean`, which recreates it. Without the flags, the template must not set CPU or memory, while defaults that admission (such as a LimitRange) added to the pods are accepted, as before.
+- SR-IOV VF requests from `--sriov` are kept alongside CPU and memory. The flags do not affect VMs, which use `--sockets`, `--cores` and `--threads`.
+
 ## RoCEv2 testing
 
 Using the `ib_write_bw` driver, your hardware should include RDMA devices:

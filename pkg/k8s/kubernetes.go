@@ -41,6 +41,7 @@ type DeploymentParams struct {
 	PodAntiAffinity    corev1.PodAntiAffinity
 	NodeAffinity       corev1.NodeAffinity
 	Port               int
+	Compute            corev1.ResourceList // --cpu/--memory, used as both request and limit
 	NetworkAnnotations map[string]string
 	Annotations        map[string]string
 	WorkloadLabels     map[string]string
@@ -667,6 +668,9 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			corev1.ResourceName("openshift.io/" + s.SriovNetwork): resource.MustParse("1"),
 		}
 	}
+	if len(s.Compute) > 0 {
+		log.Infof("🧮 Benchmark containers request and are limited to cpu=%s memory=%s (Guaranteed QoS)", s.Compute.Cpu(), s.Compute.Memory())
+	}
 
 	// Schedule pods to nodes with role worker=, but not nodes with infra= and workload=
 	workerNodeSelectorExpression := &corev1.NodeSelector{
@@ -701,6 +705,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
+			Compute:            s.Compute,
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
@@ -793,6 +798,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
+			Compute:            s.Compute,
 			NetworkAnnotations: networkAnnotations,
 			ResourceRequests:   sriovResources,
 			Privileged:         s.Privileged,
@@ -975,6 +981,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:             map[string]string{"role": clientAcrossRole},
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
+		Compute:            s.Compute,
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
@@ -994,6 +1001,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:         map[string]string{"role": hostNetClientRole},
 		Commands:       [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:           NetperfServerCtlPort,
+		Compute:        s.Compute,
 		Privileged:     s.Privileged,
 		Annotations:    s.Annotations,
 		WorkloadLabels: s.Labels,
@@ -1136,6 +1144,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:         map[string]string{"role": hostNetServerRole},
 		Commands:       dpCommands,
 		Port:           NetperfServerCtlPort,
+		Compute:        s.Compute,
 		Privileged:     s.Privileged,
 		Annotations:    s.Annotations,
 		WorkloadLabels: s.Labels,
@@ -1149,6 +1158,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Labels:             map[string]string{"role": serverRole},
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
+		Compute:            s.Compute,
 		NetworkAnnotations: networkAnnotations,
 		ResourceRequests:   sriovResources,
 		Privileged:         s.Privileged,
@@ -1480,7 +1490,46 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (corev1
 	if err != nil {
 		return pods, err
 	}
+	if err := verifyPodCompute(pods, dp); err != nil {
+		return pods, err
+	}
 	return pods, nil
+}
+
+func benchmarkContainerName(deployment string, i int) string {
+	return fmt.Sprintf("%s-%d", deployment, i)
+}
+
+// verifyPodCompute fails when admission changed a benchmark container's CPU or memory: the QoS
+// check alone would accept a Guaranteed pod of another size. Sidecars are left to VerifyGuaranteedQoS.
+func verifyPodCompute(pods corev1.PodList, dp DeploymentParams) error {
+	if len(dp.Compute) == 0 {
+		return nil
+	}
+	benchmark := make(map[string]bool, len(dp.Commands))
+	for i := range dp.Commands {
+		benchmark[benchmarkContainerName(dp.Name, i)] = true
+	}
+	for _, pod := range pods.Items {
+		for _, c := range pod.Spec.Containers {
+			if benchmark[c.Name] && !containerComputeMatches(c, dp.Compute) {
+				return fmt.Errorf("pod %s container %s requests %s and is limited to %s instead of %s for both; admission (for example a mutating webhook) changed them", pod.Name, c.Name, computeString(c.Resources.Requests), computeString(c.Resources.Limits), computeString(dp.Compute))
+			}
+		}
+	}
+	return nil
+}
+
+func computeString(list corev1.ResourceList) string {
+	parts := make([]string, 0, len(computeResourceNames))
+	for _, name := range computeResourceNames {
+		if quantity, ok := list[name]; ok {
+			parts = append(parts, fmt.Sprintf("%s=%s", name, quantity.String()))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s unset", name))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
@@ -1572,6 +1621,12 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 	d, err := client.AppsV1().Deployments(dp.Namespace).Get(context.TODO(), dp.Name, metav1.GetOptions{})
 	if err == nil {
 		if d.Status.ReadyReplicas > 0 {
+			if !deploymentComputeMatches(d, dp) {
+				return nil, fmt.Errorf("deployment %q already exists with different CPU or memory requests and limits; rerun with --clean to recreate the workload", dp.Name)
+			}
+			if err := deploymentPodsCurrent(context.TODO(), client, d, dp); err != nil {
+				return nil, fmt.Errorf("%v; rerun with --clean to recreate the workload", err)
+			}
 			if !deploymentTemplateMetadataMatches(d, dp) {
 				return nil, fmt.Errorf("deployment %q already exists with different annotations or labels; rerun with --clean to recreate the workload", dp.Name)
 			}
@@ -1602,12 +1657,99 @@ func deploymentTemplateMetadataMatches(d *appsv1.Deployment, dp DeploymentParams
 	return true
 }
 
+var computeResourceNames = []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory}
+
+func deploymentComputeMatches(d *appsv1.Deployment, dp DeploymentParams) bool {
+	for _, c := range d.Spec.Template.Spec.Containers {
+		if !containerComputeMatches(c, dp.Compute) {
+			return false
+		}
+	}
+	return true
+}
+
+// containerComputeMatches requires requests and limits equal to compute, and no CPU or memory that compute omits.
+func containerComputeMatches(c corev1.Container, compute corev1.ResourceList) bool {
+	for _, name := range computeResourceNames {
+		want, wanted := compute[name]
+		for _, list := range []corev1.ResourceList{c.Resources.Requests, c.Resources.Limits} {
+			got, set := list[name]
+			if set != wanted || (wanted && got.Cmp(want) != 0) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// deploymentPodsCurrent refuses reuse during a paused or unfinished rollout, whose pods may run an older template.
+// Containers absent from the template are ignored, and without --cpu/--memory so are pod resources (LimitRange defaults).
+func deploymentPodsCurrent(ctx context.Context, client kubernetes.Interface, d *appsv1.Deployment, dp DeploymentParams) error {
+	replicas := int32(1)
+	if d.Spec.Replicas != nil {
+		replicas = *d.Spec.Replicas
+	}
+	st := d.Status
+	if d.Spec.Paused || st.ObservedGeneration < d.Generation || st.Replicas != replicas || st.UpdatedReplicas != replicas || st.AvailableReplicas != replicas {
+		return fmt.Errorf("deployment %q has a paused or unfinished rollout (replicas %d, updated %d, available %d, generation %d observed %d, paused %t)", d.Name, st.Replicas, st.UpdatedReplicas, st.AvailableReplicas, d.Generation, st.ObservedGeneration, d.Spec.Paused)
+	}
+	templateContainers := make(map[string]bool, len(d.Spec.Template.Spec.Containers))
+	for _, c := range d.Spec.Template.Spec.Containers {
+		templateContainers[c.Name] = true
+	}
+	pods, err := client.CoreV1().Pods(dp.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.Set(dp.Labels).String()})
+	if err != nil {
+		return fmt.Errorf("unable to list the pods of deployment %q: %v", d.Name, err)
+	}
+	for _, pod := range pods.Items {
+		if pod.DeletionTimestamp != nil {
+			return fmt.Errorf("deployment %q still has terminating pod %s", d.Name, pod.Name)
+		}
+		for _, c := range pod.Spec.Containers {
+			if len(dp.Compute) > 0 && templateContainers[c.Name] && !containerComputeMatches(c, dp.Compute) {
+				return fmt.Errorf("pod %s of deployment %q has CPU or memory requests and limits other than requested", pod.Name, d.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func containerResources(dp DeploymentParams) corev1.ResourceList {
+	if len(dp.ResourceRequests) == 0 && len(dp.Compute) == 0 {
+		return nil
+	}
+	resources := make(corev1.ResourceList, len(dp.ResourceRequests)+len(dp.Compute))
+	for name, quantity := range dp.ResourceRequests {
+		resources[name] = quantity.DeepCopy()
+	}
+	for name, quantity := range dp.Compute {
+		resources[name] = quantity.DeepCopy()
+	}
+	return resources
+}
+
+// VerifyGuaranteedQoS fails when --cpu/--memory are set and a benchmark pod is not Guaranteed,
+// for example because of an injected sidecar without equal requests and limits.
+func VerifyGuaranteedQoS(s *config.PerfScenarios) error {
+	if len(s.Compute) == 0 {
+		return nil
+	}
+	for _, pods := range []corev1.PodList{s.Client, s.ClientAcross, s.ClientHost, s.Server, s.ServerHost} {
+		for _, pod := range pods.Items {
+			if pod.Status.QOSClass != corev1.PodQOSGuaranteed {
+				return fmt.Errorf("pod %s/%s has QoS class %q instead of Guaranteed; check for injected sidecars without equal requests and limits", pod.Namespace, pod.Name, pod.Status.QOSClass)
+			}
+		}
+	}
+	return nil
+}
+
 func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 	// Add containers to deployment
 	var cmdContainers []corev1.Container
 	for i := 0; i < len(dp.Commands); i++ {
 		// each container should have a unique name
-		containerName := fmt.Sprintf("%s-%d", dp.Name, i)
+		containerName := benchmarkContainerName(dp.Name, i)
 		container := corev1.Container{
 			Name:            containerName,
 			Image:           dp.Image,
@@ -1622,11 +1764,12 @@ func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 			}
 		}
 
-		// Add resource requests (e.g., SR-IOV VFs)
-		if len(dp.ResourceRequests) > 0 {
+		// Limits equal requests: extended resources (SR-IOV VFs) require it, and for
+		// --cpu/--memory it makes the pod Guaranteed.
+		if resources := containerResources(dp); len(resources) > 0 {
 			container.Resources = corev1.ResourceRequirements{
-				Requests: dp.ResourceRequests,
-				Limits:   dp.ResourceRequests, // extended resources require limits == requests
+				Requests: resources,
+				Limits:   resources.DeepCopy(),
 			}
 		}
 

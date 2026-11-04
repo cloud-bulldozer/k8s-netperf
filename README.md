@@ -62,6 +62,7 @@ For detailed documentation, please refer to the following guides:
 - **Flexible test scenarios**: Pod-to-pod, host networking, cross-AZ testing
 - **Virtual Machine support**: Test with KubeVirt VMs
 - **Advanced networking**: User Defined Networks (UDN), bridge interfaces, SR-IOV and MACVLAN
+- **Guaranteed QoS pods**: `--cpu` and `--memory` set requests equal to limits on every benchmark container ([details](docs/advanced-usage.md#guaranteed-qos-pods))
 - **Pass/fail validation**: Automated performance regression detection
 - **Result archiving**: CSV export and OpenSearch integration
 - **Prometheus integration**: System metrics collection during tests
