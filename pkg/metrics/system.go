@@ -3,6 +3,9 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"regexp"
+	"strconv"
 	"time"
 
 	ocpmetadata "github.com/cloud-bulldozer/go-commons/v2/ocp-metadata"
@@ -271,12 +274,18 @@ func nodeIdentifier(node NodeInfo) string {
 	return "unknown node"
 }
 
+// instanceAddrRegex quotes a regex for an "<ip>:<port>" instance label: dots match literally,
+// and IPv6 addresses are bracketed as in "[fd00::1]:9100".
+func instanceAddrRegex(ip string) string {
+	return strconv.Quote(regexp.QuoteMeta(net.JoinHostPort(ip, "")) + ".*")
+}
+
 func nodeCPUQuery(node NodeInfo, conn PromConnect) string {
 	if conn.OpenShift || conn.MicroShift {
 		// OpenShift and MicroShift expose node-exporter instance labels as node names.
-		return fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s\"}[2m])) * 100)", node.NodeName)
+		return fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=%s}[2m])) * 100)", strconv.Quote(node.NodeName))
 	}
-	return fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~\"%s:.*\"}[2m])) * 100)", node.IP)
+	return fmt.Sprintf("(avg by(mode) (rate(node_cpu_seconds_total{instance=~%s}[2m])) * 100)", instanceAddrRegex(node.IP))
 }
 
 // TopPodCPU will return the top 10 CPU consumers for a specific node
@@ -303,9 +312,9 @@ func TopPodCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 func topPodCPUQuery(node NodeInfo, conn PromConnect) string {
 	if conn.MicroShift {
 		// MicroShift cAdvisor metrics use the node name in the instance label.
-		return fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s\"}[2m]) * 100) by (pod, namespace, instance))", node.NodeName)
+		return fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=%s}[2m]) * 100) by (pod, namespace, instance))", strconv.Quote(node.NodeName))
 	}
-	return fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~\"%s:.*\"}[2m]) * 100) by (pod, namespace, instance))", node.IP)
+	return fmt.Sprintf("topk(10,sum(irate(container_cpu_usage_seconds_total{name!=\"\",instance=~%s}[2m]) * 100) by (pod, namespace, instance))", instanceAddrRegex(node.IP))
 }
 
 // VSwitchCPU will return the vswitchd cpu usage for specific node
@@ -327,9 +336,9 @@ func VSwitchCPU(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 func vSwitchCPUQuery(node NodeInfo, conn PromConnect) string {
 	if conn.MicroShift {
 		// MicroShift exposes OVS through namedprocess metrics.
-		return fmt.Sprintf("sum(irate(namedprocess_namegroup_cpu_seconds_total{groupname=~\"ovs-vswitchd\",instance=~\"%s\"}[2m]))*100", node.NodeName)
+		return fmt.Sprintf("sum(irate(namedprocess_namegroup_cpu_seconds_total{groupname=~\"ovs-vswitchd\",instance=%s}[2m]))*100", strconv.Quote(node.NodeName))
 	}
-	return fmt.Sprintf("irate(container_cpu_usage_seconds_total{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}[2m])*100", node.NodeName)
+	return fmt.Sprintf("irate(container_cpu_usage_seconds_total{id=~\"/system.slice/ovs-vswitchd.service\", node=%s}[2m])*100", strconv.Quote(node.NodeName))
 }
 
 // VSwitchMem will return the vswitchd memory usage for specific node
@@ -351,9 +360,9 @@ func VSwitchMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time,
 func vSwitchMemQuery(node NodeInfo, conn PromConnect) string {
 	if conn.MicroShift {
 		// MicroShift exposes OVS through namedprocess metrics.
-		return fmt.Sprintf("namedprocess_namegroup_memory_bytes{groupname=~\"ovs-vswitchd\",memtype=~\"resident\",instance=~\"%s\"}", node.NodeName)
+		return fmt.Sprintf("namedprocess_namegroup_memory_bytes{groupname=~\"ovs-vswitchd\",memtype=~\"resident\",instance=%s}", strconv.Quote(node.NodeName))
 	}
-	return fmt.Sprintf("container_memory_rss{id=~\"/system.slice/ovs-vswitchd.service\", node=~\"%s\"}", node.NodeName)
+	return fmt.Sprintf("container_memory_rss{id=~\"/system.slice/ovs-vswitchd.service\", node=%s}", strconv.Quote(node.NodeName))
 }
 
 // TopPodMem will return the top 10 Mem consumers for a specific node
@@ -380,9 +389,9 @@ func TopPodMem(node NodeInfo, conn PromConnect, start time.Time, end time.Time) 
 func topPodMemQuery(node NodeInfo, conn PromConnect) string {
 	if conn.MicroShift {
 		// MicroShift cAdvisor metrics use the node name in the instance label.
-		return fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",instance=~\"%s\"}) by (pod, namespace, instance))", node.NodeName)
+		return fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",instance=%s}) by (pod, namespace, instance))", strconv.Quote(node.NodeName))
 	}
-	return fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",node=~\"%s\"}) by (pod, namespace, node))", node.NodeName)
+	return fmt.Sprintf("topk(10,sum(container_memory_rss{container!=\"POD\",name!=\"\",node=%s}) by (pod, namespace, node))", strconv.Quote(node.NodeName))
 }
 
 // Calculates average for the given data

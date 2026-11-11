@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"errors"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -101,7 +103,7 @@ func TestMicroShiftNodeDetailsUsesUnameQuery(t *testing.T) {
 func TestMicroShiftNodeCPUQueryUsesNodeNameInstance(t *testing.T) {
 	node := NodeInfo{IP: "192.0.2.10", NodeName: "microshift-node"}
 	query := nodeCPUQuery(node, PromConnect{MicroShift: true})
-	if !strings.Contains(query, `instance=~"microshift-node"`) {
+	if !strings.Contains(query, `instance="microshift-node"`) {
 		t.Fatalf("nodeCPUQuery = %q, want node name instance matcher", query)
 	}
 	if strings.Contains(query, node.IP) {
@@ -290,5 +292,66 @@ func TestQueryPrometheusWithRetryReturnsLastError(t *testing.T) {
 	}
 	if cpu != (NodeCPU{}) {
 		t.Fatalf("queryPrometheusWithRetry returned %#v, want zero NodeCPU", cpu)
+	}
+}
+
+// regexMatcher returns the value of label=~"..." in query, compiled with Prometheus's full-match anchoring.
+func regexMatcher(t *testing.T, query, label string) *regexp.Regexp {
+	t.Helper()
+	_, rest, found := strings.Cut(query, label+"=~")
+	if !found {
+		t.Fatalf("query %q has no %s=~ matcher", query, label)
+	}
+	quoted, err := strconv.QuotedPrefix(rest)
+	if err != nil {
+		t.Fatalf("query %q: %s matcher is not a quoted string: %v", query, label, err)
+	}
+	value, _ := strconv.Unquote(quoted)
+	return regexp.MustCompile("^(?:" + value + ")$")
+}
+
+func TestInstanceAddrQueriesMatchOnlyTheNode(t *testing.T) {
+	testCases := []struct {
+		ip          string
+		match       []string
+		doesntMatch []string
+	}{
+		{ip: "10.0.0.1", match: []string{"10.0.0.1:9100"}, doesntMatch: []string{"10.0.0.10:9100", "10a0b0c1:9100"}},
+		{ip: "fd00::1", match: []string{"[fd00::1]:9100"}, doesntMatch: []string{"[fd00::10]:9100"}},
+	}
+	for _, tc := range testCases {
+		node := NodeInfo{IP: tc.ip, NodeName: "worker-0.example.com"}
+		for _, query := range []string{nodeCPUQuery(node, PromConnect{}), topPodCPUQuery(node, PromConnect{})} {
+			re := regexMatcher(t, query, "instance")
+			for _, instance := range tc.match {
+				if !re.MatchString(instance) {
+					t.Errorf("query %q does not match instance %q", query, instance)
+				}
+			}
+			for _, instance := range tc.doesntMatch {
+				if re.MatchString(instance) {
+					t.Errorf("query %q matches instance %q of another node", query, instance)
+				}
+			}
+		}
+	}
+}
+
+func TestNodeNameQueriesUseExactMatchers(t *testing.T) {
+	node := NodeInfo{IP: "10.0.0.1", NodeName: "worker-0.example.com"}
+	queries := []string{
+		nodeCPUQuery(node, PromConnect{OpenShift: true}),
+		topPodCPUQuery(node, PromConnect{MicroShift: true}),
+		vSwitchCPUQuery(node, PromConnect{}),
+		vSwitchCPUQuery(node, PromConnect{MicroShift: true}),
+		vSwitchMemQuery(node, PromConnect{}),
+		vSwitchMemQuery(node, PromConnect{MicroShift: true}),
+		topPodMemQuery(node, PromConnect{}),
+		topPodMemQuery(node, PromConnect{MicroShift: true}),
+	}
+	for _, query := range queries {
+		if !strings.Contains(query, `="worker-0.example.com"`) || strings.Contains(query, `=~"worker-0`) {
+			t.Errorf("query %q should match the node name exactly", query)
+		}
 	}
 }
