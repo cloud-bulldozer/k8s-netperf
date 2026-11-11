@@ -10,6 +10,28 @@ import (
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 )
 
+func TestBuildDocsRecordsRequestedPodImage(t *testing.T) {
+	data := func(image string) result.Data {
+		return result.Data{Driver: "netperf", ThroughputSummary: []float64{1}, LatencySummary: []float64{2}, LossSummary: []float64{0}, RetransmitSummary: []float64{0}, RequestedPodImage: image}
+	}
+	pinned := "quay.io/cloud-bulldozer/k8s-netperf@sha256:0123"
+	docs, err := BuildDocs(result.ScenarioResults{Results: []result.Data{data(pinned), data("")}}, "test-uuid")
+	if err != nil {
+		t.Fatalf("BuildDocs returned unexpected error: %v", err)
+	}
+	pod, err := json.Marshal(docs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm, err := json.Marshal(docs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(pod, []byte(`"requestedPodImage":"`+pinned+`"`)) || bytes.Contains(vm, []byte("requestedPodImage")) {
+		t.Errorf("requestedPodImage should be the requested image and absent for VM runs:\n%s\n%s", pod, vm)
+	}
+}
+
 func TestBuildDocsMapsCPUCollectionFlags(t *testing.T) {
 	docs, err := BuildDocs(result.ScenarioResults{
 		Results: []result.Data{

@@ -63,6 +63,7 @@ For detailed documentation, please refer to the following guides:
 - **Virtual Machine support**: Test with KubeVirt VMs
 - **Advanced networking**: User Defined Networks (UDN), bridge interfaces, SR-IOV and MACVLAN
 - **Guaranteed QoS pods**: `--cpu` and `--memory` set requests equal to limits on every benchmark container ([details](docs/advanced-usage.md#guaranteed-qos-pods))
+- **Pinned benchmark image**: `--image repo@sha256:...` runs one known image for a whole campaign, recorded in results as `requestedPodImage` ([details](docs/advanced-usage.md#pinning-the-benchmark-image))
 - **Pass/fail validation**: Automated performance regression detection
 - **Result archiving**: CSV export and OpenSearch integration
 - **Prometheus integration**: System metrics collection during tests
