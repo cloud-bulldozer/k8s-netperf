@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"time"
 
 	kubevirtv1 "github.com/cloud-bulldozer/k8s-netperf/pkg/kubevirt/client-go/clientset/versioned/typed/core/v1"
 	"github.com/melbahja/goph"
@@ -71,6 +72,7 @@ type PerfScenarios struct {
 	Cores                 uint32
 	Threads               uint32
 	Compute               apiv1.ResourceList // --cpu/--memory, request and limit of every benchmark container
+	ReadyTimeout          time.Duration      // --ready-timeout, per benchmark Deployment
 	RequestedDrivers      []string
 	ServerNodeInfo        metrics.NodeInfo
 	ClientNodeInfo        metrics.NodeInfo

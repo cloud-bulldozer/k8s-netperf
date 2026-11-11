@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -191,8 +192,6 @@ func (a *computeFreshAPI) RoundTrip(r *http.Request) (*http.Response, error) {
 		d.Status = appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1}
 		a.created = d
 		return respond(http.StatusCreated, d)
-	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/deployments") && r.URL.Query().Get("watch") == "true" && a.created != nil:
-		return respond(http.StatusOK, map[string]any{"type": "ADDED", "object": a.created})
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pods"):
 		return respond(http.StatusOK, a.pods)
 	}
@@ -213,7 +212,7 @@ func computeFreshClientset(t *testing.T, pods ...corev1.Pod) (*kubernetes.Client
 func TestDeployDeploymentRejectsAdmissionResizedPod(t *testing.T) {
 	dp := computeReuseParams(testCompute("2", "2Gi"))
 	cs, api := computeFreshClientset(t, computeReadyPod("server-resized", testCompute("1", "1Gi")))
-	_, err := deployDeployment(cs, dp)
+	_, err := deployDeployment(cs, dp, time.Minute)
 	if api.created == nil {
 		t.Fatal("deployDeployment() did not create the deployment")
 	}
@@ -226,7 +225,7 @@ func TestDeployDeploymentAcceptsFreshPodOfRequestedSize(t *testing.T) {
 	guaranteed := testCompute("2", "2Gi")
 	dp := computeReuseParams(guaranteed)
 	cs, api := computeFreshClientset(t, computeReadyPod("server-new", guaranteed))
-	pods, err := deployDeployment(cs, dp)
+	pods, err := deployDeployment(cs, dp, time.Minute)
 	if err != nil {
 		t.Fatalf("deployDeployment() error = %v, want success", err)
 	}
@@ -238,7 +237,7 @@ func TestDeployDeploymentAcceptsFreshPodOfRequestedSize(t *testing.T) {
 	}
 }
 
-// computeReadOnlyAPI serves one Deployment, its watch and a pod list to a real Clientset and fails any write.
+// computeReadOnlyAPI serves one Deployment and a pod list to a real Clientset and fails any write.
 type computeReadOnlyAPI struct {
 	deployment *appsv1.Deployment
 	pods       *corev1.PodList
@@ -251,8 +250,6 @@ func (a *computeReadOnlyAPI) RoundTrip(r *http.Request) (*http.Response, error) 
 		return nil, fmt.Errorf("unexpected write: %s %s", r.Method, r.URL.Path)
 	case strings.HasSuffix(r.URL.Path, "/deployments/"+a.deployment.Name):
 		obj = a.deployment
-	case strings.HasSuffix(r.URL.Path, "/deployments") && r.URL.Query().Get("watch") == "true":
-		obj = map[string]any{"type": "ADDED", "object": a.deployment}
 	case strings.HasSuffix(r.URL.Path, "/pods"):
 		obj = a.pods
 	default:
@@ -286,7 +283,7 @@ func TestDeployDeploymentRejectsOldSizeReplica(t *testing.T) {
 	d := computeRolledOut(dp)
 	d.Spec.Paused = true
 	d.Status.UpdatedReplicas = 0
-	pods, err := deployDeployment(computeReadOnlyClientset(t, d, computeReadyPod("server-old", testCompute("1", "1Gi"))), dp)
+	pods, err := deployDeployment(computeReadOnlyClientset(t, d, computeReadyPod("server-old", testCompute("1", "1Gi"))), dp, time.Minute)
 	if err == nil {
 		t.Fatalf("deployDeployment() reused the deployment and returned %d pods, want an error", len(pods.Items))
 	}
@@ -298,7 +295,7 @@ func TestDeployDeploymentRejectsOldSizeReplica(t *testing.T) {
 func TestDeployDeploymentReusesFinishedComputeRollout(t *testing.T) {
 	guaranteed := testCompute("2", "2Gi")
 	dp := computeReuseParams(guaranteed)
-	pods, err := deployDeployment(computeReadOnlyClientset(t, computeRolledOut(dp), computeReadyPod("server-new", guaranteed)), dp)
+	pods, err := deployDeployment(computeReadOnlyClientset(t, computeRolledOut(dp), computeReadyPod("server-new", guaranteed)), dp, time.Minute)
 	if err != nil {
 		t.Fatalf("deployDeployment() error = %v, want reuse", err)
 	}

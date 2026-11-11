@@ -84,6 +84,7 @@ var (
 	threads           uint32
 	podCPU            string
 	podMemory         string
+	readyTimeout      time.Duration
 	privileged        bool
 	annotations       []string
 	workloadLabels    []string
@@ -122,6 +123,9 @@ var rootCmd = &cobra.Command{
 
 		if !uperf && !netperf && !iperf3 && !ibWriteBwEnabled {
 			log.Fatalf("😭 At least one driver needs to be enabled")
+		}
+		if readyTimeout <= 0 {
+			log.Fatalf("😭 --ready-timeout must be greater than zero, got %s", readyTimeout)
 		}
 		compute, err := parseCompute(podCPU, podMemory)
 		if err != nil {
@@ -299,6 +303,7 @@ var rootCmd = &cobra.Command{
 			Cores:           cores,
 			Threads:         threads,
 			Compute:         compute,
+			ReadyTimeout:    readyTimeout,
 			Privileged:      privileged,
 			Annotations:     workloadAnnotations,
 			Labels:          labels,
@@ -1170,6 +1175,7 @@ func main() {
 	rootCmd.Flags().Uint32Var(&threads, "threads", 1, "Number of threads for VM (default 1)")
 	rootCmd.Flags().StringVar(&podCPU, "cpu", "", "CPU request and limit for every benchmark pod container, e.g. 2 or 500m (requires --memory); requests equal to limits give the pods the Guaranteed QoS class")
 	rootCmd.Flags().StringVar(&podMemory, "memory", "", "Memory request and limit for every benchmark pod container, e.g. 2Gi (requires --cpu)")
+	rootCmd.Flags().DurationVar(&readyTimeout, "ready-timeout", k8s.DefaultReadyTimeout, "How long to wait for each benchmark Deployment to have a ready pod before failing with the pods' waiting reasons")
 	rootCmd.Flags().BoolVar(&acrossAZ, "across", false, "Place the client and server across availability zones (default false)")
 	rootCmd.Flags().BoolVar(&full, "all", false, "Run all tests scenarios - hostNet and podNetwork (if possible) (default false)")
 	rootCmd.Flags().BoolVar(&hostNetOnly, "hostNet", false, "Run only hostNetwork tests (no podNetwork tests) (default false)")
