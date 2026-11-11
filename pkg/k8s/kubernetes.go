@@ -104,7 +104,7 @@ const clientRole = "client-local"
 const clientAcrossRole = "client-across"
 const hostNetServerRole = "host-server"
 const hostNetClientRole = "host-client"
-const k8sNetperfImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
+const DefaultImage = "quay.io/cloud-bulldozer/k8s-netperf:latest"
 const UdnName = "udn-primary-netperf"
 const CudnName = "cudn-secondary-netperf"
 const LocalnetCudnName = "cudn-localnet-netperf"
@@ -661,6 +661,11 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	var netperfVmDataPorts []int32
 	var err error
 
+	if s.Pod || s.ExternalServer {
+		image := benchmarkImage(s)
+		log.Infof("📦 Benchmark pod image: %s (imagePullPolicy: %s)", image, imagePullPolicy(image))
+	}
+
 	// Build SR-IOV resource requests if needed
 	var sriovResources corev1.ResourceList
 	if s.SriovNetwork != "" {
@@ -701,7 +706,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Name:               "client",
 			Namespace:          "netperf",
 			Replicas:           1,
-			Image:              k8sNetperfImage,
+			Image:              benchmarkImage(s),
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
@@ -794,7 +799,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			Namespace:          "netperf",
 			Replicas:           1,
 			HostNetwork:        s.HostNetwork,
-			Image:              k8sNetperfImage,
+			Image:              benchmarkImage(s),
 			Labels:             map[string]string{"role": clientRole},
 			Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 			Port:               NetperfServerCtlPort,
@@ -977,7 +982,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:               "client-across",
 		Namespace:          "netperf",
 		Replicas:           1,
-		Image:              k8sNetperfImage,
+		Image:              benchmarkImage(s),
 		Labels:             map[string]string{"role": clientAcrossRole},
 		Commands:           [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:               NetperfServerCtlPort,
@@ -997,7 +1002,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:      "netperf",
 		Replicas:       1,
 		HostNetwork:    true,
-		Image:          k8sNetperfImage,
+		Image:          benchmarkImage(s),
 		Labels:         map[string]string{"role": hostNetClientRole},
 		Commands:       [][]string{{"/bin/bash", "-c", "sleep 10000000"}},
 		Port:           NetperfServerCtlPort,
@@ -1140,7 +1145,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Namespace:      "netperf",
 		Replicas:       1,
 		HostNetwork:    true,
-		Image:          k8sNetperfImage,
+		Image:          benchmarkImage(s),
 		Labels:         map[string]string{"role": hostNetServerRole},
 		Commands:       dpCommands,
 		Port:           NetperfServerCtlPort,
@@ -1154,7 +1159,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		Name:               "server",
 		Namespace:          "netperf",
 		Replicas:           1,
-		Image:              k8sNetperfImage,
+		Image:              benchmarkImage(s),
 		Labels:             map[string]string{"role": serverRole},
 		Commands:           dpCommands,
 		Port:               NetperfServerCtlPort,
@@ -1493,11 +1498,40 @@ func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (corev1
 	if err := verifyPodCompute(pods, dp); err != nil {
 		return pods, err
 	}
+	for _, override := range append(imageOverrides(pods, dp), pullPolicyOverrides(pods, dp)...) {
+		warnf("⚠️  %s", override)
+	}
 	return pods, nil
 }
 
+// imageOverrides lists benchmark containers whose image admission changed, for example to a mirror.
+// Such a webhook rewrites every new pod, so callers warn instead of failing every run.
+func imageOverrides(pods corev1.PodList, dp DeploymentParams) []string {
+	benchmark := benchmarkContainers(dp)
+	var overrides []string
+	for _, pod := range pods.Items {
+		for _, c := range pod.Spec.Containers {
+			if benchmark[c.Name] && c.Image != dp.Image {
+				overrides = append(overrides, fmt.Sprintf("pod %s container %s runs image %s instead of %s; admission (for example a mirror or digest-pinning webhook) changed it", pod.Name, c.Name, c.Image, dp.Image))
+			}
+		}
+	}
+	return overrides
+}
+
+// warnf is replaced by tests.
+var warnf = log.Warnf
+
 func benchmarkContainerName(deployment string, i int) string {
 	return fmt.Sprintf("%s-%d", deployment, i)
+}
+
+func benchmarkContainers(dp DeploymentParams) map[string]bool {
+	benchmark := make(map[string]bool, len(dp.Commands))
+	for i := range dp.Commands {
+		benchmark[benchmarkContainerName(dp.Name, i)] = true
+	}
+	return benchmark
 }
 
 // verifyPodCompute fails when admission changed a benchmark container's CPU or memory: the QoS
@@ -1506,10 +1540,7 @@ func verifyPodCompute(pods corev1.PodList, dp DeploymentParams) error {
 	if len(dp.Compute) == 0 {
 		return nil
 	}
-	benchmark := make(map[string]bool, len(dp.Commands))
-	for i := range dp.Commands {
-		benchmark[benchmarkContainerName(dp.Name, i)] = true
-	}
+	benchmark := benchmarkContainers(dp)
 	for _, pod := range pods.Items {
 		for _, c := range pod.Spec.Containers {
 			if benchmark[c.Name] && !containerComputeMatches(c, dp.Compute) {
@@ -1530,6 +1561,32 @@ func computeString(list corev1.ResourceList) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// pullPolicyOverrides lists benchmark containers whose pull policy admission changed.
+// Recreating the workload would get the same override, so callers only warn.
+func pullPolicyOverrides(pods corev1.PodList, dp DeploymentParams) []string {
+	want := imagePullPolicy(dp.Image)
+	benchmark := benchmarkContainers(dp)
+	var overrides []string
+	for _, pod := range pods.Items {
+		for _, c := range pod.Spec.Containers {
+			if !benchmark[c.Name] || c.ImagePullPolicy == want {
+				continue
+			}
+			override := fmt.Sprintf("pod %s container %s has imagePullPolicy %s instead of %s; the cluster overrides the pull policy", pod.Name, c.Name, c.ImagePullPolicy, want)
+			switch c.ImagePullPolicy {
+			case corev1.PullAlways:
+				override += " (for example the AlwaysPullImages admission plugin), so nodes pull the image on every pod start; an image pinned by digest still resolves to the same content"
+			case corev1.PullNever:
+				override += ", so nodes never pull the image and pods only start where it is already present"
+			default:
+				override += ", so nodes pull the image only when it is not present"
+			}
+			overrides = append(overrides, override)
+		}
+	}
+	return overrides
 }
 
 // WaitForReady accepts the client and deployment params to determine which pods to watch.
@@ -1624,6 +1681,9 @@ func CreateDeployment(dp DeploymentParams, client *kubernetes.Clientset) (*appsv
 			if !deploymentComputeMatches(d, dp) {
 				return nil, fmt.Errorf("deployment %q already exists with different CPU or memory requests and limits; rerun with --clean to recreate the workload", dp.Name)
 			}
+			if !deploymentTemplateImageMatches(d, dp) {
+				return nil, fmt.Errorf("deployment %q already exists with an image or image pull policy other than %q (%s); rerun with --clean to recreate the workload", dp.Name, dp.Image, imagePullPolicy(dp.Image))
+			}
 			if err := deploymentPodsCurrent(context.TODO(), client, d, dp); err != nil {
 				return nil, fmt.Errorf("%v; rerun with --clean to recreate the workload", err)
 			}
@@ -1709,6 +1769,9 @@ func deploymentPodsCurrent(ctx context.Context, client kubernetes.Interface, d *
 			if len(dp.Compute) > 0 && templateContainers[c.Name] && !containerComputeMatches(c, dp.Compute) {
 				return fmt.Errorf("pod %s of deployment %q has CPU or memory requests and limits other than requested", pod.Name, d.Name)
 			}
+			if templateContainers[c.Name] && c.Image != dp.Image {
+				return fmt.Errorf("pod %s of deployment %q runs image %q instead of %q", pod.Name, d.Name, c.Image, dp.Image)
+			}
 		}
 	}
 	return nil
@@ -1744,6 +1807,35 @@ func VerifyGuaranteedQoS(s *config.PerfScenarios) error {
 	return nil
 }
 
+func deploymentTemplateImageMatches(d *appsv1.Deployment, dp DeploymentParams) bool {
+	containers := d.Spec.Template.Spec.Containers
+	if len(containers) == 0 {
+		return false
+	}
+	for _, c := range containers {
+		if c.Image != dp.Image || c.ImagePullPolicy != imagePullPolicy(dp.Image) {
+			return false
+		}
+	}
+	return true
+}
+
+func benchmarkImage(s *config.PerfScenarios) string {
+	if s.Image != "" {
+		return s.Image
+	}
+	return DefaultImage
+}
+
+// imagePullPolicy keeps Always for tags such as :latest, which can move; a digest-pinned
+// image cannot change, so it is pulled only when the node lacks it.
+func imagePullPolicy(image string) corev1.PullPolicy {
+	if strings.Contains(image, "@") {
+		return corev1.PullIfNotPresent
+	}
+	return corev1.PullAlways
+}
+
 func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 	// Add containers to deployment
 	var cmdContainers []corev1.Container
@@ -1754,7 +1846,7 @@ func newDeployment(dp DeploymentParams) *appsv1.Deployment {
 			Name:            containerName,
 			Image:           dp.Image,
 			Command:         dp.Commands[i],
-			ImagePullPolicy: corev1.PullAlways,
+			ImagePullPolicy: imagePullPolicy(dp.Image),
 		}
 
 		// Add privileged security context if requested

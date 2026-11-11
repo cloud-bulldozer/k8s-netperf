@@ -50,6 +50,7 @@ type PerfScenarios struct {
 	Configs               []Config
 	Pod                   bool
 	VM                    bool
+	Image                 string
 	VMImage               string
 	VMHost                string
 	VMName                string

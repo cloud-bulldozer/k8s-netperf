@@ -35,6 +35,17 @@ k8s-netperf --label example.com/team=networking --label environment=staging \
   --annotation example.com/policy-test=enabled
 ```
 
+## Pinning the benchmark image
+
+Benchmark pods (clients and servers, pod network and host network) run `quay.io/cloud-bulldozer/k8s-netperf:latest` by default and pull it on every pod start, so the image can change between runs. To run one known image across a campaign, pin it by digest with `--image`:
+
+```bash
+digest=$(skopeo inspect --format '{{.Digest}}' docker://quay.io/cloud-bulldozer/k8s-netperf:latest)
+k8s-netperf --image quay.io/cloud-bulldozer/k8s-netperf@${digest}
+```
+
+A digest-pinned image (`repo@sha256:...`, with or without a tag) gets `imagePullPolicy: IfNotPresent`: a digest cannot point at different content, so each node pulls it once and reuses it. Any other `--image` value, such as a tag on a mirror registry, keeps `imagePullPolicy: Always`. The run logs the image and pull policy it uses, and a malformed reference is rejected before anything is created. With `--clean=false`, an existing workload is reused only when its rollout has finished, its template runs the requested image with that pull policy, and all of its pods run the requested image; otherwise the run stops and asks for a rerun with `--clean`, which recreates it. If the cluster changes the pull policy of the pods, for example when the AlwaysPullImages admission plugin forces `Always`, the run warns for each affected container: nodes then re-pull the image, which still resolves to the same content when it is pinned by digest. It also warns when admission changes the image of a newly created pod, for example to a mirror; with `--json` only errors are logged, so these warnings do not show. Results record the requested image as `requestedPodImage` in the JSON and OpenSearch documents and in the `Requested Pod Image` CSV column, also when admission rewrote it on the pods. `--image` does not affect VMs, which use `--vm-image`.
+
 ## Using User Defined Network - UDN (only on OCP 4.18 and above)
 To run k8s-netperf using a UDN primary network for the test instead of the default network of OVN-k:
 

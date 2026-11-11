@@ -58,6 +58,7 @@ type Data struct {
 	MacvlanInfo        string
 	LocalnetInfo       string
 	Virt               bool
+	RequestedPodImage  string // --image requested for the benchmark pods, even if admission rewrote it; empty for VM runs
 }
 
 // ScenarioResults each scenario could have multiple results

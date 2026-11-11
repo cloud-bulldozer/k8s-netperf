@@ -65,6 +65,7 @@ type Doc struct {
 	SriovInfo          string           `json:"sriovInfo"`
 	MacvlanInfo        string           `json:"macvlanInfo"`
 	LocalnetInfo       string           `json:"localnetInfo"`
+	RequestedPodImage  string           `json:"requestedPodImage,omitempty"`
 }
 
 // Connect returns a client connected to the desired cluster.
@@ -145,6 +146,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 			SriovInfo:          r.SriovInfo,
 			MacvlanInfo:        r.MacvlanInfo,
 			LocalnetInfo:       r.LocalnetInfo,
+			RequestedPodImage:  r.RequestedPodImage,
 		}
 		UDPLossPercent, e := result.Average(r.LossSummary)
 		if e != nil {
@@ -461,6 +463,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 		"Throughput Metric",
 		"99%tile Observed Latency",
 		"Latency Metric",
+		"Requested Pod Image",
 	)
 
 	if err := archive.Write(data); err != nil {
@@ -474,6 +477,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 			row.Metric,
 			fmt.Sprint(lavg),
 			"usec",
+			row.RequestedPodImage,
 		)
 		if err := archive.Write(data); err != nil {
 			return fmt.Errorf("failed to write archive to file")
