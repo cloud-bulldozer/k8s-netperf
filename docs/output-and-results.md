@@ -106,6 +106,9 @@ k8s-netperf will report TCP Retransmissions and UDP Loss for both workload drive
 +---------------------+---------+------------+-------------+--------------+---------+--------------+-------+-----------+----------+---------+-----------+
 ```
 
+### TCP MSS
+For netperf TCP tests, k8s-netperf records the client's effective send MSS: netperf's `TRANSPORT_MSS`, read with `TCP_MAXSEG` after room for TCP options such as timestamps is taken off. Stream and RR tests read it near the end of each stream; TCP_CRR reads it on its first connection. The smallest value across streams and samples is reported as `transportMSS` in the JSON and OpenSearch documents and in the last CSV column, `Transport MSS`. It is left out for UDP, for iperf3 and uperf, and for images whose `super-netperf` predates it. A value well below the path MTU minus 52 bytes (1448 for MTU 1500 with TCP timestamps) points at an MSS clamp or a small path MTU.
+
 ### Output to CSV
 `k8s-netperf` will write a csv file, after it has completed the desired performance tests.
 

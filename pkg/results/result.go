@@ -42,6 +42,7 @@ type Data struct {
 	LatencySummary    []float64 // 99%tile latency summary
 	LossSummary       []float64
 	RetransmitSummary []float64
+	TransportMSS      []int // Per sample; 0 when not reported
 	ClientMetrics     metrics.NodeCPU
 	ServerMetrics     metrics.NodeCPU
 	// CPUCollected covers node CPU mode metrics; vSwitch metrics are collected independently.
@@ -75,6 +76,17 @@ type Metadata struct {
 	Kernel          string `json:"kernel"`
 	OCPShortVersion string `json:"ocpShortVersion"`
 	MTU             int    `json:"mtu"`
+}
+
+// MinTransportMSS returns the smallest MSS reported by the samples, or 0 if none reported one.
+func MinTransportMSS(r Data) int {
+	smallest := 0
+	for _, mss := range r.TransportMSS {
+		if mss > 0 && (smallest == 0 || mss < smallest) {
+			smallest = mss
+		}
+	}
+	return smallest
 }
 
 // Average accepts array of floats to calculate average

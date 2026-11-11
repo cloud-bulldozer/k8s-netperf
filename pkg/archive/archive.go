@@ -40,6 +40,7 @@ type Doc struct {
 	TputMetric         string           `json:"tputMetric"`
 	LtcyMetric         string           `json:"ltcyMetric"`
 	TCPRetransmit      float64          `json:"tcpRetransmits"`
+	TransportMSS       int              `json:"transportMSS,omitempty"` // smallest of the samples; netperf TCP only
 	UDPLossPercent     float64          `json:"udpLossPercent"`
 	ToolVersion        string           `json:"toolVersion"`
 	ToolGitCommit      string           `json:"toolGitCommit"`
@@ -160,6 +161,7 @@ func BuildDocs(sr result.ScenarioResults, uuid string) ([]interface{}, error) {
 		} else {
 			d.TCPRetransmit = TCPRetransmit
 		}
+		d.TransportMSS = result.MinTransportMSS(r)
 		Throughput, e := result.Average(r.ThroughputSummary)
 		if e != nil {
 			logging.Warn("Unable to process throughput, setting value to zero")
@@ -461,6 +463,7 @@ func WriteCSVResult(r result.ScenarioResults) error {
 		"Throughput Metric",
 		"99%tile Observed Latency",
 		"Latency Metric",
+		"Transport MSS",
 	)
 
 	if err := archive.Write(data); err != nil {
@@ -469,11 +472,16 @@ func WriteCSVResult(r result.ScenarioResults) error {
 	for _, row := range r.Results {
 		avg, _ := result.Average(row.ThroughputSummary)
 		lavg, _ := result.Average(row.LatencySummary)
+		mss := ""
+		if m := result.MinTransportMSS(row); m > 0 {
+			mss = fmt.Sprint(m)
+		}
 		data := append(commonCsvDataFields(row),
 			fmt.Sprintf("%f", avg),
 			row.Metric,
 			fmt.Sprint(lavg),
 			"usec",
+			mss,
 		)
 		if err := archive.Write(data); err != nil {
 			return fmt.Errorf("failed to write archive to file")

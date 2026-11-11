@@ -24,7 +24,7 @@ import (
 const superNetperf = "super-netperf"
 
 // omniOptions are netperf specific options that we will pass to the netperf client.
-const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_recv_calls,local_send_calls,local_transport_retrans"
+const omniOptions = "rt_latency,p99_latency,throughput,throughput_units,remote_recv_calls,local_send_calls,local_transport_retrans,transport_mss"
 
 // Run will use the k8s client to run the netperf binary in the container image
 // it will return a bytes.Buffer of the stdout.
@@ -206,6 +206,11 @@ func (n *netperf) ParseResults(stdout *bytes.Buffer, _ config.Config) (sample.Sa
 			recv, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
 		} else if strings.Contains(l[0], "LOCAL_TRANSPORT_RETRANS") {
 			sample.Retransmits, _ = strconv.ParseFloat(strings.Trim(l[1], "\r"), 64)
+		} else if strings.Contains(l[0], "TRANSPORT_MSS") {
+			// -1 (UDP) and images whose super-netperf drops the key leave it 0, meaning unknown.
+			if mss, err := strconv.Atoi(strings.TrimSpace(l[1])); err == nil && mss > 0 {
+				sample.TransportMSS = mss
+			}
 		}
 	}
 	if math.IsNaN(sample.Throughput) {

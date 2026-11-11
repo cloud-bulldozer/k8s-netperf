@@ -32,6 +32,7 @@ process_netperf() {
     send=0
     recv=0
     retrans=0
+    mss=-1 # Smallest TCP MSS of the streams; netperf reports -1 for UDP
     u=""
     top=""
     counter=0
@@ -54,6 +55,10 @@ process_netperf() {
       send=$(echo $send+$s | bc)
       recv=$(echo $recv+$r | bc)
       retrans=$(echo $retrans+$rt | bc)
+      m=$(cat $file | grep "TRANSPORT_MSS=" | awk -F= '{print $2}')
+      if [[ $m =~ ^[0-9]+$ ]] && (( m > 0 && (mss < 0 || m < mss) )); then
+        mss=$m
+      fi
       u=$(cat $file | grep "UNITS")
       filename=$(basename $file)
       mv $file /tmp/old-$filename
@@ -69,6 +74,7 @@ process_netperf() {
     echo "LOCAL_TRANSPORT_RETRANS=$retrans"
     echo "REMOTE_RECV_CALLS=$recv"
     echo "LOCAL_SEND_CALLS=$send"
+    echo "TRANSPORT_MSS=$mss"
     echo "$u"
 }
 run_netperf $@
