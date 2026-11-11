@@ -63,6 +63,7 @@ For detailed documentation, please refer to the following guides:
 - **Virtual Machine support**: Test with KubeVirt VMs
 - **Advanced networking**: User Defined Networks (UDN), bridge interfaces, SR-IOV and MACVLAN
 - **Guaranteed QoS pods**: `--cpu` and `--memory` set requests equal to limits on every benchmark container ([details](docs/advanced-usage.md#guaranteed-qos-pods))
+- **Bounded pod startup**: `--ready-timeout` (default 10m) fails a run whose benchmark pods never become ready and says why ([details](docs/setup.md#flag-details))
 - **Pass/fail validation**: Automated performance regression detection
 - **Result archiving**: CSV export and OpenSearch integration
 - **Prometheus integration**: System metrics collection during tests

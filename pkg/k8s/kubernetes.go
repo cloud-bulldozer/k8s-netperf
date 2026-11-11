@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -717,7 +718,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 		}
 
-		s.Client, err = deployDeployment(client, cdp)
+		s.Client, err = deployDeployment(client, cdp, s.ReadyTimeout)
 		if err != nil {
 			return err
 		}
@@ -815,7 +816,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 			RequiredDuringSchedulingIgnoredDuringExecution: workerNodeSelectorExpression,
 		}
 		if s.Pod {
-			s.Client, err = deployDeployment(client, cdp)
+			s.Client, err = deployDeployment(client, cdp, s.ReadyTimeout)
 			if err != nil {
 				return err
 			}
@@ -1044,7 +1045,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 				RequiredDuringSchedulingIgnoredDuringExecution: clientRoleAffinity,
 			}
 			if s.Pod {
-				s.ClientHost, err = deployDeployment(client, cdpHostAcross)
+				s.ClientHost, err = deployDeployment(client, cdpHostAcross, s.ReadyTimeout)
 				if err != nil {
 					return err
 				}
@@ -1062,7 +1063,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		// Only create regular client pods if not in HostNetworkOnly mode
 		if !s.HostNetworkOnly {
 			if s.Pod {
-				s.ClientAcross, err = deployDeployment(client, cdpAcross)
+				s.ClientAcross, err = deployDeployment(client, cdpAcross, s.ReadyTimeout)
 				if err != nil {
 					return err
 				}
@@ -1239,7 +1240,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	if ncount > 1 {
 		if s.Pod {
 			if s.HostNetwork {
-				s.ServerHost, err = deployDeployment(client, sdpHost)
+				s.ServerHost, err = deployDeployment(client, sdpHost, s.ReadyTimeout)
 				if err != nil {
 					return err
 				}
@@ -1258,7 +1259,7 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 	// Only create regular server pods if not in HostNetworkOnly mode (unless NodeLocal where we use regular pods with hostNetwork)
 	if !s.HostNetworkOnly || s.NodeLocal {
 		if s.Pod {
-			s.Server, err = deployDeployment(client, sdp)
+			s.Server, err = deployDeployment(client, sdp, s.ReadyTimeout)
 			if err != nil {
 				return err
 			}
@@ -1475,13 +1476,13 @@ func zoneNodeSelectorExpression(c kubernetes.Clientset, zone string, role string
 
 // deployDeployment Manages the creation and waits for the pods to become ready.
 // returns a podList which is associated with the Deployment.
-func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams) (corev1.PodList, error) {
+func deployDeployment(client *kubernetes.Clientset, dp DeploymentParams, readyTimeout time.Duration) (corev1.PodList, error) {
 	pods := corev1.PodList{}
 	_, err := CreateDeployment(dp, client)
 	if err != nil {
 		return pods, fmt.Errorf("😥 Unable to create deployment: %v", err)
 	}
-	_, err = WaitForReady(client, dp)
+	err = WaitForReady(client, dp, readyTimeout)
 	if err != nil {
 		return pods, err
 	}
@@ -1532,27 +1533,87 @@ func computeString(list corev1.ResourceList) string {
 	return strings.Join(parts, " ")
 }
 
-// WaitForReady accepts the client and deployment params to determine which pods to watch.
-// It will return a bool based on if the pods ever become ready before we move on.
-func WaitForReady(c *kubernetes.Clientset, dp DeploymentParams) (bool, error) {
+// DefaultReadyTimeout is the --ready-timeout default, also used when a caller leaves the timeout unset.
+const DefaultReadyTimeout = 10 * time.Minute
+
+// readyPollInterval is how often WaitForReady checks the Deployment; tests shorten it.
+var readyPollInterval = 2 * time.Second
+
+// WaitForReady waits until dp's Deployment has a ready pod. It fails at once if the Deployment
+// cannot create pods, and after timeout with the reasons its pods are not ready.
+func WaitForReady(c kubernetes.Interface, dp DeploymentParams, timeout time.Duration) error {
 	log.Infof("⏰ Checking for %s Pods to become ready...", dp.Name)
-	dw, err := c.AppsV1().Deployments(dp.Namespace).Watch(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return false, err
+	if timeout <= 0 {
+		timeout = DefaultReadyTimeout
 	}
-	defer dw.Stop()
-	for event := range dw.ResultChan() {
-		d, ok := event.Object.(*appsv1.Deployment)
-		if !ok {
-			log.Error("❌ Issue with the Deployment")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	var lastErr error
+	responded := false
+	for {
+		d, err := c.AppsV1().Deployments(dp.Namespace).Get(ctx, dp.Name, metav1.GetOptions{})
+		if err != nil {
+			log.Debugf("Getting deployment %s: %v", dp.Name, err)
+			// A read cut off by the deadline explains the timeout only if no read succeeded or failed before it.
+			if ctx.Err() == nil || (!responded && lastErr == nil) {
+				lastErr = err
+			}
+		} else if d.Status.ReadyReplicas >= 1 {
+			return nil
+		} else if failure := replicaFailure(d); failure != nil {
+			return fmt.Errorf("%w%s", failure, podWaitingReasons(c, dp))
+		} else {
+			responded, lastErr = true, nil
 		}
-		if d.Name == dp.Name {
-			if d.Status.ReadyReplicas == 1 {
-				return true, nil
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				return fmt.Errorf("deployment %q in namespace %q not ready after %s (see --ready-timeout): %w", dp.Name, dp.Namespace, timeout, lastErr)
+			}
+			return fmt.Errorf("deployment %q in namespace %q not ready after %s (see --ready-timeout)%s", dp.Name, dp.Namespace, timeout, podWaitingReasons(c, dp))
+		case <-time.After(readyPollInterval):
+		}
+	}
+}
+
+// replicaFailure reports a Deployment that cannot create pods, for example when quota or admission rejects them.
+func replicaFailure(d *appsv1.Deployment) error {
+	for _, condition := range d.Status.Conditions {
+		if condition.Type == appsv1.DeploymentReplicaFailure && condition.Status == corev1.ConditionTrue {
+			return fmt.Errorf("deployment %q cannot create pods (%s): %s", d.Name, condition.Reason, condition.Message)
+		}
+	}
+	return nil
+}
+
+// podWaitingReasons summarizes why the pods of dp are not ready, for error messages.
+func podWaitingReasons(c kubernetes.Interface, dp DeploymentParams) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pods, err := c.CoreV1().Pods(dp.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.Set(dp.Labels).String()})
+	if err != nil {
+		return fmt.Sprintf("; unable to list the pods for diagnostics: %v", err)
+	}
+	if len(pods.Items) == 0 {
+		return ""
+	}
+	var reasons []string
+	for _, pod := range pods.Items {
+		var details []string
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+				details = append(details, fmt.Sprintf("%s: %s", cond.Reason, cond.Message))
 			}
 		}
+		for _, cs := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
+			if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+				details = append(details, fmt.Sprintf("%s: %s", cs.State.Waiting.Reason, cs.State.Waiting.Message))
+			}
+		}
+		reasons = append(reasons, fmt.Sprintf("%s %s [%s]", pod.Name, pod.Status.Phase, strings.Join(details, "; ")))
 	}
-	return false, fmt.Errorf("❌ Deployment had issues")
+	sort.Strings(reasons)
+	return "; pods: " + strings.Join(reasons, ", ")
 }
 
 func areNodesLabeled(c *kubernetes.Clientset) bool {
