@@ -64,7 +64,7 @@ For detailed documentation, please refer to the following guides:
 - **Advanced networking**: User Defined Networks (UDN), bridge interfaces, SR-IOV and MACVLAN
 - **Guaranteed QoS pods**: `--cpu` and `--memory` set requests equal to limits on every benchmark container ([details](docs/advanced-usage.md#guaranteed-qos-pods))
 - **Pass/fail validation**: Automated performance regression detection
-- **Result archiving**: CSV export and OpenSearch integration
+- **Result archiving**: CSV export and OpenSearch integration, including the TCP MSS of netperf tests as `transportMSS` ([details](docs/output-and-results.md#tcp-mss))
 - **Prometheus integration**: System metrics collection during tests
 
 ## Contributing

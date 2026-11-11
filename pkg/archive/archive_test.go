@@ -10,6 +10,32 @@ import (
 	result "github.com/cloud-bulldozer/k8s-netperf/pkg/results"
 )
 
+func TestBuildDocsReportsSmallestTransportMSS(t *testing.T) {
+	data := func(mss ...int) result.Data {
+		return result.Data{Driver: "netperf", ThroughputSummary: []float64{1}, LatencySummary: []float64{2}, LossSummary: []float64{0}, RetransmitSummary: []float64{0}, TransportMSS: mss}
+	}
+	docs, err := BuildDocs(result.ScenarioResults{Results: []result.Data{data(1448, 524, 0), data(0, 0), data()}}, "test-uuid")
+	if err != nil {
+		t.Fatalf("BuildDocs returned unexpected error: %v", err)
+	}
+	for i, want := range []int{524, 0, 0} {
+		if got := docs[i].(Doc).TransportMSS; got != want {
+			t.Errorf("doc %d TransportMSS = %d, want %d", i, got, want)
+		}
+	}
+	reported, err := json.Marshal(docs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown, err := json.Marshal(docs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(reported, []byte(`"transportMSS":524`)) || bytes.Contains(unknown, []byte("transportMSS")) {
+		t.Errorf("transportMSS should be present only when reported:\n%s\n%s", reported, unknown)
+	}
+}
+
 func TestBuildDocsMapsCPUCollectionFlags(t *testing.T) {
 	docs, err := BuildDocs(result.ScenarioResults{
 		Results: []result.Data{

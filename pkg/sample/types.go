@@ -8,6 +8,7 @@ type Sample struct {
 	Throughput     float64
 	LossPercent    float64
 	Retransmits    float64
+	TransportMSS   int // Smallest TCP MSS of the client's streams; 0 when not reported
 	Metric         string
 	Driver         string
 }
