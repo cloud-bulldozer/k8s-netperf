@@ -118,7 +118,7 @@ Flags:
 
 ## Flag Details
 
-- `--across` will force the client to be across availability zones from the server
+- `--across` places the server in another availability zone than the client, using the `topology.kubernetes.io/zone` node label. The run fails if the cluster has fewer than two zones, or if the pods end up in the same zone, for example because nodes labeled `netperf=client`/`netperf=server` share a zone. It cannot be combined with `--serverIP`.
 - `--cpu` and `--memory` set the same value as request and limit on every benchmark pod container, which gives the pods the Guaranteed QoS class. Both are required together. See [Guaranteed QoS pods](advanced-usage.md#guaranteed-qos-pods).
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. It also writes the same complete payload, including TCP retransmissions and UDP loss, to `result-<timestamp>.json`. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)

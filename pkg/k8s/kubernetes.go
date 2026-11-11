@@ -1281,7 +1281,48 @@ func BuildSUT(client *kubernetes.Clientset, s *config.PerfScenarios) error {
 		}
 	}
 
+	if s.AcrossAZ {
+		return verifyAcrossAZ(client, []corev1.PodList{s.Client, s.ClientAcross, s.ClientHost, s.VMClientAcross}, []corev1.PodList{s.Server, s.ServerHost, s.VMServer})
+	}
 	return nil
+}
+
+// verifyAcrossAZ fails unless client and server pods run in different zones: --across only prefers
+// the other zone, and nodes labeled netperf=client/server take precedence over it.
+func verifyAcrossAZ(c kubernetes.Interface, clients, servers []corev1.PodList) error {
+	clientZones, err := podZones(c, clients)
+	if err != nil {
+		return err
+	}
+	serverZones, err := podZones(c, servers)
+	if err != nil {
+		return err
+	}
+	for zone, clientNode := range clientZones {
+		if serverNode, same := serverZones[zone]; same {
+			return fmt.Errorf("--across: client node %s and server node %s are both in zone %s; check the netperf=client/server node labels and capacity in the other zone", clientNode, serverNode, zone)
+		}
+	}
+	return nil
+}
+
+// podZones maps the zone of each pod's node to the node's name.
+func podZones(c kubernetes.Interface, lists []corev1.PodList) (map[string]string, error) {
+	zones := map[string]string{}
+	for _, pods := range lists {
+		for _, pod := range pods.Items {
+			node, err := c.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("unable to get node %s of pod %s: %w", pod.Spec.NodeName, pod.Name, err)
+			}
+			zone := node.Labels["topology.kubernetes.io/zone"]
+			if zone == "" {
+				return nil, fmt.Errorf("--across: node %s of pod %s has no topology.kubernetes.io/zone label", node.Name, pod.Name)
+			}
+			zones[zone] = node.Name
+		}
+	}
+	return zones, nil
 }
 
 // ExtractBridgeIp extracts the bridge network IP address from pod network status annotation

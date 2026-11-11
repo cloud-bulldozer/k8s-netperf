@@ -96,7 +96,6 @@ var rootCmd = &cobra.Command{
 		log.Infof("Starting k8s-netperf (%s@%s)", cmdVersion.Version, cmdVersion.GitCommit)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		var acrossAZ bool
 		var sr result.ScenarioResults
 		if version {
 			fmt.Println("Version:", cmdVersion.Version)
@@ -129,6 +128,9 @@ var rootCmd = &cobra.Command{
 		}
 		if len(compute) > 0 && !pod && serverIPAddr == "" {
 			log.Warn("⚠️  --cpu and --memory only apply to benchmark pods; VM workloads use --sockets, --cores and --threads")
+		}
+		if acrossAZ && serverIPAddr != "" {
+			log.Fatal("😭 --across cannot be used with --serverIP: the external server's zone is unknown")
 		}
 		// Validate mutually exclusive UDN flags
 		if udnl2 && udnl3 {
@@ -517,13 +519,14 @@ var rootCmd = &cobra.Command{
 
 		sr.Version = cmdVersion.Version
 		sr.GitCommit = cmdVersion.GitCommit
-		// If the client and server needs to be across zones
+		// Inferred zone placement for results; executeWorkload reports --across (s.AcrossAZ) first.
+		var inferredAcrossAZ bool
 		lz, zones, err := k8s.GetZone(client)
 		if s.NodeLocal || err != nil || len(zones) == 0 {
-			acrossAZ = false
+			inferredAcrossAZ = false
 		} else {
 			nodesInZone := zones[lz]
-			acrossAZ = nodesInZone <= 1
+			inferredAcrossAZ = nodesInZone <= 1
 		}
 		time.Sleep(5 * time.Second) // Wait some seconds to ensure service is ready
 
@@ -536,7 +539,7 @@ var rootCmd = &cobra.Command{
 					metric = "Mb/s"
 				}
 				nc.Metric = metric
-				nc.AcrossAZ = acrossAZ
+				nc.AcrossAZ = inferredAcrossAZ
 				// No need to run hostNetwork through Service.
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
@@ -579,7 +582,7 @@ var rootCmd = &cobra.Command{
 					metric = "Mb/s"
 				}
 				nc.Metric = metric
-				nc.AcrossAZ = acrossAZ
+				nc.AcrossAZ = inferredAcrossAZ
 				// No need to run hostNetwork through Service.
 				for _, driver := range requestedDrivers {
 					if s.HostNetwork && !nc.Service {
