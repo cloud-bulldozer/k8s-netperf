@@ -954,6 +954,19 @@ func validateCIDR(value, field string) error {
 	return nil
 }
 
+// uperfService picks the Service of the uperf server a profile talks to: TCP_STREAM_LAT pods use the
+// histogram server, whose ports only uperf-histogram-service exposes. VMs run no histogram server.
+func uperfService(s config.PerfScenarios, profile string, virt bool) *corev1.Service {
+	switch {
+	case virt:
+		return s.UperfVmService
+	case profile == "TCP_STREAM_LAT":
+		return s.UperfLatService
+	default:
+		return s.UperfService
+	}
+}
+
 // executeWorkload runs the workload and returns (result.Data, bool).
 // The bool is true when the result should be recorded and false when
 // the selected driver does not support the configured profile.
@@ -987,11 +1000,7 @@ func executeWorkload(nc config.Config,
 				serverIP = s.IperfService.Spec.ClusterIP
 			}
 		case "uperf":
-			if virt {
-				serverIP = s.UperfVmService.Spec.ClusterIP
-			} else {
-				serverIP = s.UperfService.Spec.ClusterIP
-			}
+			serverIP = uperfService(s, nc.Profile, virt).Spec.ClusterIP
 		default:
 			if virt {
 				serverIP = s.NetperfVmService.Spec.ClusterIP
