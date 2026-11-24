@@ -67,6 +67,9 @@ type PodNetworksData struct {
 const sa string = "netperf"
 const namespace string = "netperf"
 
+// RunUUIDAnnotation carries the run UUID on the netperf namespace the run created, so callers can tell it is theirs.
+const RunUUIDAnnotation = "k8s-netperf.cloud-bulldozer.io/run-uuid"
+
 // NetperfServerCtlPort control port for the service
 const NetperfServerCtlPort = 12865
 
@@ -241,20 +244,20 @@ func ExtractMacvlanIp(pod corev1.Pod) (string, error) {
 	return "", fmt.Errorf("MACVLAN network IP not found for %s on pod %s", expectedNetworkName, pod.Name)
 }
 
-// BuildInfra will create the infra for the SUT
-func BuildInfra(client *kubernetes.Clientset, udn bool) error {
+// BuildInfra will create the infra for the SUT. A namespace it creates carries runUUID from the Create on;
+// an existing one is reused unchanged.
+func BuildInfra(client kubernetes.Interface, udn bool, runUUID string) error {
 	_, err := client.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err == nil {
 		log.Infof("♻️ Namespace already exists, reusing it")
 	} else {
 		log.Infof("🔨 Creating namespace: %s", namespace)
+		nsLabels := map[string]string{namespace: netperfNamespaceLabel}
 		if udn {
-			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
-				Labels: map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}}}, metav1.CreateOptions{})
-		} else {
-			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
-				Labels: map[string]string{namespace: netperfNamespaceLabel}}}, metav1.CreateOptions{})
+			nsLabels = map[string]string{"k8s.ovn.org/primary-user-defined-network": ""}
 		}
+		_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace,
+			Labels: nsLabels, Annotations: map[string]string{RunUUIDAnnotation: runUUID}}}, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("😥 Unable to create namespace: %v", err)
 		}

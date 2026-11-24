@@ -339,7 +339,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Build the namespace and create the sa account
-		err = k8s.BuildInfra(client, udnl2 || udnl3)
+		err = k8s.BuildInfra(client, udnl2 || udnl3, uid)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
