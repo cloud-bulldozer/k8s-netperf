@@ -234,7 +234,7 @@ func TestCheckCrossClusterNodesAndLeftovers(t *testing.T) {
 
 // testLifecycle returns a lifecycle on two fake clusters with test-sized bounds.
 func testLifecycle(client, server kubernetes.Interface) *crossClusterLifecycle {
-	l := newCrossClusterLifecycle(client, server, "tok")
+	l := newCrossClusterLifecycle(client, server, "tok", "run-1")
 	l.cleanupTimeout = 2 * time.Second
 	l.joinTimeout = 200 * time.Millisecond
 	return l
@@ -272,11 +272,28 @@ func TestLifecyclePreCleanDoesNotStopCreation(t *testing.T) {
 	}
 }
 
+func TestLifecycleCreateInfraMarksBothClusters(t *testing.T) {
+	client, server := fake.NewClientset(), fake.NewClientset()
+	l := testLifecycle(client, server)
+	if err := l.createInfra(); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]kubernetes.Interface{"client": client, "server": server} {
+		ns, err := c.CoreV1().Namespaces().Get(context.Background(), "netperf", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if ns.Annotations[k8s.RunUUIDAnnotation] != "run-1" || ns.Annotations[k8s.OwnerTokenAnnotation] != "tok" {
+			t.Errorf("%s cluster namespace annotations = %v", name, ns.Annotations)
+		}
+	}
+}
+
 func TestLifecycleStopBetweenCreates(t *testing.T) {
 	client, server := fake.NewClientset(), fake.NewClientset()
 	l := testLifecycle(client, server)
 	if err := l.create([]int{clientClusterIdx}, func(ctx context.Context) error {
-		return k8s.CreateOwnedInfra(ctx, client, l.token)
+		return k8s.CreateOwnedInfra(ctx, client, l.token, l.runUUID)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +320,7 @@ func TestLifecycleWaitsForInFlightCreate(t *testing.T) {
 		_ = l.create([]int{serverClusterIdx}, func(ctx context.Context) error {
 			close(started)
 			<-ctx.Done() // honors cancellation, then the request it had in flight lands
-			_ = k8s.CreateOwnedInfra(context.Background(), server, l.token)
+			_ = k8s.CreateOwnedInfra(context.Background(), server, l.token, l.runUUID)
 			close(created)
 			return ctx.Err()
 		})
@@ -417,7 +434,7 @@ func TestLifecycleRecoversNamespaceAfterServiceAccountFailure(t *testing.T) {
 	client, server := fake.NewClientset(), fake.NewClientset()
 	l := testLifecycle(client, server)
 	err := l.create([]int{clientClusterIdx}, func(ctx context.Context) error {
-		if err := k8s.CreateOwnedInfra(ctx, client, l.token); err != nil {
+		if err := k8s.CreateOwnedInfra(ctx, client, l.token, l.runUUID); err != nil {
 			return err
 		}
 		return errors.New("service account create failed after the namespace")
@@ -578,7 +595,7 @@ func runPreCleanChild() {
 		})
 		clients = append(clients, c)
 	}
-	startCrossCluster(clients[0], clients[1], true)
+	startCrossCluster(clients[0], clients[1], true, "run-1")
 	os.Exit(0) // not reached: PreClean fails
 }
 

@@ -259,6 +259,7 @@ type lifecycleCluster struct {
 type crossClusterLifecycle struct {
 	clusters     []lifecycleCluster
 	token        string
+	runUUID      string
 	createCtx    context.Context
 	cancelCreate context.CancelFunc
 
@@ -279,11 +280,12 @@ type crossClusterLifecycle struct {
 	deleteOwned    func(ctx context.Context, c kubernetes.Interface, token string) error
 }
 
-func newCrossClusterLifecycle(client, server kubernetes.Interface, token string) *crossClusterLifecycle {
+func newCrossClusterLifecycle(client, server kubernetes.Interface, token, runUUID string) *crossClusterLifecycle {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &crossClusterLifecycle{
 		clusters:       []lifecycleCluster{{"client cluster", client}, {"server cluster", server}},
 		token:          token,
+		runUUID:        runUUID,
 		createCtx:      ctx,
 		cancelCreate:   cancel,
 		attempted:      make([]bool, 2),
@@ -460,7 +462,7 @@ func (l *crossClusterLifecycle) createInfra() error {
 	for _, idx := range []int{clientClusterIdx, serverClusterIdx} {
 		c := l.clusters[idx]
 		err := l.create([]int{idx}, func(ctx context.Context) error {
-			return k8s.CreateOwnedInfra(ctx, c.client, l.token)
+			return k8s.CreateOwnedInfra(ctx, c.client, l.token, l.runUUID)
 		})
 		if err != nil {
 			return fmt.Errorf("%s: %w", c.name, err)
@@ -493,8 +495,8 @@ func crossClusterFlagsFromGlobals(ibWriteBwEnabled bool) crossClusterFlags {
 }
 
 // startCrossCluster runs the two-cluster checks; with --clean it installs the signal handler, pre-cleans
-// and registers the Fatal cleanup handler.
-func startCrossCluster(client, serverClient kubernetes.Interface, clean bool) *crossClusterLifecycle {
+// and registers the Fatal cleanup handler. runUUID goes on the namespaces the run creates.
+func startCrossCluster(client, serverClient kubernetes.Interface, clean bool, runUUID string) *crossClusterLifecycle {
 	ctx := context.Background()
 	if err := checkCrossClusterNodes(ctx, client, serverClient); err != nil {
 		log.Fatal(err)
@@ -504,7 +506,7 @@ func startCrossCluster(client, serverClient kubernetes.Interface, clean bool) *c
 			log.Fatal(err)
 		}
 	}
-	l := newCrossClusterLifecycle(client, serverClient, uuid.New().String())
+	l := newCrossClusterLifecycle(client, serverClient, uuid.New().String(), runUUID)
 	if !clean {
 		return l
 	}

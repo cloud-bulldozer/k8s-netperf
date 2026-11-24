@@ -67,7 +67,7 @@ With `--clean` (the default) the `netperf` namespace is deleted on both clusters
 
 The namespaces a run creates carry an owner annotation (`k8s-netperf.cloud-bulldozer.io/owner-token`). The start-of-run cleanup deletes any `netperf` namespace, as `--clean` always did. The cleanup at the end, after a failure or after a signal only deletes a namespace with this run's token, and only on a cluster this run started creating resources on, so a namespace another run created in the meantime is never removed. Deployment readiness is bounded at 10 minutes; a Deployment that cannot create pods or does not become ready fails the run with the reason (for example `Unschedulable` or `ImagePullBackOff`), which triggers the cleanup.
 
-With `--clean=false` nothing is deleted on either cluster, and the run refuses to start on top of an existing `netperf` namespace.
+With `--clean=false` nothing is deleted on either cluster, and the run refuses to start on top of an existing `netperf` namespace. The namespaces the run creates also carry the run UUID (`k8s-netperf.cloud-bulldozer.io/run-uuid`, the `--uuid` value or the generated one) on both clusters, so the caller can recognize and delete them afterwards.
 
 ## Metrics (`--prom`, `--server-prom`, `--metrics`)
 

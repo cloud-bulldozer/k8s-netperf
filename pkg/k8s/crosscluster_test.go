@@ -233,7 +233,7 @@ func TestCreateOwnedInfra(t *testing.T) {
 	ctx := context.Background()
 	t.Run("fresh", func(t *testing.T) {
 		c := fake.NewClientset()
-		if err := CreateOwnedInfra(ctx, c, "tok"); err != nil {
+		if err := CreateOwnedInfra(ctx, c, "tok", "run-1"); err != nil {
 			t.Fatal(err)
 		}
 		ns, err := c.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
@@ -249,17 +249,17 @@ func TestCreateOwnedInfra(t *testing.T) {
 	})
 	t.Run("same run on a shared API server", func(t *testing.T) {
 		c := fake.NewClientset()
-		if err := CreateOwnedInfra(ctx, c, "tok"); err != nil {
+		if err := CreateOwnedInfra(ctx, c, "tok", "run-1"); err != nil {
 			t.Fatal(err)
 		}
-		if err := CreateOwnedInfra(ctx, c, "tok"); err != nil {
+		if err := CreateOwnedInfra(ctx, c, "tok", "run-1"); err != nil {
 			t.Fatalf("second create by the same run: %v", err)
 		}
 	})
 	for _, token := range []string{"", "other"} {
 		t.Run("foreign namespace token="+token, func(t *testing.T) {
 			c := fake.NewClientset(netperfNamespace(token))
-			err := CreateOwnedInfra(ctx, c, "tok")
+			err := CreateOwnedInfra(ctx, c, "tok", "run-1")
 			if !errors.Is(err, ErrNamespaceNotOwned) {
 				t.Fatalf("err = %v, want ErrNamespaceNotOwned", err)
 			}
@@ -273,10 +273,84 @@ func TestCreateOwnedInfra(t *testing.T) {
 		c.PrependReactor("create", "serviceaccounts", func(k8stesting.Action) (bool, runtime.Object, error) {
 			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, sa, errors.New("denied"))
 		})
-		if err := CreateOwnedInfra(ctx, c, "tok"); err == nil {
+		if err := CreateOwnedInfra(ctx, c, "tok", "run-1"); err == nil {
 			t.Fatal("want error")
 		}
 	})
+}
+
+func TestCreateOwnedInfraRunUUID(t *testing.T) {
+	shortTimeouts(t)
+	ctx := context.Background()
+	t.Run("in the Create request", func(t *testing.T) {
+		c := fake.NewClientset()
+		if err := CreateOwnedInfra(ctx, c, "tok", testRunUUID); err != nil {
+			t.Fatal(err)
+		}
+		creates := namespaceActions(c, "create")
+		if len(creates) != 1 {
+			t.Fatalf("got %d namespace creates, want 1", len(creates))
+		}
+		sent := creates[0].(k8stesting.CreateAction).GetObject().(*corev1.Namespace)
+		if sent.Annotations[OwnerTokenAnnotation] != "tok" || sent.Annotations[RunUUIDAnnotation] != testRunUUID {
+			t.Errorf("Create request annotations = %v", sent.Annotations)
+		}
+	})
+	for _, tc := range []struct {
+		name    string
+		token   string
+		wantErr bool
+	}{{"same run", "tok", false}, {"unmarked", "", true}, {"other run", "other", true}} {
+		t.Run("existing namespace, "+tc.name, func(t *testing.T) {
+			existing := netperfNamespace(tc.token)
+			if existing.Annotations == nil {
+				existing.Annotations = map[string]string{}
+			}
+			existing.Annotations[RunUUIDAnnotation] = "existing-uuid"
+			c := fake.NewClientset(existing)
+			err := CreateOwnedInfra(ctx, c, "tok", testRunUUID)
+			if tc.wantErr != errors.Is(err, ErrNamespaceNotOwned) || (!tc.wantErr && err != nil) {
+				t.Fatalf("err = %v, want ErrNamespaceNotOwned %v", err, tc.wantErr)
+			}
+			if writes := namespaceActions(c, "update", "patch"); len(writes) != 0 {
+				t.Fatalf("existing namespace was written: %v", writes)
+			}
+			if got := storedNamespace(t, c).Annotations[RunUUIDAnnotation]; got != "existing-uuid" {
+				t.Errorf("annotation = %q, want existing-uuid", got)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name   string
+		inject func(c *fake.Clientset)
+	}{
+		{"create response lost", func(c *fake.Clientset) {
+			c.PrependReactor("create", "namespaces", func(a k8stesting.Action) (bool, runtime.Object, error) {
+				if err := c.Tracker().Add(a.(k8stesting.CreateAction).GetObject()); err != nil {
+					return true, nil, err
+				}
+				return true, nil, apierrors.NewTimeoutError("response lost", 1)
+			})
+		}},
+		{"service account refused", func(c *fake.Clientset) {
+			c.PrependReactor("create", "serviceaccounts", forbid("serviceaccounts"))
+		}},
+		{"role binding refused", func(c *fake.Clientset) {
+			c.PrependReactor("create", "rolebindings", forbid("rolebindings"))
+		}},
+	} {
+		t.Run("failure leaves a marked namespace, "+tc.name, func(t *testing.T) {
+			c := fake.NewClientset()
+			tc.inject(c)
+			if err := CreateOwnedInfra(ctx, c, "tok", testRunUUID); err == nil {
+				t.Fatal("CreateOwnedInfra succeeded despite the injected failure")
+			}
+			ns := storedNamespace(t, c)
+			if ns.Annotations[OwnerTokenAnnotation] != "tok" || ns.Annotations[RunUUIDAnnotation] != testRunUUID {
+				t.Errorf("annotations = %v", ns.Annotations)
+			}
+		})
+	}
 }
 
 func readyOnCreate(c *fake.Clientset) {
@@ -666,7 +740,7 @@ func TestCrossClusterAPICallsHaveDeadlines(t *testing.T) {
 		"BuildCrossClusterSUT": func(ctx context.Context) {
 			_ = BuildCrossClusterSUT(ctx, c, c, &config.PerfScenarios{Pod: true, RequestedDrivers: []string{"netperf", "iperf3", "uperf"}})
 		},
-		"CreateOwnedInfra":       func(ctx context.Context) { _ = CreateOwnedInfra(ctx, c, "tok") },
+		"CreateOwnedInfra":       func(ctx context.Context) { _ = CreateOwnedInfra(ctx, c, "tok", "run-1") },
 		"DeleteNamespaceAndWait": func(ctx context.Context) { _ = DeleteNamespaceAndWait(ctx, c, "") },
 		"DeleteOwnedNamespace":   func(ctx context.Context) { _ = DeleteOwnedNamespace(ctx, c, "tok") },
 		"NamespaceExists":        func(ctx context.Context) { _, _ = NamespaceExists(ctx, c) },

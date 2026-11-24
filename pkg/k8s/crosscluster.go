@@ -111,13 +111,13 @@ func ownedBy(ns *corev1.Namespace, token string) bool {
 	return token != "" && ns.Annotations[OwnerTokenAnnotation] == token
 }
 
-// CreateOwnedInfra creates the netperf namespace annotated with token, its ServiceAccount and RoleBinding. An existing
-// namespace is accepted only with the same token, as when both kubeconfigs point at one API server.
-func CreateOwnedInfra(ctx context.Context, c kubernetes.Interface, token string) error {
+// CreateOwnedInfra creates the netperf namespace annotated with token and runUUID, its ServiceAccount and RoleBinding.
+// An existing namespace is accepted only with the same token, as when both kubeconfigs point at one API server.
+func CreateOwnedInfra(ctx context.Context, c kubernetes.Interface, token, runUUID string) error {
 	nsObj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 		Name:        namespace,
 		Labels:      map[string]string{namespace: netperfNamespaceLabel},
-		Annotations: map[string]string{OwnerTokenAnnotation: token},
+		Annotations: map[string]string{OwnerTokenAnnotation: token, RunUUIDAnnotation: runUUID},
 	}}
 	log.Infof("🔨 Creating namespace: %s", namespace)
 	callCtx, cancel := withAPITimeout(ctx)

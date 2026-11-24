@@ -299,7 +299,7 @@ var rootCmd = &cobra.Command{
 			if server.restConfig.Host == rconfig.Host {
 				log.Warnf("⚠️ --server-kubeconfig points at the same API server as the client cluster (%s): traffic will not leave that cluster", rconfig.Host)
 			}
-			lifecycle = startCrossCluster(client, server.clientSet, clean)
+			lifecycle = startCrossCluster(client, server.clientSet, clean, uid)
 			if clean {
 				defer func() {
 					if r := recover(); r != nil {
