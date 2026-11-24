@@ -122,6 +122,7 @@ Flags:
 - `--cpu` and `--memory` set the same value as request and limit on every benchmark pod container, which gives the pods the Guaranteed QoS class. Both are required together. See [Guaranteed QoS pods](advanced-usage.md#guaranteed-qos-pods).
 - `--json` will reduce all output to just the JSON result, allowing users to feed the result to `jq` or other tools. It also writes the same complete payload, including TCP retransmissions and UDP loss, to `result-<timestamp>.json`. Only output to the screen will be the result JSON or errors.
 - `--clean=true` will delete all the resources the project creates (deployments and services)
+- `--uuid` sets the run UUID written to the results; without it a random one is generated. The `netperf` namespace a run creates carries it in the annotation `k8s-netperf.cloud-bulldozer.io/run-uuid`, so a caller can recognize its own namespace, for example to clean up after `--clean=false`. An existing namespace (reused with `--clean=false`) is not annotated or changed. The mark identifies a run only if each run uses its own UUID.
 - `--serverIP` accepts a string (IP Address). Example  44.243.95.221. k8s-netperf assumes this as server address and the client sends requests to this IP address.
 - `--prom` accepts a string (URL). Example  http://localhost:9090
   - When using `--prom` with a non-openshift cluster, it will be necessary to pass the prometheus URL.
