@@ -96,6 +96,10 @@ type PerfScenarios struct {
 	DClient               *dynamic.DynamicClient
 	SSHClient             *goph.Client
 	VMClientExecutor      VMExecutor
+	// CrossCluster places the server side on the cluster of ServerClientSet.
+	CrossCluster    bool
+	ServerDomain    string
+	ServerClientSet *kubernetes.Clientset
 }
 
 // struct for bridge options
